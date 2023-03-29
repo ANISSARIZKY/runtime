@@ -32,7 +32,6 @@ namespace System.Net
         public bool Expired { get { throw null; } set { } }
         public System.DateTime Expires { get { throw null; } set { } }
         public bool HttpOnly { get { throw null; } set { } }
-        [System.Diagnostics.CodeAnalysis.AllowNullAttribute]
         public string Name { get { throw null; } set { } }
         [System.Diagnostics.CodeAnalysis.AllowNullAttribute]
         public string Path { get { throw null; } set { } }
@@ -43,7 +42,7 @@ namespace System.Net
         [System.Diagnostics.CodeAnalysis.AllowNullAttribute]
         public string Value { get { throw null; } set { } }
         public int Version { get { throw null; } set { } }
-        public override bool Equals(object? comparand) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? comparand) { throw null; }
         public override int GetHashCode() { throw null; }
         public override string ToString() { throw null; }
     }
@@ -82,6 +81,7 @@ namespace System.Net
         public void Add(System.Net.CookieCollection cookies) { }
         public void Add(System.Uri uri, System.Net.Cookie cookie) { }
         public void Add(System.Uri uri, System.Net.CookieCollection cookies) { }
+        public System.Net.CookieCollection GetAllCookies() { throw null; }
         public string GetCookieHeader(System.Uri uri) { throw null; }
         public System.Net.CookieCollection GetCookies(System.Uri uri) { throw null; }
         public void SetCookies(System.Uri uri, string cookieHeader) { }
@@ -122,7 +122,7 @@ namespace System.Net
         public override System.Net.Sockets.AddressFamily AddressFamily { get { throw null; } }
         public string Host { get { throw null; } }
         public int Port { get { throw null; } }
-        public override bool Equals(object? comparand) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? comparand) { throw null; }
         public override int GetHashCode() { throw null; }
         public override string ToString() { throw null; }
     }
@@ -208,6 +208,7 @@ namespace System.Net
         public static readonly System.Version Version10;
         public static readonly System.Version Version11;
         public static readonly System.Version Version20;
+        public static readonly System.Version Version30;
     }
     public partial interface ICredentials
     {
@@ -217,7 +218,7 @@ namespace System.Net
     {
         System.Net.NetworkCredential? GetCredential(string host, int port, string authenticationType);
     }
-    public partial class IPAddress
+    public partial class IPAddress : ISpanFormattable, ISpanParsable<IPAddress>
     {
         public static readonly System.Net.IPAddress Any;
         public static readonly System.Net.IPAddress Broadcast;
@@ -231,7 +232,7 @@ namespace System.Net
         public IPAddress(long newAddress) { }
         public IPAddress(System.ReadOnlySpan<byte> address) { }
         public IPAddress(System.ReadOnlySpan<byte> address, long scopeid) { }
-        [System.ObsoleteAttribute("This property has been deprecated. It is address family dependent. Please use IPAddress.Equals method to perform comparisons. https://go.microsoft.com/fwlink/?linkid=14202")]
+        [System.ObsoleteAttribute("IPAddress.Address is address family dependent and has been deprecated. Use IPAddress.Equals to perform comparisons instead.")]
         public long Address { get { throw null; } set { } }
         public System.Net.Sockets.AddressFamily AddressFamily { get { throw null; } }
         public bool IsIPv4MappedToIPv6 { get { throw null; } }
@@ -239,8 +240,9 @@ namespace System.Net
         public bool IsIPv6Multicast { get { throw null; } }
         public bool IsIPv6SiteLocal { get { throw null; } }
         public bool IsIPv6Teredo { get { throw null; } }
+        public bool IsIPv6UniqueLocal { get { throw null; } }
         public long ScopeId { get { throw null; } set { } }
-        public override bool Equals(object? comparand) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? comparand) { throw null; }
         public byte[] GetAddressBytes() { throw null; }
         public override int GetHashCode() { throw null; }
         public static short HostToNetworkOrder(short host) { throw null; }
@@ -254,10 +256,16 @@ namespace System.Net
         public static long NetworkToHostOrder(long network) { throw null; }
         public static System.Net.IPAddress Parse(System.ReadOnlySpan<char> ipSpan) { throw null; }
         public static System.Net.IPAddress Parse(string ipString) { throw null; }
+        static IPAddress ISpanParsable<IPAddress>.Parse(ReadOnlySpan<char> s, IFormatProvider? provider) { throw null; }
+        static IPAddress IParsable<IPAddress>.Parse(string s, IFormatProvider? provider) { throw null; }
         public override string ToString() { throw null; }
+        string IFormattable.ToString(string? format, IFormatProvider? formatProvider) { throw null; }
         public bool TryFormat(System.Span<char> destination, out int charsWritten) { throw null; }
+        bool ISpanFormattable.TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) { throw null; }
         public static bool TryParse(System.ReadOnlySpan<char> ipSpan, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.Net.IPAddress? address) { throw null; }
         public static bool TryParse([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] string? ipString, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.Net.IPAddress? address) { throw null; }
+        static bool ISpanParsable<IPAddress>.TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out IPAddress result) { throw null; }
+        static bool IParsable<IPAddress>.TryParse([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] string? s, IFormatProvider? provider, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out IPAddress? result) { throw null; }
         public bool TryWriteBytes(System.Span<byte> destination, out int bytesWritten) { throw null; }
     }
     public partial class IPEndPoint : System.Net.EndPoint
@@ -270,7 +278,7 @@ namespace System.Net
         public override System.Net.Sockets.AddressFamily AddressFamily { get { throw null; } }
         public int Port { get { throw null; } set { } }
         public override System.Net.EndPoint Create(System.Net.SocketAddress socketAddress) { throw null; }
-        public override bool Equals(object? comparand) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? comparand) { throw null; }
         public override int GetHashCode() { throw null; }
         public static System.Net.IPEndPoint Parse(System.ReadOnlySpan<char> s) { throw null; }
         public static System.Net.IPEndPoint Parse(string s) { throw null; }
@@ -278,6 +286,32 @@ namespace System.Net
         public override string ToString() { throw null; }
         public static bool TryParse(System.ReadOnlySpan<char> s, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.Net.IPEndPoint? result) { throw null; }
         public static bool TryParse(string s, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.Net.IPEndPoint? result) { throw null; }
+    }
+    public readonly partial struct IPNetwork : System.IEquatable<System.Net.IPNetwork>, System.IFormattable, System.IParsable<System.Net.IPNetwork>, System.ISpanFormattable, System.ISpanParsable<System.Net.IPNetwork>
+    {
+        private readonly object _dummy;
+        private readonly int _dummyPrimitive;
+        public IPNetwork(System.Net.IPAddress baseAddress, int prefixLength) { throw null; }
+        public System.Net.IPAddress BaseAddress { get { throw null; } }
+        public int PrefixLength { get { throw null; } }
+        public bool Contains(System.Net.IPAddress address) { throw null; }
+        public bool Equals(System.Net.IPNetwork other) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? obj) { throw null; }
+        public override int GetHashCode() { throw null; }
+        public static bool operator ==(System.Net.IPNetwork left, System.Net.IPNetwork right) { throw null; }
+        public static bool operator !=(System.Net.IPNetwork left, System.Net.IPNetwork right) { throw null; }
+        public static System.Net.IPNetwork Parse(System.ReadOnlySpan<char> s) { throw null; }
+        public static System.Net.IPNetwork Parse(string s) { throw null; }
+        string System.IFormattable.ToString(string? format, System.IFormatProvider? provider) { throw null; }
+        static System.Net.IPNetwork System.IParsable<System.Net.IPNetwork>.Parse([System.Diagnostics.CodeAnalysis.NotNullAttribute] string s, System.IFormatProvider? provider) { throw null; }
+        static bool System.IParsable<System.Net.IPNetwork>.TryParse([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] string? s, System.IFormatProvider? provider, out System.Net.IPNetwork result) { throw null; }
+        bool System.ISpanFormattable.TryFormat(System.Span<char> destination, out int charsWritten, System.ReadOnlySpan<char> format, System.IFormatProvider? provider) { throw null; }
+        static System.Net.IPNetwork System.ISpanParsable<System.Net.IPNetwork>.Parse(System.ReadOnlySpan<char> s, System.IFormatProvider? provider) { throw null; }
+        static bool System.ISpanParsable<System.Net.IPNetwork>.TryParse(System.ReadOnlySpan<char> s, System.IFormatProvider? provider, out System.Net.IPNetwork result) { throw null; }
+        public override string ToString() { throw null; }
+        public bool TryFormat(System.Span<char> destination, out int charsWritten) { throw null; }
+        public static bool TryParse(System.ReadOnlySpan<char> s, out System.Net.IPNetwork result) { throw null; }
+        public static bool TryParse(string? s, out System.Net.IPNetwork result) { throw null; }
     }
     public partial interface IWebProxy
     {
@@ -469,6 +503,7 @@ namespace System.Net.Sockets
     {
         public SocketException() { }
         public SocketException(int errorCode) { }
+        public SocketException(int errorCode, string? message) { }
         protected SocketException(System.Runtime.Serialization.SerializationInfo serializationInfo, System.Runtime.Serialization.StreamingContext streamingContext) { }
         public override int ErrorCode { get { throw null; } }
         public override string Message { get { throw null; } }
@@ -510,13 +545,15 @@ namespace System.Security.Authentication
     public enum SslProtocols
     {
         None = 0,
-        [System.ObsoleteAttribute("This value has been deprecated.  It is no longer supported. https://go.microsoft.com/fwlink/?linkid=14202")]
+        [System.ObsoleteAttribute("SslProtocols.Ssl2 has been deprecated and is not supported.")]
         Ssl2 = 12,
-        [System.ObsoleteAttribute("This value has been deprecated.  It is no longer supported. https://go.microsoft.com/fwlink/?linkid=14202")]
+        [System.ObsoleteAttribute("SslProtocols.Ssl3 has been deprecated and is not supported.")]
         Ssl3 = 48,
+        [System.ObsoleteAttribute("TLS versions 1.0 and 1.1 have known vulnerabilities and are not recommended. Use a newer TLS version instead, or use SslProtocols.None to defer to OS defaults.", DiagnosticId="SYSLIB0039", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         Tls = 192,
-        [System.ObsoleteAttribute("This value has been deprecated.  It is no longer supported. https://go.microsoft.com/fwlink/?linkid=14202")]
+        [System.ObsoleteAttribute("SslProtocols.Default has been deprecated and is not supported.")]
         Default = 240,
+        [System.ObsoleteAttribute("TLS versions 1.0 and 1.1 have known vulnerabilities and are not recommended. Use a newer TLS version instead, or use SslProtocols.None to defer to OS defaults.", DiagnosticId="SYSLIB0039", UrlFormat="https://aka.ms/dotnet-warnings/{0}")]
         Tls11 = 768,
         Tls12 = 3072,
         Tls13 = 12288,

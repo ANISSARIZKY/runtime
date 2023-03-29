@@ -3,7 +3,6 @@
 
 using System.Diagnostics;
 using System.Text;
-using System.Linq;
 
 namespace System.IO.Packaging
 {
@@ -113,7 +112,7 @@ namespace System.IO.Packaging
                 packUri = new Uri(string.Concat(packUri.GetComponents(UriComponents.AbsoluteUri, UriFormat.UriEscaped), fragment));
 
             // We want to ensure that internal content of resulting Uri has canonical form
-            // i.e.  result.OrignalString would appear as perfectly formatted Uri string
+            // i.e.  result.OriginalString would appear as perfectly formatted Uri string
             // so we roundtrip the result.
 
             return new Uri(packUri.GetComponents(UriComponents.AbsoluteUri, UriFormat.UriEscaped));
@@ -286,7 +285,7 @@ namespace System.IO.Packaging
             // This is currently enforced by the order of characters in the s_specialCharacterChars array
             foreach (char c in s_specialCharacterChars)
             {
-                if (path.Contains(c))
+                if (path.IndexOf(c) != -1)
                 {
                     path = path.Replace(c.ToString(), Uri.HexEscape(c));
                 }

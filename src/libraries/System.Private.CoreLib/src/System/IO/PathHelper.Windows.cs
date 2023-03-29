@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -84,7 +83,7 @@ namespace System.IO
             if (result == 0)
             {
                 // Failure, get the error and throw
-                int errorCode = Marshal.GetLastWin32Error();
+                int errorCode = Marshal.GetLastPInvokeError();
                 if (errorCode == 0)
                     errorCode = Interop.Errors.ERROR_BAD_PATHNAME;
                 throw Win32Marshal.GetExceptionForWin32Error(errorCode, path.ToString());
@@ -186,7 +185,7 @@ namespace System.IO
                 if (result == 0)
                 {
                     // Look to see if we couldn't find the file
-                    int error = Marshal.GetLastWin32Error();
+                    int error = Marshal.GetLastPInvokeError();
                     if (error != Interop.Errors.ERROR_FILE_NOT_FOUND && error != Interop.Errors.ERROR_PATH_NOT_FOUND)
                     {
                         // Some other failure, give up

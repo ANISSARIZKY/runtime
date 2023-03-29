@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,7 +33,7 @@ namespace System.Net
             }
         }
 
-        private class ThreadContext
+        private sealed class ThreadContext
         {
             internal int _nestedIOCount;
         }
@@ -174,6 +173,7 @@ namespace System.Net
             }
         }
 
+#pragma warning disable CA1822
         // This allows ContextAwareResult to not let anyone trigger the CompletedSynchronously tripwire while the context is being captured.
         [Conditional("DEBUG")]
         protected void DebugProtectState(bool protect)
@@ -182,6 +182,7 @@ namespace System.Net
             _protectState = protect;
 #endif
         }
+#pragma warning restore CA1822
 
         // Interface property, returning synchronous completion status.
         public bool CompletedSynchronously

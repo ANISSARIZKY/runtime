@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -80,7 +79,7 @@ internal static partial class Interop
                     Interop.NetSecurityNative.Status displayCallStatus = isMinor ?
                         DisplayMinorStatus(out minStat, status, ref displayBuffer):
                         DisplayMajorStatus(out minStat, status, ref displayBuffer);
-                    return (Status.GSS_S_COMPLETE != displayCallStatus) ? null : Marshal.PtrToStringAnsi(displayBuffer._data);
+                    return (Status.GSS_S_COMPLETE != displayCallStatus) ? null : Marshal.PtrToStringUTF8(displayBuffer._data);
                 }
                 finally
                 {

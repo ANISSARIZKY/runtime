@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -34,10 +35,7 @@ namespace System.Linq.Expressions
 
         private int GetId(object o)
         {
-            if (_ids == null)
-            {
-                _ids = new Dictionary<object, int>();
-            }
+            _ids ??= new Dictionary<object, int>();
 
             int id;
             if (!_ids.TryGetValue(o, out id))
@@ -119,7 +117,7 @@ namespace System.Linq.Expressions
             VisitExpressions(open, expressions, close, ", ");
         }
 
-        private void VisitExpressions<T>(char open, ReadOnlyCollection<T> expressions, char close, string seperator) where T : Expression
+        private void VisitExpressions<T>(char open, ReadOnlyCollection<T> expressions, char close, string separator) where T : Expression
         {
             Out(open);
             if (expressions != null)
@@ -133,7 +131,7 @@ namespace System.Linq.Expressions
                     }
                     else
                     {
-                        Out(seperator);
+                        Out(separator);
                     }
                     Visit(e);
                 }
@@ -380,16 +378,7 @@ namespace System.Linq.Expressions
 
         protected internal override Expression VisitDebugInfo(DebugInfoExpression node)
         {
-            string s = string.Format(
-                CultureInfo.CurrentCulture,
-                "<DebugInfo({0}: {1}, {2}, {3}, {4})>",
-                node.Document.FileName,
-                node.StartLine,
-                node.StartColumn,
-                node.EndLine,
-                node.EndColumn
-            );
-            Out(s);
+            Out($"<DebugInfo({node.Document.FileName}: {node.StartLine}, {node.StartColumn}, {node.EndLine}, {node.EndColumn})>");
             return node;
         }
 
@@ -786,6 +775,8 @@ namespace System.Linq.Expressions
             return node;
         }
 
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
+            Justification = "The 'ToString' method cannot be trimmed on any Expression type because we are calling Expression.ToString() in this method.")]
         protected internal override Expression VisitExtension(Expression node)
         {
             // Prefer an overridden ToString, if available.

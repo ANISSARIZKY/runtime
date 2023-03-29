@@ -148,7 +148,7 @@ mono_arch_exceptions_init (void)
 }
 
 gboolean
-mono_arch_unwind_frame (MonoDomain *domain, MonoJitTlsData *jit_tls, MonoJitInfo *ji,
+mono_arch_unwind_frame (MonoJitTlsData *jit_tls, MonoJitInfo *ji,
                         MonoContext *ctx, MonoContext *new_ctx, MonoLMF **lmf,
                         host_mgreg_t **save_locations, StackFrameInfo *frame)
 {
@@ -201,7 +201,7 @@ mono_arch_unwind_frame (MonoDomain *domain, MonoJitTlsData *jit_tls, MonoJitInfo
 		if (*lmf)
 			NOT_IMPLEMENTED;
 
-		/* we substract 1, so that the IP points into the call instruction */
+		/* we subtract 1, so that the IP points into the call instruction */
 		new_ctx->gregs [RISCV_ZERO]--;
 
 		return TRUE;

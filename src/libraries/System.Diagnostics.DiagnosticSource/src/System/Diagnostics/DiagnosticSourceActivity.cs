@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.Diagnostics
 {
@@ -24,12 +25,19 @@ namespace System.Diagnostics
         /// <param name="args">An object that represent the value being passed as a payload for the event.</param>
         /// <returns>Started Activity for convenient chaining</returns>
         /// <seealso cref="Activity"/>
+        [RequiresUnreferencedCode(WriteRequiresUnreferencedCode)]
         public Activity StartActivity(Activity activity, object? args)
         {
             activity.Start();
             Write(activity.OperationName + ".Start", args);
             return activity;
         }
+
+        /// <inheritdoc cref="StartActivity"/>
+        /// <typeparam name="T">The type of the value being passed as a payload for the event.</typeparam>
+        [RequiresUnreferencedCode(WriteOfTRequiresUnreferencedCode)]
+        public Activity StartActivity<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(Activity activity, T args)
+            => StartActivity(activity, (object?)args);
 
         /// <summary>
         /// Stops given Activity: maintains global Current Activity and notifies consumers
@@ -41,6 +49,7 @@ namespace System.Diagnostics
         /// <param name="activity">Activity to be stopped</param>
         /// <param name="args">An object that represent the value being passed as a payload for the event.</param>
         /// <seealso cref="Activity"/>
+        [RequiresUnreferencedCode(WriteRequiresUnreferencedCode)]
         public void StopActivity(Activity activity, object? args)
         {
             // Stop sets the end time if it was unset, but we want it set before we issue the write
@@ -51,24 +60,30 @@ namespace System.Diagnostics
             activity.Stop();    // Resets Activity.Current (we want this after the Write)
         }
 
+        /// <inheritdoc cref="StartActivity"/>
+        /// <typeparam name="T">The type of the value being passed as a payload for the event.</typeparam>
+        [RequiresUnreferencedCode(WriteOfTRequiresUnreferencedCode)]
+        public void StopActivity<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(Activity activity, T args)
+            => StopActivity(activity, (object?)args);
+
         /// <summary>
         /// Optional: If an instrumentation site creating an new activity that was caused
-        /// by something outside the process (e.g. an incomming HTTP request), then that site
+        /// by something outside the process (e.g. an incoming HTTP request), then that site
         /// will want to make a new activity and transfer state from that incoming request
         /// to the activity.   To the extent possible this should be done by the instrumentation
-        /// site (because it is a contract between Activity and the incomming request logic
+        /// site (because it is a contract between Activity and the incoming request logic
         /// at the instrumentation site.   However the instrumentation site can't handle policy
         /// (for example if sampling is done exactly which requests should be sampled) For this
         /// the instrumentation site needs to call back out to the logging system and ask it to
         /// resolve policy (e.g. decide if the Activity's 'sampling' bit should be set)  This
         /// is what OnActivityImport is for.   It is given the activity as well as a payload
-        /// object that represents the incomming request.   The DiagnosticSource's subscribers
+        /// object that represents the incoming request.   The DiagnosticSource's subscribers
         /// then have the opportunity to update this activity as desired.
         ///
         /// Note that this callout is rarely used at instrumentation sites (only those sites
         /// that are on the 'boundry' of the process), and the instrumentation site will implement
         /// some default policy (it sets the activity in SOME way), and so this method does not
-        /// need to be overriden if that default policy is fine.   Thus this is call should
+        /// need to be overridden if that default policy is fine.   Thus this is call should
         /// be used rare (but often important) cases.
         ///
         /// Note that the type of 'payload' is typed as object here, but for any

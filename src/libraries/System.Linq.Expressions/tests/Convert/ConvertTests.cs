@@ -183,6 +183,15 @@ namespace System.Linq.Expressions.Tests
         }
 
         [Theory, ClassData(typeof(CompilationTypes))]
+        public static void ConvertByteToSByteRetIntTest(bool useInterpreter)
+        {
+            foreach (byte value in new byte[] { 0, 1, byte.MaxValue })
+            {
+                VerifyByteToSByteRetInt(value, useInterpreter);
+            }
+        }
+
+        [Theory, ClassData(typeof(CompilationTypes))]
         public static void ConvertByteToNullableSByteTest(bool useInterpreter)
         {
             foreach (byte value in new byte[] { 0, 1, byte.MaxValue })
@@ -1650,7 +1659,6 @@ namespace System.Linq.Expressions.Tests
         }
 
         [Theory, ClassData(typeof(CompilationTypes))]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/13651")]
         public static void ConvertDoubleToUIntTest(bool useInterpreter)
         {
             foreach (double value in new double[] { 0, 1, -1, double.MinValue, double.MaxValue, double.Epsilon, double.NegativeInfinity, double.PositiveInfinity, double.NaN })
@@ -1660,7 +1668,6 @@ namespace System.Linq.Expressions.Tests
         }
 
         [Theory, ClassData(typeof(CompilationTypes))]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/13651")]
         public static void ConvertDoubleToNullableUIntTest(bool useInterpreter)
         {
             foreach (double value in new double[] { 0, 1, -1, double.MinValue, double.MaxValue, double.Epsilon, double.NegativeInfinity, double.PositiveInfinity, double.NaN })
@@ -4415,6 +4422,15 @@ namespace System.Linq.Expressions.Tests
         }
 
         [Theory, ClassData(typeof(CompilationTypes))]
+        public static void ConvertSByteToByteRetIntTest(bool useInterpreter)
+        {
+            foreach (sbyte value in new sbyte[] { 0, 1, -1, sbyte.MinValue, sbyte.MaxValue })
+            {
+                VerifySByteToByteRetInt(value, useInterpreter);
+            }
+        }
+
+        [Theory, ClassData(typeof(CompilationTypes))]
         public static void ConvertSByteToNullableByteTest(bool useInterpreter)
         {
             foreach (sbyte value in new sbyte[] { 0, 1, -1, sbyte.MinValue, sbyte.MaxValue })
@@ -5149,6 +5165,15 @@ namespace System.Linq.Expressions.Tests
             foreach (short value in new short[] { 0, 1, -1, short.MinValue, short.MaxValue })
             {
                 VerifyShortToUShort(value, useInterpreter);
+            }
+        }
+
+        [Theory, ClassData(typeof(CompilationTypes))]
+        public static void ConvertShortToUShortRetIntTest(bool useInterpreter)
+        {
+            foreach (short value in new short[] { 0, 1, -1, short.MinValue, short.MaxValue })
+            {
+                VerifyShortToUShortRetInt(value, useInterpreter);
             }
         }
 
@@ -6611,6 +6636,15 @@ namespace System.Linq.Expressions.Tests
         }
 
         [Theory, ClassData(typeof(CompilationTypes))]
+        public static void ConvertUShortToShortRetIntTest(bool useInterpreter)
+        {
+            foreach (ushort value in new ushort[] { 0, 1, ushort.MaxValue })
+            {
+                VerifyUShortToShortRetInt(value, useInterpreter);
+            }
+        }
+
+        [Theory, ClassData(typeof(CompilationTypes))]
         public static void ConvertUShortToNullableShortTest(bool useInterpreter)
         {
             foreach (ushort value in new ushort[] { 0, 1, ushort.MaxValue })
@@ -7136,6 +7170,17 @@ namespace System.Linq.Expressions.Tests
             Func<sbyte> f = e.Compile(useInterpreter);
 
             Assert.Equal(unchecked((sbyte)value), f());
+        }
+
+        private static void VerifyByteToSByteRetInt(byte value, bool useInterpreter)
+        {
+            Expression<Func<int>> e =
+                Expression.Lambda<Func<int>>(
+                    Expression.Convert(Expression.Convert(Expression.Constant(value, typeof(byte)), typeof(sbyte)), typeof(int)),
+                    Enumerable.Empty<ParameterExpression>());
+            Func<int> f = e.Compile(useInterpreter);
+
+            Assert.Equal((int)unchecked((sbyte)value), f());
         }
 
         private static void VerifyByteToNullableSByte(byte value, bool useInterpreter)
@@ -13180,6 +13225,17 @@ namespace System.Linq.Expressions.Tests
             Assert.Equal(unchecked((byte)value), f());
         }
 
+        private static void VerifySByteToByteRetInt(sbyte value, bool useInterpreter)
+        {
+            Expression<Func<int>> e =
+                Expression.Lambda<Func<int>>(
+                    Expression.Convert(Expression.Convert(Expression.Constant(value, typeof(sbyte)), typeof(byte)), typeof(int)),
+                    Enumerable.Empty<ParameterExpression>());
+            Func<int> f = e.Compile(useInterpreter);
+
+            Assert.Equal((int)unchecked((byte)value), f());
+        }
+
         private static void VerifySByteToNullableByte(sbyte value, bool useInterpreter)
         {
             Expression<Func<byte?>> e =
@@ -14122,6 +14178,17 @@ namespace System.Linq.Expressions.Tests
             Func<ushort> f = e.Compile(useInterpreter);
 
             Assert.Equal(unchecked((ushort)value), f());
+        }
+
+        private static void VerifyShortToUShortRetInt(short value, bool useInterpreter)
+        {
+            Expression<Func<int>> e =
+                Expression.Lambda<Func<int>>(
+                    Expression.Convert(Expression.Convert(Expression.Constant(value, typeof(short)), typeof(ushort)), typeof(int)),
+                    Enumerable.Empty<ParameterExpression>());
+            Func<int> f = e.Compile(useInterpreter);
+
+            Assert.Equal((int)unchecked((ushort)value), f());
         }
 
         private static void VerifyShortToNullableUShort(short value, bool useInterpreter)
@@ -16030,6 +16097,17 @@ namespace System.Linq.Expressions.Tests
             Func<short> f = e.Compile(useInterpreter);
 
             Assert.Equal(unchecked((short)value), f());
+        }
+
+        private static void VerifyUShortToShortRetInt(ushort value, bool useInterpreter)
+        {
+            Expression<Func<int>> e =
+                Expression.Lambda<Func<int>>(
+                    Expression.Convert(Expression.Convert(Expression.Constant(value, typeof(ushort)), typeof(short)), typeof(int)),
+                    Enumerable.Empty<ParameterExpression>());
+            Func<int> f = e.Compile(useInterpreter);
+
+            Assert.Equal((int)unchecked((short)value), f());
         }
 
         private static void VerifyUShortToNullableShort(ushort value, bool useInterpreter)

@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -11,6 +12,9 @@ namespace System.Runtime.Serialization.Formatters.Binary
 {
     internal sealed class BinaryParser
     {
+        private const string BinaryParserUnreferencedCodeMessage = "ObjectReader requires unreferenced code";
+        private const string BinaryParserDynamicCodeMessage = "ObjectReader requires dynamic code";
+
         private const int ChunkSize = 4096;
         private static readonly Encoding s_encoding = new UTF8Encoding(false, true);
 
@@ -51,21 +55,23 @@ namespace System.Runtime.Serialization.Formatters.Binary
         }
 
         internal BinaryAssemblyInfo SystemAssemblyInfo =>
-            _systemAssemblyInfo ?? (_systemAssemblyInfo = new BinaryAssemblyInfo(Converter.s_urtAssemblyString, Converter.s_urtAssembly));
+            _systemAssemblyInfo ??= new BinaryAssemblyInfo(Converter.s_urtAssemblyString, Converter.s_urtAssembly);
 
         internal SizedArray ObjectMapIdTable =>
-            _objectMapIdTable ?? (_objectMapIdTable = new SizedArray());
+            _objectMapIdTable ??= new SizedArray();
 
         internal SizedArray AssemIdToAssemblyTable =>
-            _assemIdToAssemblyTable ?? (_assemIdToAssemblyTable = new SizedArray(2));
+            _assemIdToAssemblyTable ??= new SizedArray(2);
 
         internal ParseRecord PRs =>
-            _prs ?? (_prs = new ParseRecord());
+            _prs ??= new ParseRecord();
 
         // Parse the input
         // Reads each record from the input stream. If the record is a primitive type (A number)
         //  then it doesn't have a BinaryHeaderEnum byte. For this case the expected type
         //  has been previously set to Primitive
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         internal void Run()
         {
             try
@@ -255,7 +261,7 @@ namespace System.Runtime.Serialization.Formatters.Binary
 
         internal DateTime ReadDateTime() => FromBinaryRaw(ReadInt64());
 
-        private static DateTime FromBinaryRaw(long dateData)
+        private static unsafe DateTime FromBinaryRaw(long dateData)
         {
             // Use DateTime's public constructor to validate the input, but we
             // can't return that result as it strips off the kind. To address
@@ -263,7 +269,7 @@ namespace System.Runtime.Serialization.Formatters.Binary
             // See BinaryFormatterWriter.WriteDateTime for details.
             const long TicksMask = 0x3FFFFFFFFFFFFFFF;
             new DateTime(dateData & TicksMask);
-            return MemoryMarshal.Cast<long, DateTime>(MemoryMarshal.CreateReadOnlySpan(ref dateData, 1))[0];
+            return *(DateTime*)&dateData;
         }
 
         internal ushort ReadUInt16() => _dataReader.ReadUInt16();
@@ -303,12 +309,11 @@ namespace System.Runtime.Serialization.Formatters.Binary
             AssemIdToAssemblyTable[record._assemId] = new BinaryAssemblyInfo(record._assemblyString!);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         private void ReadObject()
         {
-            if (_binaryObject == null)
-            {
-                _binaryObject = new BinaryObject();
-            }
+            _binaryObject ??= new BinaryObject();
             _binaryObject.Read(this);
 
             ObjectMap? objectMap = (ObjectMap?)ObjectMapIdTable[_binaryObject._mapId];
@@ -373,6 +378,8 @@ namespace System.Runtime.Serialization.Formatters.Binary
             _objectReader.Parse(pr);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         internal void ReadCrossAppDomainMap()
         {
             BinaryCrossAppDomainMap record = new BinaryCrossAppDomainMap();
@@ -395,6 +402,8 @@ namespace System.Runtime.Serialization.Formatters.Binary
             }
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         internal void ReadObjectWithMap(BinaryHeaderEnum binaryHeaderEnum)
         {
             if (_bowm == null)
@@ -409,6 +418,8 @@ namespace System.Runtime.Serialization.Formatters.Binary
             ReadObjectWithMap(_bowm);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode("Types might be removed")]
         private void ReadObjectWithMap(BinaryObjectWithMap record)
         {
             BinaryAssemblyInfo? assemblyInfo = null;
@@ -495,6 +506,8 @@ namespace System.Runtime.Serialization.Formatters.Binary
             _objectReader.Parse(pr);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode("Types might be removed")]
         internal void ReadObjectWithMapTyped(BinaryHeaderEnum binaryHeaderEnum)
         {
             if (_bowmt == null)
@@ -509,6 +522,8 @@ namespace System.Runtime.Serialization.Formatters.Binary
             ReadObjectWithMapTyped(_bowmt);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode("Types might be removed")]
         private void ReadObjectWithMapTyped(BinaryObjectWithMapTyped record)
         {
             BinaryAssemblyInfo? assemblyInfo = null;
@@ -589,12 +604,11 @@ namespace System.Runtime.Serialization.Formatters.Binary
             _objectReader.Parse(pr);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         private void ReadObjectString(BinaryHeaderEnum binaryHeaderEnum)
         {
-            if (_objectString == null)
-            {
-                _objectString = new BinaryObjectString();
-            }
+            _objectString ??= new BinaryObjectString();
 
             if (binaryHeaderEnum == BinaryHeaderEnum.ObjectString)
             {
@@ -602,10 +616,7 @@ namespace System.Runtime.Serialization.Formatters.Binary
             }
             else
             {
-                if (_crossAppDomainString == null)
-                {
-                    _crossAppDomainString = new BinaryCrossAppDomainString();
-                }
+                _crossAppDomainString ??= new BinaryCrossAppDomainString();
                 _crossAppDomainString.Read(this);
                 _objectString._value = _objectReader.CrossAppDomainArray(_crossAppDomainString._value) as string;
                 if (_objectString._value == null)
@@ -665,12 +676,11 @@ namespace System.Runtime.Serialization.Formatters.Binary
             _objectReader.Parse(PRs);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         private void ReadMemberPrimitiveTyped()
         {
-            if (_memberPrimitiveTyped == null)
-            {
-                _memberPrimitiveTyped = new MemberPrimitiveTyped();
-            }
+            _memberPrimitiveTyped ??= new MemberPrimitiveTyped();
             _memberPrimitiveTyped.Read(this);
 
             PRs._objectTypeEnum = InternalObjectTypeE.Object; //Get rid of
@@ -712,9 +722,11 @@ namespace System.Runtime.Serialization.Formatters.Binary
             _objectReader.Parse(PRs);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         private void ReadArray(BinaryHeaderEnum binaryHeaderEnum)
         {
-            BinaryAssemblyInfo? assemblyInfo = null;
+            BinaryAssemblyInfo? assemblyInfo;
             BinaryArray record = new BinaryArray(binaryHeaderEnum);
             record.Read(this);
 
@@ -822,7 +834,7 @@ namespace System.Runtime.Serialization.Formatters.Binary
                 case BinaryArrayTypeEnum.RectangularOffset:
                     int arrayLength = 1;
                     for (int i = 0; i < record._rank; i++)
-                        arrayLength = arrayLength * record._lengthA[i];
+                        arrayLength *= record._lengthA[i];
                     op._numItems = arrayLength;
                     pr._arrayTypeEnum = InternalArrayTypeE.Rectangular;
                     break;
@@ -868,10 +880,7 @@ namespace System.Runtime.Serialization.Formatters.Binary
 
                 Array array = (Array)pr._newObj;
                 int arrayOffset = 0;
-                if (_byteBuffer == null)
-                {
-                    _byteBuffer = new byte[ChunkSize];
-                }
+                _byteBuffer ??= new byte[ChunkSize];
 
                 while (arrayOffset < array.Length)
                 {
@@ -881,7 +890,6 @@ namespace System.Runtime.Serialization.Formatters.Binary
                     if (!BitConverter.IsLittleEndian)
                     {
                         // we know that we are reading a primitive type, so just do a simple swap
-                        Debug.Fail("Re-review this code if/when we start running on big endian systems");
                         for (int i = 0; i < bufferUsed; i += typeLength)
                         {
                             for (int j = 0; j < typeLength / 2; j++)
@@ -898,13 +906,12 @@ namespace System.Runtime.Serialization.Formatters.Binary
             }
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         private void ReadMemberPrimitiveUnTyped()
         {
             ObjectProgress? objectOp = (ObjectProgress?)_stack.Peek();
-            if (memberPrimitiveUnTyped == null)
-            {
-                memberPrimitiveUnTyped = new MemberPrimitiveUnTyped();
-            }
+            memberPrimitiveUnTyped ??= new MemberPrimitiveUnTyped();
             memberPrimitiveUnTyped.Set((InternalPrimitiveTypeE)_expectedTypeInformation!);
             memberPrimitiveUnTyped.Read(this);
 
@@ -930,12 +937,11 @@ namespace System.Runtime.Serialization.Formatters.Binary
             _objectReader.Parse(PRs);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         private void ReadMemberReference()
         {
-            if (_memberReference == null)
-            {
-                _memberReference = new MemberReference();
-            }
+            _memberReference ??= new MemberReference();
             _memberReference.Read(this);
 
             ObjectProgress? objectOp = (ObjectProgress?)_stack.Peek();
@@ -960,12 +966,11 @@ namespace System.Runtime.Serialization.Formatters.Binary
             _objectReader.Parse(PRs);
         }
 
+        [RequiresDynamicCode(BinaryParserDynamicCodeMessage)]
+        [RequiresUnreferencedCode(BinaryParserUnreferencedCodeMessage)]
         private void ReadObjectNull(BinaryHeaderEnum binaryHeaderEnum)
         {
-            if (_objectNull == null)
-            {
-                _objectNull = new ObjectNull();
-            }
+            _objectNull ??= new ObjectNull();
             _objectNull.Read(this, binaryHeaderEnum);
 
             ObjectProgress? objectOp = (ObjectProgress?)_stack.Peek();
@@ -994,10 +999,7 @@ namespace System.Runtime.Serialization.Formatters.Binary
 
         private void ReadMessageEnd()
         {
-            if (_messageEnd == null)
-            {
-                _messageEnd = new MessageEnd();
-            }
+            _messageEnd ??= new MessageEnd();
             _messageEnd.Read(this);
 
             if (!_stack.IsEmpty())
@@ -1047,10 +1049,7 @@ namespace System.Runtime.Serialization.Formatters.Binary
 
         private void PutOp(ObjectProgress op)
         {
-            if (_opPool == null)
-            {
-                _opPool = new SerStack("opPool");
-            }
+            _opPool ??= new SerStack("opPool");
             _opPool.Push(op);
         }
     }

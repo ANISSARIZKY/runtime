@@ -1,10 +1,14 @@
-#include "mono/eventpipe/ep.h"
-#include "mono/eventpipe/ep-config.h"
-#include "mono/eventpipe/ep-buffer.h"
-#include "mono/eventpipe/ep-event.h"
-#include "mono/eventpipe/ep-event-payload.h"
-#include "mono/eventpipe/ep-session.h"
-#include "eglib/test/test.h"
+#if defined(_MSC_VER) && defined(_DEBUG)
+#include "ep-tests-debug.h"
+#endif
+
+#include <eventpipe/ep.h>
+#include <eventpipe/ep-config.h>
+#include <eventpipe/ep-buffer.h>
+#include <eventpipe/ep-event.h>
+#include <eventpipe/ep-event-payload.h>
+#include <eventpipe/ep-session.h>
+#include <eglib/test/test.h>
 
 #define TEST_PROVIDER_NAME "MyTestProvider"
 #define TEST_FILE "./ep_test_create_file.txt"
@@ -70,7 +74,7 @@ load_buffer_with_events_init (
 
 	EventPipeProviderConfiguration provider_config;
 	EventPipeProviderConfiguration *current_provider_config;
-	current_provider_config = ep_provider_config_init (&provider_config, TEST_PROVIDER_NAME, 1, EP_EVENT_LEVEL_LOG_ALWAYS, "");
+	current_provider_config = ep_provider_config_init (&provider_config, TEST_PROVIDER_NAME, 1, EP_EVENT_LEVEL_LOGALWAYS, "");
 	ep_raise_error_if_nok (current_provider_config != NULL);
 
 	test_location = 1;
@@ -86,14 +90,15 @@ load_buffer_with_events_init (
 			1,
 			current_provider_config,
 			1,
-			false);
+			NULL,
+			NULL);
 	EP_LOCK_EXIT (section1)
 
 	ep_raise_error_if_nok (*session != NULL);
 
 	test_location = 2;
 
-	*provider = ep_create_provider (TEST_PROVIDER_NAME, NULL, NULL, NULL);
+	*provider = ep_create_provider (TEST_PROVIDER_NAME, NULL, NULL);
 	ep_raise_error_if_nok (*provider != NULL);
 
 	test_location = 3;
@@ -136,11 +141,11 @@ load_buffer (
 			event_data_len = strlen (event_data) + 1;
 		}else {
 			event_data = (gchar *)TEST_EVENT_DATA;
-			event_data_len = EP_ARRAY_SIZE (TEST_EVENT_DATA);
+			event_data_len = ARRAY_SIZE (TEST_EVENT_DATA);
 		}
 		if (event_data) {
-			ep_event_payload_init (&payload, (uint8_t *)event_data, event_data_len);
-			result = ep_buffer_write_event (buffer, ep_buffer_get_writer_thread (buffer), session, ep_event, &payload, NULL, NULL, NULL);
+			ep_event_payload_init (&payload, (uint8_t *)event_data, (uint32_t)event_data_len);
+			result = ep_buffer_write_event (buffer, ep_rt_thread_get_handle (), session, ep_event, &payload, NULL, NULL, NULL);
 			ep_event_payload_fini (&payload);
 
 			if (!perf_test)
@@ -596,7 +601,7 @@ test_check_buffer_perf (void)
 	uint32_t events_written = 0;
 	uint32_t number_of_buffers = 1;
 	uint32_t total_events_written = 0;
-	int64_t accumulted_time_ticks = 0;
+	int64_t accumulated_time_ticks = 0;
 	bool done = false;
 
 	while (!done) {
@@ -604,7 +609,7 @@ test_check_buffer_perf (void)
 		load_result = load_buffer (buffer, session, ep_event, 10 * 1000 * 1000, true, &events_written);
 		int64_t stop = ep_perf_timestamp_get ();
 
-		accumulted_time_ticks += stop - start;
+		accumulated_time_ticks += stop - start;
 		total_events_written += events_written;
 		if (load_result || (total_events_written > 10 * 1000 * 1000)) {
 			done = true;
@@ -617,15 +622,15 @@ test_check_buffer_perf (void)
 
 	test_location = 4;
 
-	float accumulted_time_sec = ((float)accumulted_time_ticks / (float)ep_perf_frequency_query ());
-	float events_per_sec = (float)total_events_written / (accumulted_time_sec ? accumulted_time_sec : 1.0);
+	float accumulated_time_sec = ((float)accumulated_time_ticks / (float)ep_perf_frequency_query ());
+	float events_per_sec = (float)total_events_written / (accumulated_time_sec ? accumulated_time_sec : 1.0);
 
 	// Measured number of events/second for one thread.
 	// Only measure loading data into pre-allocated buffer.
 	// TODO: Setup acceptable pass/failure metrics.
 	printf ("\n\tPerformance stats:\n");
 	printf ("\t\tTotal number of events: %i\n", total_events_written);
-	printf ("\t\tTotal time in sec: %.2f\n", accumulted_time_sec);
+	printf ("\t\tTotal time in sec: %.2f\n", accumulated_time_sec);
 	printf ("\t\tTotal number of events written per sec/core: %.2f\n", events_per_sec);
 	printf ("\t\tTotal number of used buffers: %i\n\t", number_of_buffers);
 

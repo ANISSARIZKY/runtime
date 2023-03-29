@@ -100,6 +100,7 @@ namespace System.Globalization.Tests
         [Theory]
         [InlineData("en-US", "United States")]
         [OuterLoop("May fail on machines with multiple language packs installed")] // see https://github.com/dotnet/runtime/issues/30132
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/45951", TestPlatforms.Browser)]
         public void DisplayName(string name, string expected)
         {
             using (new ThreadCultureChange(null, new CultureInfo(name)))
@@ -110,7 +111,8 @@ namespace System.Globalization.Tests
 
         public static IEnumerable<object[]> NativeName_TestData()
         {
-            if (PlatformDetection.IsNotBrowser)
+            // Android has its own ICU, which doesn't 100% map to UsingLimitedCultures
+            if (PlatformDetection.IsNotUsingLimitedCultures || PlatformDetection.IsAndroid)
             {
                 yield return new object[] { "GB", "United Kingdom" };
                 yield return new object[] { "SE", "Sverige" };
@@ -134,7 +136,8 @@ namespace System.Globalization.Tests
 
         public static IEnumerable<object[]> EnglishName_TestData()
         {
-            if (PlatformDetection.IsNotBrowser)
+            // Android has its own ICU, which doesn't 100% map to UsingLimitedCultures
+            if (PlatformDetection.IsNotUsingLimitedCultures || PlatformDetection.IsAndroid)
             {
                 yield return new object[] { "en-US", new string[] { "United States" } };
                 yield return new object[] { "US", new string[] { "United States" } };
@@ -215,7 +218,8 @@ namespace System.Globalization.Tests
             RegionInfo ri = new RegionInfo(lcid); // create it with lcid
             Assert.Equal(geoId, ri.GeoId);
 
-            if (PlatformDetection.IsBrowser)
+            // Android has its own ICU, which doesn't 100% map to UsingLimitedCultures
+            if (PlatformDetection.IsUsingLimitedCultures && !PlatformDetection.IsAndroid)
             {
                 Assert.Equal(currencyShortName, ri.CurrencyEnglishName);
                 Assert.Equal(currencyShortName, ri.CurrencyNativeName);
@@ -249,6 +253,19 @@ namespace System.Globalization.Tests
             {
                 Assert.Equal(expected, regionInfo1.GetHashCode().Equals(obj.GetHashCode()));
             }
+        }
+
+        [Fact]
+        public void ValidateThrowingWhenUsingCustomUnspecifiedLcid()
+        {
+            // When trying to create RegionInfo using Lcid, we call LcidToLocaleName to map the Lcid to the culture name.
+            // LOCALE_CUSTOM_UNSPECIFIED (0x1000) is considered invalid Lcid to create cultures with. Sometimes Windows can
+            // map which is wrong. This happen if we enumerate the cultures before trying to create the RegionInfo object.
+            // This test is to ensure we'll not allow this creation in .NET.
+
+            CultureInfo [] cultures = CultureInfo.GetCultures(CultureTypes.SpecificCultures);
+
+            AssertExtensions.Throws<ArgumentException>("culture", () => new RegionInfo(4096));
         }
     }
 }

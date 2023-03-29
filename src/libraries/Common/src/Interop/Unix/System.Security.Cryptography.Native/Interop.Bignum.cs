@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
@@ -11,37 +10,29 @@ internal static partial class Interop
 {
     internal static partial class Crypto
     {
-        [DllImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_BigNumDestroy")]
-        internal static extern void BigNumDestroy(IntPtr a);
+        [LibraryImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_BigNumDestroy")]
+        internal static partial void BigNumDestroy(IntPtr a);
 
-        [DllImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_BigNumFromBinary")]
-        private static extern unsafe IntPtr BigNumFromBinary(byte* s, int len);
+        [LibraryImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_BigNumFromBinary")]
+        private static unsafe partial SafeBignumHandle BigNumFromBinary(ReadOnlySpan<byte> bigEndianValue, int len);
 
-        [DllImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_BigNumToBinary")]
-        private static extern unsafe int BigNumToBinary(SafeBignumHandle a, byte* to);
+        [LibraryImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_BigNumToBinary")]
+        private static unsafe partial int BigNumToBinary(SafeBignumHandle a, byte* to);
 
-        [DllImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_GetBigNumBytes")]
-        private static extern int GetBigNumBytes(SafeBignumHandle a);
-
-        private static unsafe IntPtr CreateBignumPtr(ReadOnlySpan<byte> bigEndianValue)
-        {
-            fixed (byte* pBigEndianValue = bigEndianValue)
-            {
-                IntPtr ret = BigNumFromBinary(pBigEndianValue, bigEndianValue.Length);
-
-                if (ret == IntPtr.Zero)
-                {
-                    throw CreateOpenSslCryptographicException();
-                }
-
-                return ret;
-            }
-        }
+        [LibraryImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_GetBigNumBytes")]
+        private static partial int GetBigNumBytes(SafeBignumHandle a);
 
         internal static SafeBignumHandle CreateBignum(ReadOnlySpan<byte> bigEndianValue)
         {
-            IntPtr handle = CreateBignumPtr(bigEndianValue);
-            return new SafeBignumHandle(handle, true);
+            SafeBignumHandle ret = BigNumFromBinary(bigEndianValue, bigEndianValue.Length);
+            if (ret.IsInvalid)
+            {
+                Exception e = CreateOpenSslCryptographicException();
+                ret.Dispose();
+                throw e;
+            }
+
+            return ret;
         }
 
         internal static byte[]? ExtractBignum(IntPtr bignum, int targetSize)
@@ -54,7 +45,7 @@ internal static partial class Interop
             }
         }
 
-        private static unsafe byte[]? ExtractBignum(SafeBignumHandle? bignum, int targetSize)
+        internal static unsafe byte[]? ExtractBignum(SafeBignumHandle? bignum, int targetSize)
         {
             if (bignum == null || bignum.IsInvalid)
             {

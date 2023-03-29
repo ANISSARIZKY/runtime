@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Runtime.CompilerServices;
-using Internal.Runtime.CompilerServices;
 
 namespace System.Threading
 {
@@ -69,6 +68,39 @@ namespace System.Threading
         [CLSCompliant(false)]
         public static ulong Exchange(ref ulong location1, ulong value) =>
             (ulong)Exchange(ref Unsafe.As<ulong, long>(ref location1), (long)value);
+
+        /// <summary>Sets a platform-specific handle or pointer to a specified value and returns the original value, as an atomic operation.</summary>
+        /// <param name="location1">The variable to set to the specified value.</param>
+        /// <param name="value">The value to which the <paramref name="location1"/> parameter is set.</param>
+        /// <returns>The original value of <paramref name="location1"/>.</returns>
+        /// <exception cref="NullReferenceException">The address of location1 is a null pointer.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static IntPtr Exchange(ref IntPtr location1, IntPtr value)
+        {
+#pragma warning disable CA2020 // Prevent from behavioral change
+#if TARGET_64BIT
+            return (IntPtr)Interlocked.Exchange(ref Unsafe.As<IntPtr, long>(ref location1), (long)value);
+#else
+            return (IntPtr)Interlocked.Exchange(ref Unsafe.As<IntPtr, int>(ref location1), (int)value);
+#endif
+#pragma warning restore CA2020
+        }
+
+        /// <summary>Sets a platform-specific handle or pointer to a specified value and returns the original value, as an atomic operation.</summary>
+        /// <param name="location1">The variable to set to the specified value.</param>
+        /// <param name="value">The value to which the <paramref name="location1"/> parameter is set.</param>
+        /// <returns>The original value of <paramref name="location1"/>.</returns>
+        /// <exception cref="NullReferenceException">The address of location1 is a null pointer.</exception>
+        [CLSCompliant(false)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static UIntPtr Exchange(ref UIntPtr location1, UIntPtr value)
+        {
+#if TARGET_64BIT
+            return (UIntPtr)Interlocked.Exchange(ref Unsafe.As<UIntPtr, long>(ref location1), (long)value);
+#else
+            return (UIntPtr)Interlocked.Exchange(ref Unsafe.As<UIntPtr, int>(ref location1), (int)value);
+#endif
+        }
         #endregion
 
         #region CompareExchange
@@ -93,6 +125,41 @@ namespace System.Threading
         [CLSCompliant(false)]
         public static ulong CompareExchange(ref ulong location1, ulong value, ulong comparand) =>
             (ulong)CompareExchange(ref Unsafe.As<ulong, long>(ref location1), (long)value, (long)comparand);
+
+        /// <summary>Compares two platform-specific handles or pointers for equality and, if they are equal, replaces the first one.</summary>
+        /// <param name="location1">The destination <see cref="IntPtr"/>, whose value is compared with the value of <paramref name="comparand"/> and possibly replaced by <paramref name="value"/>.</param>
+        /// <param name="value">The <see cref="IntPtr"/> that replaces the destination value if the comparison results in equality.</param>
+        /// <param name="comparand">The <see cref="IntPtr"/> that is compared to the value at <paramref name="location1"/>.</param>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
+        /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static IntPtr CompareExchange(ref IntPtr location1, IntPtr value, IntPtr comparand)
+        {
+#pragma warning disable CA2020 // Prevent from behavioral change
+#if TARGET_64BIT
+            return (IntPtr)Interlocked.CompareExchange(ref Unsafe.As<IntPtr, long>(ref location1), (long)value, (long)comparand);
+#else
+            return (IntPtr)Interlocked.CompareExchange(ref Unsafe.As<IntPtr, int>(ref location1), (int)value, (int)comparand);
+#endif
+#pragma warning restore CA2020
+        }
+
+        /// <summary>Compares two platform-specific handles or pointers for equality and, if they are equal, replaces the first one.</summary>
+        /// <param name="location1">The destination <see cref="UIntPtr"/>, whose value is compared with the value of <paramref name="comparand"/> and possibly replaced by <paramref name="value"/>.</param>
+        /// <param name="value">The <see cref="UIntPtr"/> that replaces the destination value if the comparison results in equality.</param>
+        /// <param name="comparand">The <see cref="UIntPtr"/> that is compared to the value at <paramref name="location1"/>.</param>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
+        /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
+        [CLSCompliant(false)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static UIntPtr CompareExchange(ref UIntPtr location1, UIntPtr value, UIntPtr comparand)
+        {
+#if TARGET_64BIT
+            return (UIntPtr)Interlocked.CompareExchange(ref Unsafe.As<UIntPtr, long>(ref location1), (long)value, (long)comparand);
+#else
+            return (UIntPtr)Interlocked.CompareExchange(ref Unsafe.As<UIntPtr, int>(ref location1), (int)value, (int)comparand);
+#endif
+        }
         #endregion
 
         #region Add
@@ -133,6 +200,7 @@ namespace System.Threading
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
         /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int And(ref int location1, int value)
         {
@@ -164,6 +232,7 @@ namespace System.Threading
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
         /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long And(ref long location1, long value)
         {
@@ -197,6 +266,7 @@ namespace System.Threading
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
         /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Or(ref int location1, int value)
         {
@@ -228,6 +298,7 @@ namespace System.Threading
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
         /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long Or(ref long location1, long value)
         {

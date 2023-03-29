@@ -214,7 +214,7 @@ namespace System.PrivateUri.Tests
         [InlineData(null, "")]
         public void Password_Get_Set(string value, string expected)
         {
-            var uriBuilder = new UriBuilder("http://userinfo1:userinfo2@domain/path?query#fragment");
+            var uriBuilder = new UriBuilder("http://userinfo1:PLACEHOLDER@domain/path?query#fragment");
             uriBuilder.Password = value;
             Assert.Equal(expected, uriBuilder.Password);
 
@@ -383,6 +383,22 @@ namespace System.PrivateUri.Tests
             var uriBuilder = new UriBuilder();
             uriBuilder.Password = "password";
             Assert.Throws<UriFormatException>(() => uriBuilder.ToString()); // Uri has a password but no username
+        }
+
+        [Theory]
+        [InlineData(@"user/\?#@name", "", "http://user%2F%5C%3F%23%40name@localhost/")]
+        [InlineData(@"user/\?#@name", @"/\?#@", "http://user%2F%5C%3F%23%40name:%2F%5C%3F%23%40@localhost/")]
+        public void ToString_EncodingUserInfo(string username, string password, string expectedToString)
+        {
+            var uriBuilder = new UriBuilder
+            {
+                UserName = username,
+                Password = password
+            };
+
+            Assert.Equal(expectedToString, uriBuilder.ToString());
+            Assert.Equal(username, uriBuilder.UserName);
+            Assert.Equal(password, uriBuilder.Password);
         }
 
         private static void VerifyUriBuilder(UriBuilder uriBuilder, string scheme, string userName, string password, string host, int port, string path, string query, string fragment)

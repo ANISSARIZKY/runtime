@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Dynamic.Utils;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -404,21 +405,21 @@ namespace System.Linq.Expressions
                 new TrueReadOnlyCollection<Expression>(
                     Assign(left, Left),
                     Condition(
-                        Property(left, "HasValue"),
+                        GetHasValueProperty(left),
                         Condition(
-                            Call(opTrueFalse, Call(left, "GetValueOrDefault", null)),
+                            Call(opTrueFalse, CallGetValueOrDefault(left)),
                             left,
                             Block(
                                 new TrueReadOnlyCollection<ParameterExpression>(right),
                                 new TrueReadOnlyCollection<Expression>(
                                     Assign(right, Right),
                                     Condition(
-                                        Property(right, "HasValue"),
+                                        GetHasValueProperty(right),
                                         Convert(
                                             Call(
                                                 Method,
-                                                Call(left, "GetValueOrDefault", null),
-                                                Call(right, "GetValueOrDefault", null)
+                                                CallGetValueOrDefault(left),
+                                                CallGetValueOrDefault(right)
                                             ),
                                             Type
                                         ),
@@ -431,6 +432,22 @@ namespace System.Linq.Expressions
                     )
                 )
             );
+        }
+
+        [DynamicDependency("GetValueOrDefault", typeof(Nullable<>))]
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+            Justification = "The method will be preserved by the DynamicDependency.")]
+        private static MethodCallExpression CallGetValueOrDefault(ParameterExpression nullable)
+        {
+            return Call(nullable, "GetValueOrDefault", null);
+        }
+
+        [DynamicDependency("HasValue", typeof(Nullable<>))]
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+                Justification = "The property will be preserved by the DynamicDependency.")]
+        private static MemberExpression GetHasValueProperty(ParameterExpression nullable)
+        {
+            return Property(nullable, "HasValue");
         }
     }
 
@@ -476,7 +493,7 @@ namespace System.Linq.Expressions
         public sealed override ExpressionType NodeType => ExpressionType.Assign;
     }
 
-    internal class ByRefAssignBinaryExpression : AssignBinaryExpression
+    internal sealed class ByRefAssignBinaryExpression : AssignBinaryExpression
     {
         internal ByRefAssignBinaryExpression(Expression left, Expression right)
             : base(left, right)
@@ -618,8 +635,8 @@ namespace System.Linq.Expressions
                 throw Error.IncorrectNumberOfMethodCallArguments(method, nameof(method));
             if (ParameterIsAssignable(pms[0], left.Type) && ParameterIsAssignable(pms[1], right.Type))
             {
-                ValidateParamswithOperandsOrThrow(pms[0].ParameterType, left.Type, binaryType, method.Name);
-                ValidateParamswithOperandsOrThrow(pms[1].ParameterType, right.Type, binaryType, method.Name);
+                ValidateParamsWithOperandsOrThrow(pms[0].ParameterType, left.Type, binaryType, method.Name);
+                ValidateParamsWithOperandsOrThrow(pms[1].ParameterType, right.Type, binaryType, method.Name);
                 return new MethodBinaryExpression(binaryType, left, right, method.ReturnType, method);
             }
             // check for lifted call
@@ -666,8 +683,8 @@ namespace System.Linq.Expressions
             if (b != null)
             {
                 ParameterInfo[] pis = b.Method!.GetParametersCached();
-                ValidateParamswithOperandsOrThrow(pis[0].ParameterType, left.Type, binaryType, name);
-                ValidateParamswithOperandsOrThrow(pis[1].ParameterType, right.Type, binaryType, name);
+                ValidateParamsWithOperandsOrThrow(pis[0].ParameterType, left.Type, binaryType, name);
+                ValidateParamsWithOperandsOrThrow(pis[1].ParameterType, right.Type, binaryType, name);
                 return b;
             }
             throw Error.BinaryOperatorNotDefined(binaryType, left.Type, right.Type);
@@ -693,6 +710,8 @@ namespace System.Linq.Expressions
             return b;
         }
 
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2072:UnrecognizedReflectionPattern",
+            Justification = "The trimmer doesn't remove operators when System.Linq.Expressions is used. See https://github.com/mono/linker/pull/2125.")]
         private static MethodInfo? GetUserDefinedBinaryOperator(ExpressionType binaryType, Type leftType, Type rightType, string name)
         {
             // This algorithm is wrong, we should be checking for uniqueness and erroring if
@@ -729,7 +748,7 @@ namespace System.Linq.Expressions
             return TypeUtils.AreReferenceAssignable(pType, argType);
         }
 
-        private static void ValidateParamswithOperandsOrThrow(Type paramType, Type operandType, ExpressionType exprType, string name)
+        private static void ValidateParamsWithOperandsOrThrow(Type paramType, Type operandType, ExpressionType exprType, string name)
         {
             if (paramType.IsNullableType() && !operandType.IsNullableType())
             {
@@ -2745,8 +2764,8 @@ namespace System.Linq.Expressions
                     }
 
                     ParameterInfo[] pis = b.Method!.GetParametersCached();
-                    ValidateParamswithOperandsOrThrow(pis[0].ParameterType, left.Type, ExpressionType.Power, name);
-                    ValidateParamswithOperandsOrThrow(pis[1].ParameterType, right.Type, ExpressionType.Power, name);
+                    ValidateParamsWithOperandsOrThrow(pis[0].ParameterType, left.Type, ExpressionType.Power, name);
+                    ValidateParamsWithOperandsOrThrow(pis[1].ParameterType, right.Type, ExpressionType.Power, name);
                     return b;
                 }
             }

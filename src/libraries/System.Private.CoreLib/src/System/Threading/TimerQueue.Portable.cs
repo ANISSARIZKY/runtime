@@ -7,9 +7,9 @@ using System.Diagnostics;
 namespace System.Threading
 {
     //
-    // Unix-specific implementation of Timer
+    // Portable implementation of Timer
     //
-    internal partial class TimerQueue : IThreadPoolWorkItem
+    internal sealed partial class TimerQueue : IThreadPoolWorkItem
     {
         private static List<TimerQueue>? s_scheduledTimers;
         private static List<TimerQueue>? s_scheduledTimersToFire;
@@ -23,9 +23,11 @@ namespace System.Threading
         private bool _isScheduled;
         private long _scheduledDueTimeMs;
 
+#pragma warning disable IDE0060
         private TimerQueue(int id)
         {
         }
+#pragma warning restore IDE0060
 
         private static List<TimerQueue> InitializeScheduledTimerManager_Locked()
         {
@@ -34,9 +36,14 @@ namespace System.Threading
             var timers = new List<TimerQueue>(Instances.Length);
             s_scheduledTimersToFire ??= new List<TimerQueue>(Instances.Length);
 
-            Thread timerThread = new Thread(TimerThread);
-            timerThread.IsBackground = true;
-            timerThread.Start();
+            // The timer thread must start in the default execution context without transferring the context, so
+            // using UnsafeStart() instead of Start()
+            Thread timerThread = new Thread(TimerThread)
+            {
+                Name = ".NET Timer",
+                IsBackground = true
+            };
+            timerThread.UnsafeStart();
 
             // Do this after creating the thread in case thread creation fails so that it will try again next time
             s_scheduledTimers = timers;
@@ -52,11 +59,7 @@ namespace System.Threading
             {
                 if (!_isScheduled)
                 {
-                    List<TimerQueue>? timers = s_scheduledTimers;
-                    if (timers == null)
-                    {
-                        timers = InitializeScheduledTimerManager_Locked();
-                    }
+                    List<TimerQueue> timers = s_scheduledTimers ?? InitializeScheduledTimerManager_Locked();
 
                     timers.Add(this);
                     _isScheduled = true;
@@ -70,7 +73,7 @@ namespace System.Threading
         }
 
         /// <summary>
-        /// This method is executed on a dedicated a timer thread. Its purpose is
+        /// This method is executed on a dedicated timer thread. Its purpose is
         /// to handle timer requests and notify the TimerQueue when a timer expires.
         /// </summary>
         private static void TimerThread()
@@ -121,7 +124,7 @@ namespace System.Threading
                 {
                     foreach (TimerQueue timerToFire in timersToFire)
                     {
-                        ThreadPool.UnsafeQueueTimeSensitiveWorkItem(timerToFire);
+                        ThreadPool.UnsafeQueueHighPriorityWorkItemInternal(timerToFire);
                     }
                     timersToFire.Clear();
                 }

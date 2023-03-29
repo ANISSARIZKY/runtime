@@ -9,7 +9,7 @@ using Test.Cryptography;
 
 namespace System.Security.Cryptography.EcDiffieHellman.Tests
 {
-    [SkipOnMono("Not supported on Browser", TestPlatforms.Browser)]
+    [SkipOnPlatform(TestPlatforms.Browser, "Not supported on Browser")]
     public partial class ECDiffieHellmanTests : EccTestBase
     {
         private static List<object[]> s_everyKeysize;
@@ -168,6 +168,8 @@ namespace System.Security.Cryptography.EcDiffieHellman.Tests
                     key.KeySize = 384;
                     key.ExportParameters(false);
                 });
+
+            pubKey.Dispose();
         }
 
 #if NETCOREAPP

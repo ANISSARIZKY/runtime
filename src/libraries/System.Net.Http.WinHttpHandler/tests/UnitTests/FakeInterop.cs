@@ -422,6 +422,12 @@ internal static partial class Interop
             ref uint buffer,
             ref uint bufferSize)
         {
+            if (option == WINHTTP_OPTION_STREAM_ERROR_CODE)
+            {
+                TestControl.LastWin32Error = (int)ERROR_INVALID_PARAMETER;
+                return false;
+            }
+
             return true;
         }
 
@@ -507,6 +513,10 @@ internal static partial class Interop
             {
                 APICallHistory.WinHttpOptionRedirectPolicy = optionData;
             }
+            else if (option == Interop.WinHttp.WINHTTP_OPTION_RECEIVE_TIMEOUT)
+            {
+                APICallHistory.WinHttpOptionReceiveTimeout = optionData;
+            }
 
             return true;
         }
@@ -537,7 +547,7 @@ internal static partial class Interop
             return true;
         }
 
-        public static bool WinHttpSetOption(
+        public unsafe static bool WinHttpSetOption(
             SafeWinHttpHandle handle,
             uint option,
             IntPtr optionData,
@@ -555,6 +565,11 @@ internal static partial class Interop
             else if (option == Interop.WinHttp.WINHTTP_OPTION_CLIENT_CERT_CONTEXT)
             {
                 APICallHistory.WinHttpOptionClientCertContext.Add(optionData);
+            }
+            else if (option == Interop.WinHttp.WINHTTP_OPTION_TCP_KEEPALIVE)
+            {
+                Interop.WinHttp.tcp_keepalive* ptr = (Interop.WinHttp.tcp_keepalive*)optionData;
+                APICallHistory.WinHttpOptionTcpKeepAlive = (ptr->onoff, ptr->keepalivetime, ptr->keepaliveinterval);
             }
 
             return true;
@@ -599,7 +614,7 @@ internal static partial class Interop
         {
             if (FakeRegistry.WinInetProxySettings.RegistryKeyMissing)
             {
-                proxyConfig.AutoDetect = false;
+                proxyConfig.AutoDetect = 0;
                 proxyConfig.AutoConfigUrl = IntPtr.Zero;
                 proxyConfig.Proxy = IntPtr.Zero;
                 proxyConfig.ProxyBypass = IntPtr.Zero;
@@ -608,7 +623,7 @@ internal static partial class Interop
                 return false;
             }
 
-            proxyConfig.AutoDetect = FakeRegistry.WinInetProxySettings.AutoDetect;
+            proxyConfig.AutoDetect = FakeRegistry.WinInetProxySettings.AutoDetect ? 1 : 0;
             proxyConfig.AutoConfigUrl = Marshal.StringToHGlobalUni(FakeRegistry.WinInetProxySettings.AutoConfigUrl);
             proxyConfig.Proxy = Marshal.StringToHGlobalUni(FakeRegistry.WinInetProxySettings.Proxy);
             proxyConfig.ProxyBypass = Marshal.StringToHGlobalUni(FakeRegistry.WinInetProxySettings.ProxyBypass);

@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 #pragma warning disable SA1028 // ignore whitespace warnings for generated code
@@ -67,7 +67,8 @@ namespace System.Security.Cryptography.Pkcs.Asn1
 
             // DEFAULT value handler for Ordering.
             {
-                AsnWriter tmp = new AsnWriter(AsnEncodingRules.DER);
+                const int AsnBoolDerEncodeSize = 3;
+                AsnWriter tmp = new AsnWriter(AsnEncodingRules.DER, initialCapacity: AsnBoolDerEncodeSize);
                 tmp.WriteBoolean(Ordering);
 
                 if (!tmp.EncodedValueEquals(DefaultOrdering))
@@ -117,7 +118,7 @@ namespace System.Security.Cryptography.Pkcs.Asn1
             {
                 AsnValueReader reader = new AsnValueReader(encoded.Span, ruleSet);
 
-                Decode(ref reader, expectedTag, encoded, out Rfc3161TstInfo decoded);
+                DecodeCore(ref reader, expectedTag, encoded, out Rfc3161TstInfo decoded);
                 reader.ThrowIfNotEmpty();
                 return decoded;
             }
@@ -170,7 +171,7 @@ namespace System.Security.Cryptography.Pkcs.Asn1
             if (sequenceReader.HasData && sequenceReader.PeekTag().HasSameClassAndValue(Asn1Tag.Sequence))
             {
                 System.Security.Cryptography.Pkcs.Asn1.Rfc3161Accuracy tmpAccuracy;
-                System.Security.Cryptography.Pkcs.Asn1.Rfc3161Accuracy.Decode(ref sequenceReader, rebind, out tmpAccuracy);
+                System.Security.Cryptography.Pkcs.Asn1.Rfc3161Accuracy.Decode(ref sequenceReader, out tmpAccuracy);
                 decoded.Accuracy = tmpAccuracy;
 
             }

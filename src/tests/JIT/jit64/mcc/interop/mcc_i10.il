@@ -3,8 +3,8 @@
 
 
 .assembly extern mscorlib {}
-.assembly MCCTest {}
-.module mcc_i10.exe
+.assembly extern xunit.core {}
+.assembly 'mcc_i10' {}
 
 
 .namespace MCCTest
@@ -15,8 +15,11 @@
         vararg valuetype MCCTest.VType1 Sum(float64) cil managed preservesig {
     }
 
-    .method private static int32 Main(string[] args)
+    .method private static int32 Main()
     {
+      .custom instance void [xunit.core]Xunit.FactAttribute::.ctor() = (
+          01 00 00 00
+      )
       .entrypoint
       .maxstack  64
       .locals init	(

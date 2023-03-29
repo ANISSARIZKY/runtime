@@ -45,10 +45,10 @@ namespace System.Net
         public System.Net.HttpListenerRequest Request { get { throw null; } }
         public System.Net.HttpListenerResponse Response { get { throw null; } }
         public System.Security.Principal.IPrincipal? User { get { throw null; } }
-        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string subProtocol) { throw null; }
-        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string subProtocol, int receiveBufferSize, System.TimeSpan keepAliveInterval) { throw null; }
-        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string subProtocol, int receiveBufferSize, System.TimeSpan keepAliveInterval, System.ArraySegment<byte> internalBuffer) { throw null; }
-        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string subProtocol, System.TimeSpan keepAliveInterval) { throw null; }
+        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string? subProtocol) { throw null; }
+        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string? subProtocol, int receiveBufferSize, System.TimeSpan keepAliveInterval) { throw null; }
+        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string? subProtocol, int receiveBufferSize, System.TimeSpan keepAliveInterval, System.ArraySegment<byte> internalBuffer) { throw null; }
+        public System.Threading.Tasks.Task<System.Net.WebSockets.HttpListenerWebSocketContext> AcceptWebSocketAsync(string? subProtocol, System.TimeSpan keepAliveInterval) { throw null; }
     }
     public partial class HttpListenerException : System.ComponentModel.Win32Exception
     {
@@ -132,7 +132,7 @@ namespace System.Net
         public void Close() { }
         public void Close(byte[] responseEntity, bool willBlock) { }
         public void CopyFrom(System.Net.HttpListenerResponse templateResponse) { }
-        public void Redirect(string url) { }
+        public void Redirect([System.Diagnostics.CodeAnalysis.StringSyntaxAttribute("Uri")] string url) { }
         public void SetCookie(System.Net.Cookie cookie) { }
         void System.IDisposable.Dispose() { }
     }

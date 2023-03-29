@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Security;
+using System.Runtime.Versioning;
 using System.Threading;
 
 namespace System.Net
@@ -50,10 +51,7 @@ namespace System.Net
             get { return s_maxServicePoints; }
             set
             {
-                if (value < 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
                 s_maxServicePoints = value;
             }
         }
@@ -63,10 +61,7 @@ namespace System.Net
             get { return s_connectionLimit; }
             set
             {
-                if (value <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
                 s_connectionLimit = value;
             }
         }
@@ -76,10 +71,7 @@ namespace System.Net
             get { return s_maxServicePointIdleTime; }
             set
             {
-                if (value < Timeout.Infinite)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfLessThan(value, Timeout.Infinite);
                 s_maxServicePointIdleTime = value;
             }
         }
@@ -102,6 +94,7 @@ namespace System.Net
 
         public static bool CheckCertificateRevocationList { get; set; }
 
+        [UnsupportedOSPlatform("browser")]
         public static EncryptionPolicy EncryptionPolicy { get; } = EncryptionPolicy.RequireEncryption;
 
         [Obsolete(Obsoletions.WebRequestMessage, DiagnosticId = Obsoletions.WebRequestDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
@@ -113,10 +106,7 @@ namespace System.Net
         [Obsolete(Obsoletions.WebRequestMessage, DiagnosticId = Obsoletions.WebRequestDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
         public static ServicePoint FindServicePoint(Uri address, IWebProxy? proxy)
         {
-            if (address == null)
-            {
-                throw new ArgumentNullException(nameof(address));
-            }
+            ArgumentNullException.ThrowIfNull(address);
 
             // If there's a proxy for this address, get the "real" address.
             bool isProxyServicePoint = ProxyAddressIfNecessary(ref address, proxy);
@@ -207,8 +197,8 @@ namespace System.Net
         }
 
         private static string MakeQueryString(Uri address) => address.IsDefaultPort ?
-            address.Scheme + "://" + address.DnsSafeHost :
-            address.Scheme + "://" + address.DnsSafeHost + ":" + address.Port.ToString();
+            $"{address.Scheme}://{address.DnsSafeHost}" :
+            $"{address.Scheme}://{address.DnsSafeHost}:{address.Port}";
 
         private static string MakeQueryString(Uri address, bool isProxy)
         {
@@ -220,14 +210,8 @@ namespace System.Net
         {
             if (enabled)
             {
-                if (keepAliveTime <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(keepAliveTime));
-                }
-                if (keepAliveInterval <= 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(keepAliveInterval));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(keepAliveTime);
+                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(keepAliveInterval);
             }
         }
     }

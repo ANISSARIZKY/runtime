@@ -10,6 +10,17 @@ namespace System
         internal static bool GetBooleanConfig(string configName, bool defaultValue) =>
             AppContext.TryGetSwitch(configName, out bool value) ? value : defaultValue;
 
+        internal static bool GetBooleanConfig(string switchName, string envVariable, bool defaultValue = false)
+        {
+            if (!AppContext.TryGetSwitch(switchName, out bool ret))
+            {
+                string? switchValue = Environment.GetEnvironmentVariable(envVariable);
+                ret = switchValue != null ? (bool.IsTrueStringIgnoreCase(switchValue) || switchValue.Equals("1")) : defaultValue;
+            }
+
+            return ret;
+        }
+
         internal static int GetInt32Config(string configName, int defaultValue, bool allowNegative = true)
         {
             try
@@ -77,7 +88,7 @@ namespace System
                         {
                             result = Convert.ToInt16(str, 16);
                         }
-                        else if (str.StartsWith("0"))
+                        else if (str.StartsWith('0'))
                         {
                             result = Convert.ToInt16(str, 8);
                         }

@@ -4,6 +4,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -19,6 +20,8 @@ namespace System.Diagnostics.Tests
 {
     public partial class ProcessTests : ProcessTestBase
     {
+        private static bool IsRemoteExecutorSupportedAndPrivilegedProcess => RemoteExecutor.IsSupported && PlatformDetection.IsPrivilegedProcess;
+
         [Fact]
         private void TestWindowApisUnix()
         {
@@ -77,6 +80,7 @@ namespace System.Diagnostics.Tests
 
         [Fact]
         [OuterLoop("Opens program")]
+        [SkipOnPlatform(TestPlatforms.MacCatalyst, "In App Sandbox mode, the process doesn't have read access to the binary.")]
         public void ProcessStart_DirectoryNameInCurDirectorySameAsFileNameInExecDirectory_Success()
         {
             string fileToOpen = "dotnet";
@@ -156,13 +160,15 @@ namespace System.Diagnostics.Tests
         }
 
         [Fact]
-        [PlatformSpecific(~TestPlatforms.OSX)] // On OSX, ProcessName returns the script interpreter.
+        [SkipOnPlatform(TestPlatforms.OSX | TestPlatforms.MacCatalyst, "On OSX, ProcessName returns the script interpreter.")]
+        [SkipOnPlatform(TestPlatforms.iOS | TestPlatforms.tvOS, "Not supported on iOS or tvOS.")]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/13757")]
         public void ProcessNameMatchesScriptName()
         {
             string scriptName = GetTestFileName();
             string filename = Path.Combine(TestDirectory, scriptName);
             File.WriteAllText(filename, $"#!/bin/sh\nsleep 600\n"); // sleep 10 min.
-            ChMod(filename, "744"); // set x-bit
+            File.SetUnixFileMode(filename, ExecutablePermissions);
 
             using (var process = Process.Start(new ProcessStartInfo { FileName = filename }))
             {
@@ -184,6 +190,40 @@ namespace System.Diagnostics.Tests
         }
 
         [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        public void ProcessStart_SkipsNonExecutableFilesOnPATH()
+        {
+            const string ScriptName = "script";
+
+            // Create a directory named ScriptName.
+            string path1 = Path.Combine(TestDirectory, "Path1");
+            Directory.CreateDirectory(Path.Combine(path1, ScriptName));
+
+            // Create a non-executable file named ScriptName
+            string path2 = Path.Combine(TestDirectory, "Path2");
+            Directory.CreateDirectory(path2);
+            File.WriteAllText(Path.Combine(path2, ScriptName), "Not executable");
+
+            // Create an executable script named ScriptName
+            string path3 = Path.Combine(TestDirectory, "Path3");
+            Directory.CreateDirectory(path3);
+            string filename = WriteScriptFile(path3, ScriptName, returnValue: 42);
+
+            // Process.Start ScriptName with the above on PATH.
+            RemoteInvokeOptions options = new RemoteInvokeOptions();
+            options.StartInfo.EnvironmentVariables["PATH"] = $"{path1}:{path2}:{path3}";
+            RemoteExecutor.Invoke(() =>
+            {
+                using (var px = Process.Start(new ProcessStartInfo { FileName = ScriptName }))
+                {
+                    Assert.NotNull(px);
+                    px.WaitForExit();
+                    Assert.True(px.HasExited);
+                    Assert.Equal(42, px.ExitCode);
+                }
+            }, options).Dispose();
+        }
+
+        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
         [PlatformSpecific(TestPlatforms.Linux)] // s_allowedProgramsToRun is Linux specific
         public void ProcessStart_UseShellExecute_OnUnix_FallsBackWhenNotRealExecutable()
         {
@@ -196,7 +236,7 @@ namespace System.Diagnostics.Tests
             // Create a file that has the x-bit set, but which isn't a valid script.
             string filename = WriteScriptFile(TestDirectory, GetTestFileName(), returnValue: 0);
             File.WriteAllText(filename, $"not a script");
-            ChMod(filename, "744"); // set x-bit
+            File.SetUnixFileMode(filename, ExecutablePermissions);
 
             RemoteInvokeOptions options = new RemoteInvokeOptions();
             options.StartInfo.EnvironmentVariables["PATH"] = path;
@@ -343,7 +383,7 @@ namespace System.Diagnostics.Tests
         }
 
         [Theory, InlineData("/usr/bin/open"), InlineData("/usr/bin/nano")]
-        [PlatformSpecific(TestPlatforms.OSX)]
+        [PlatformSpecific(TestPlatforms.OSX | TestPlatforms.MacCatalyst)]
         [OuterLoop("Opens program")]
         public void ProcessStart_OpenFileOnOsx_UsesSpecifiedProgram(string programToOpenWith)
         {
@@ -360,7 +400,7 @@ namespace System.Diagnostics.Tests
         }
 
         [Theory, InlineData("Safari"), InlineData("\"Google Chrome\"")]
-        [PlatformSpecific(TestPlatforms.OSX)]
+        [PlatformSpecific(TestPlatforms.OSX | TestPlatforms.MacCatalyst)]
         [OuterLoop("Opens browser")]
         public void ProcessStart_OpenUrl_UsesSpecifiedApplication(string applicationToOpenWith)
         {
@@ -374,7 +414,7 @@ namespace System.Diagnostics.Tests
         }
 
         [Theory, InlineData("-a Safari"), InlineData("-a \"Google Chrome\"")]
-        [PlatformSpecific(TestPlatforms.OSX)]
+        [PlatformSpecific(TestPlatforms.OSX | TestPlatforms.MacCatalyst)]
         [OuterLoop("Opens browser")]
         public void ProcessStart_UseShellExecuteTrue_OpenUrl_SuccessfullyReadsArgument(string arguments)
         {
@@ -396,7 +436,7 @@ namespace System.Diagnostics.Tests
 
         [Theory,
             MemberData(nameof(StartOSXProcessWithArgumentList))]
-        [PlatformSpecific(TestPlatforms.OSX)]
+        [PlatformSpecific(TestPlatforms.OSX | TestPlatforms.MacCatalyst)]
         [OuterLoop("Opens browser")]
         public void ProcessStart_UseShellExecuteTrue_OpenUrl_SuccessfullyReadsArgumentArray(string[] argumentList)
         {
@@ -416,8 +456,7 @@ namespace System.Diagnostics.Tests
             }
         }
 
-        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
-        [Trait(XunitConstants.Category, XunitConstants.RequiresElevation)]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsPrivilegedProcess))]
         public void TestPriorityClassUnix()
         {
             CreateDefaultProcess();
@@ -439,58 +478,50 @@ namespace System.Diagnostics.Tests
             }
             catch (Win32Exception ex)
             {
-                Assert.True(!PlatformDetection.IsSuperUser, $"Failed even though superuser {ex.ToString()}");
+                Assert.False(PlatformDetection.IsPrivilegedProcess, $"Failed even though superuser {ex.ToString()}");
             }
         }
 
-        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
-        [Trait(XunitConstants.Category, XunitConstants.RequiresElevation)]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsPrivilegedProcess))]
         public void TestBasePriorityOnUnix()
         {
             CreateDefaultProcess();
 
             ProcessPriorityClass originalPriority = _process.PriorityClass;
             Assert.Equal(ProcessPriorityClass.Normal, originalPriority);
-
-            // https://github.com/dotnet/runtime/issues/24426 -- returns "-19" and not "19"
-            if (!PlatformDetection.IsWindowsSubsystemForLinux)
-            {
-                SetAndCheckBasePriority(ProcessPriorityClass.Idle, 19);
-            }
+            SetAndCheckBasePriority(ProcessPriorityClass.Idle, 19);
 
             try
             {
                 SetAndCheckBasePriority(ProcessPriorityClass.Normal, 0);
-                // https://github.com/dotnet/runtime/issues/24426 -- returns "11" and not "-11"
-                if (!PlatformDetection.IsWindowsSubsystemForLinux)
-                {
-                    SetAndCheckBasePriority(ProcessPriorityClass.High, -11);
-                }
+                SetAndCheckBasePriority(ProcessPriorityClass.High, -11);
                 _process.PriorityClass = originalPriority;
             }
             catch (Win32Exception ex)
             {
-                Assert.True(!PlatformDetection.IsSuperUser, $"Failed even though superuser {ex.ToString()}");
+                Assert.False(PlatformDetection.IsPrivilegedProcess, $"Failed even though superuser {ex.ToString()}");
             }
         }
 
         [Fact]
+        [SkipOnPlatform(TestPlatforms.iOS | TestPlatforms.tvOS, "Not supported on iOS or tvOS.")]
         public void TestStartOnUnixWithBadPermissions()
         {
             string path = GetTestFilePath();
             File.Create(path).Dispose();
-            ChMod(path, "644");
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 
             Win32Exception e = Assert.Throws<Win32Exception>(() => Process.Start(path));
             Assert.NotEqual(0, e.NativeErrorCode);
         }
 
         [Fact]
+        [SkipOnPlatform(TestPlatforms.iOS | TestPlatforms.tvOS, "Not supported on iOS or tvOS.")]
         public void TestStartOnUnixWithBadFormat()
         {
             string path = GetTestFilePath();
             File.Create(path).Dispose();
-            ChMod(path, "744"); // set x-bit
+            File.SetUnixFileMode(path, ExecutablePermissions);
 
             Win32Exception e = Assert.Throws<Win32Exception>(() => Process.Start(path));
             Assert.NotEqual(0, e.NativeErrorCode);
@@ -541,8 +572,8 @@ namespace System.Diagnostics.Tests
         }
 
         [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
-        [ActiveIssue("https://github.com/dotnet/runtime/issues/28922", TestPlatforms.AnyUnix)]
-        public unsafe void TestCheckChildProcessUserAndGroupIds()
+        [SkipOnPlatform(TestPlatforms.LinuxBionic, "Bionic is not normal Linux, has no normal users/groups")]
+        public void TestCheckChildProcessUserAndGroupIds()
         {
             string userName = GetCurrentRealUserName();
             string userId = GetUserId(userName);
@@ -565,9 +596,7 @@ namespace System.Diagnostics.Tests
         /// Tests when running as root and starting a new process as a normal user,
         /// the new process doesn't have elevated privileges.
         /// </summary>
-        [ConditionalTheory(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
-        [OuterLoop("Needs sudo access")]
-        [Trait(XunitConstants.Category, XunitConstants.RequiresElevation)]
+        [ConditionalTheory(nameof(IsRemoteExecutorSupportedAndPrivilegedProcess))]
         [InlineData(true)]
         [InlineData(false)]
         public unsafe void TestCheckChildProcessUserAndGroupIdsElevated(bool useRootGroups)
@@ -626,7 +655,7 @@ namespace System.Diagnostics.Tests
 
         private static string GetCurrentRealUserName()
         {
-            string realUserName = geteuid() == 0 ?
+            string realUserName = Environment.IsPrivilegedProcess ?
                 Environment.GetEnvironmentVariable("SUDO_USER") :
                 Environment.UserName;
 
@@ -713,7 +742,6 @@ namespace System.Diagnostics.Tests
         /// Tests the ProcessWaitState reference count drops to zero.
         /// </summary>
         [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
-        [PlatformSpecific(TestPlatforms.AnyUnix)] // Test validates Unix implementation
         public async Task TestProcessWaitStateReferenceCount()
         {
             using (var exitedEventSemaphore = new SemaphoreSlim(0, 1))
@@ -804,6 +832,23 @@ namespace System.Diagnostics.Tests
         }
 
         [ConditionalTheory(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        [InlineData("/dev/stdin",  O_RDONLY)]
+        [InlineData("/dev/stdout", O_WRONLY)]
+        [InlineData("/dev/stderr", O_WRONLY)]
+        public void ChildProcessRedirectedIO_FilePathOpenShouldSucceed(string filename, int flags)
+        {
+            var options = new RemoteInvokeOptions { StartInfo = new ProcessStartInfo { RedirectStandardOutput = true, RedirectStandardInput = true, RedirectStandardError = true }};
+            using (RemoteInvokeHandle handle = RemoteExecutor.Invoke(ExecuteChildProcess, filename, flags.ToString(CultureInfo.InvariantCulture), options))
+            { }
+
+            static void ExecuteChildProcess(string filename, string flags)
+            {
+                int result = open(filename, int.Parse(flags, CultureInfo.InvariantCulture));
+                Assert.True(result >= 0, $"failed to open file with {result} and errno {Marshal.GetLastWin32Error()}.");
+            }
+        }
+
+        [ConditionalTheory(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
         [InlineData(true)]
         [InlineData(false)]
         public async Task Kill_ExitedNonChildProcess_DoesNotThrow(bool killTree)
@@ -890,14 +935,6 @@ namespace System.Diagnostics.Tests
         }
 
         [DllImport("libc")]
-        private static extern int chmod(string path, int mode);
-
-        private static void ChMod(string filename, string mode)
-        {
-            Assert.Equal(0, chmod(filename, Convert.ToInt32(mode, 8)));
-        }
-
-        [DllImport("libc")]
         private static extern uint geteuid();
         [DllImport("libc")]
         private static extern uint getuid();
@@ -923,7 +960,11 @@ namespace System.Diagnostics.Tests
                 }
 
                 // Return this as a HashSet to filter out duplicates.
-                return new HashSet<uint>(groups.Slice(0, rv).ToArray());
+                var result = new HashSet<uint>(groups.Slice(0, rv).ToArray());
+                // according to https://man7.org/linux/man-pages/man2/getgroups.2.html it's not specified
+                // if this group is included in the list returned by getgroups
+                result.Add(getegid());
+                return result;
             }
         }
 
@@ -938,13 +979,19 @@ namespace System.Diagnostics.Tests
         [DllImport("libc", SetLastError = true)]
         private static extern int kill(int pid, int sig);
 
+        [DllImport("libc", SetLastError = true)]
+        private static extern int open(string pathname, int flags);
+
+        private const int O_RDONLY = 0;
+        private const int O_WRONLY = 1;
+
         private static readonly string[] s_allowedProgramsToRun = new string[] { "xdg-open", "gnome-open", "kfmclient" };
 
         private string WriteScriptFile(string directory, string name, int returnValue)
         {
             string filename = Path.Combine(directory, name);
             File.WriteAllText(filename, $"#!/bin/sh\nexit {returnValue}\n");
-            ChMod(filename, "744"); // set x-bit
+            File.SetUnixFileMode(filename, ExecutablePermissions);
             return filename;
         }
 

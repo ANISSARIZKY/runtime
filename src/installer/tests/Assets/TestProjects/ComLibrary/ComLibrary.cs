@@ -2,7 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Loader;
 
 namespace ComLibrary
 {
@@ -12,13 +14,21 @@ namespace ComLibrary
     {
     }
 
+    [ComVisible(true)]
+    [Guid("27293cc8-7933-4fdf-9fde-653cbf9b55df")]
+    public interface IServer
+    {
+    }
+
     [UserDefined]
     [ComVisible(true)]
     [Guid("438968CE-5950-4FBC-90B0-E64691350DF5")]
-    public class Server
+    public class Server : IServer
     {
         public Server()
         {
+            Assembly asm = Assembly.GetExecutingAssembly();
+            Console.WriteLine($"{asm.GetName().Name}: AssemblyLoadContext = {AssemblyLoadContext.GetLoadContext(asm)}");
             Console.WriteLine($"New instance of {nameof(Server)} created");
         }
     }
@@ -29,13 +39,19 @@ namespace ComLibrary
     }
 
     [ComVisible(true)]
+    [Guid("f7199267-9821-4f5b-924b-ab5246b455cd")]
+    public interface INested
+    {
+    }
+
+    [ComVisible(true)]
     [Guid("36e75747-aecd-43bf-9082-1a605889c762")]
     public class ComVisible
     {
         [UserDefined]
         [ComVisible(true)]
         [Guid("c82e4585-58bd-46e0-a76d-c0b6975e5984")]
-        public class Nested
+        public class Nested : INested
         {
         }
     }
@@ -46,7 +62,7 @@ namespace ComLibrary
     {
         [ComVisible(true)]
         [Guid("8a0a7085-aca4-4651-9878-ca42747e2206")]
-        public class Nested
+        public class Nested : INested
         {
         }
     }

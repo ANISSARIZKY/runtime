@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Dynamic.Utils;
 using System.Reflection;
 
@@ -57,7 +58,7 @@ namespace System.Linq.Expressions
         /// <returns>The created <see cref="MemberAssignment"/>.</returns>
         public static MemberAssignment Bind(MemberInfo member, Expression expression)
         {
-            ContractUtils.RequiresNotNull(member, nameof(member));
+            ArgumentNullException.ThrowIfNull(member);
             ExpressionUtils.RequiresCanRead(expression, nameof(expression));
             Type memberType;
             ValidateSettableFieldOrPropertyMember(member, out memberType);
@@ -74,10 +75,11 @@ namespace System.Linq.Expressions
         /// <param name="propertyAccessor">The <see cref="PropertyInfo"/> for the property which is being assigned to.</param>
         /// <param name="expression">The value to be assigned to <paramref name="propertyAccessor"/>.</param>
         /// <returns>The created <see cref="MemberAssignment"/>.</returns>
+        [RequiresUnreferencedCode(PropertyFromAccessorRequiresUnreferencedCode)]
         public static MemberAssignment Bind(MethodInfo propertyAccessor, Expression expression)
         {
-            ContractUtils.RequiresNotNull(propertyAccessor, nameof(propertyAccessor));
-            ContractUtils.RequiresNotNull(expression, nameof(expression));
+            ArgumentNullException.ThrowIfNull(propertyAccessor);
+            ArgumentNullException.ThrowIfNull(expression);
             ValidateMethodInfo(propertyAccessor, nameof(propertyAccessor));
             return Bind(GetProperty(propertyAccessor, nameof(propertyAccessor)), expression);
         }

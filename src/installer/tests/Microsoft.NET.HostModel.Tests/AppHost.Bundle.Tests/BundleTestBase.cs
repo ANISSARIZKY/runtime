@@ -19,35 +19,47 @@ namespace AppHost.Bundle.Tests
         // removing them requires deps.json update.
         public static string UseSingleFileSelfContainedHost(TestProjectFixture testFixture)
         {
-            var singleFileHost = Path.Combine(
-                testFixture.RepoDirProvider.HostArtifacts,
-                RuntimeInformationExtensions.GetExeFileNameForCurrentPlatform("singlefilehost"));
             var publishedHostPath = BundleHelper.GetHostPath(testFixture);
-            HostWriter.CreateAppHost(singleFileHost,
+            HostWriter.CreateAppHost(Binaries.SingleFileHost.FilePath,
                                      publishedHostPath,
-                                     BundleHelper.GetAppPath(testFixture));
+                                     BundleHelper.GetAppName(testFixture));
             return publishedHostPath;
         }
 
         public static string UseFrameworkDependentHost(TestProjectFixture testFixture)
         {
-            var appHost = Path.Combine(
-                testFixture.RepoDirProvider.HostArtifacts,
-                RuntimeInformationExtensions.GetExeFileNameForCurrentPlatform("apphost"));
             var publishedHostPath = BundleHelper.GetHostPath(testFixture);
-            HostWriter.CreateAppHost(appHost,
+            HostWriter.CreateAppHost(Binaries.AppHost.FilePath,
                                      publishedHostPath,
-                                     BundleHelper.GetAppPath(testFixture));
+                                     BundleHelper.GetAppName(testFixture));
             return publishedHostPath;
         }
 
         public static string BundleSelfContainedApp(
             TestProjectFixture testFixture,
             BundleOptions options = BundleOptions.None,
-            Version targetFrameworkVersion = null)
+            Version targetFrameworkVersion = null,
+            bool disableCompression = false)
+        {
+            string singleFile;
+            BundleSelfContainedApp(testFixture, out singleFile, options, targetFrameworkVersion);
+            return singleFile;
+        }
+
+        public static Bundler BundleSelfContainedApp(
+            TestProjectFixture testFixture,
+            out string singleFile,
+            BundleOptions options = BundleOptions.None,
+            Version targetFrameworkVersion = null,
+            bool disableCompression = false)
         {
             UseSingleFileSelfContainedHost(testFixture);
-            return BundleHelper.BundleApp(testFixture, options, targetFrameworkVersion);
+            if (targetFrameworkVersion == null || targetFrameworkVersion >= new Version(6, 0))
+            {
+                options |= BundleOptions.EnableCompression;
+            }
+
+            return BundleHelper.BundleApp(testFixture, out singleFile, options, targetFrameworkVersion);
         }
 
         public abstract class SharedTestStateBase
@@ -63,7 +75,7 @@ namespace AppHost.Bundle.Tests
             {
                 var testFixture = new TestProjectFixture(projectName, RepoDirectories);
                 testFixture
-                    .EnsureRestoredForRid(testFixture.CurrentRid, RepoDirectories.CorehostPackages)
+                    .EnsureRestoredForRid(testFixture.CurrentRid)
                     .PublishProject(runtime: testFixture.CurrentRid,
                                     outputDirectory: BundleHelper.GetPublishPath(testFixture),
                                     extraArgs: extraArgs);

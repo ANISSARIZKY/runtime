@@ -3,13 +3,12 @@
 
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
+
 using EditorBrowsableAttribute = System.ComponentModel.EditorBrowsableAttribute;
 using EditorBrowsableState = System.ComponentModel.EditorBrowsableState;
-
-using Internal.Runtime.CompilerServices;
 
 namespace System
 {
@@ -215,7 +214,7 @@ namespace System
             {
                 return (_object is string str) ? str.Substring(_index, _length) : Span.ToString();
             }
-            return string.Format("System.Memory<{0}>[{1}]", typeof(T).Name, _length);
+            return $"System.Memory<{typeof(T).Name}>[{_length}]";
         }
 
         /// <summary>
@@ -356,22 +355,20 @@ namespace System
         /// Copies the contents of the memory into the destination. If the source
         /// and destination overlap, this method behaves as if the original values are in
         /// a temporary location before the destination is overwritten.
-        ///
+        /// </summary>
         /// <param name="destination">The Memory to copy items into.</param>
         /// <exception cref="System.ArgumentException">
         /// Thrown when the destination is shorter than the source.
         /// </exception>
-        /// </summary>
         public void CopyTo(Memory<T> destination) => Span.CopyTo(destination.Span);
 
         /// <summary>
         /// Copies the contents of the memory into the destination. If the source
         /// and destination overlap, this method behaves as if the original values are in
         /// a temporary location before the destination is overwritten.
-        ///
+        /// </summary>
         /// <returns>If the destination is shorter than the source, this method
         /// return false and no data is written to the destination.</returns>
-        /// </summary>
         /// <param name="destination">The span to copy items into.</param>
         public bool TryCopyTo(Memory<T> destination) => Span.TryCopyTo(destination.Span);
 
@@ -379,10 +376,10 @@ namespace System
         /// Creates a handle for the memory.
         /// The GC will not move the memory until the returned <see cref="MemoryHandle"/>
         /// is disposed, enabling taking and using the memory's address.
+        /// </summary>
         /// <exception cref="System.ArgumentException">
         /// An instance with nonprimitive (non-blittable) members cannot be pinned.
         /// </exception>
-        /// </summary>
         public unsafe MemoryHandle Pin()
         {
             // Just like the Span property getter, we have special support for a mutable Memory<char>
@@ -445,7 +442,7 @@ namespace System
         /// Returns true if the object is Memory or ReadOnlyMemory and if both objects point to the same array and have the same length.
         /// </summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             if (obj is ReadOnlyMemory<T>)
             {

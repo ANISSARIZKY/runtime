@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using Microsoft.Win32.SafeHandles;
 
 using System.Diagnostics;
@@ -45,13 +44,5 @@ namespace System.Net.Security
         {
             return _handle.ToString();
         }
-
-#if DEBUG
-        //This method should never be called for this type
-        public new IntPtr DangerousGetHandle()
-        {
-            throw new InvalidOperationException();
-        }
-#endif
     }
 }

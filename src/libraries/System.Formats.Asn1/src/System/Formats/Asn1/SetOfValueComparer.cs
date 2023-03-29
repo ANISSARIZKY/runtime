@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace System.Formats.Asn1
 {
-    internal class SetOfValueComparer : IComparer<ReadOnlyMemory<byte>>
+    internal sealed class SetOfValueComparer : IComparer<ReadOnlyMemory<byte>>
     {
         internal static SetOfValueComparer Instance { get; } = new SetOfValueComparer();
 
@@ -17,6 +17,14 @@ namespace System.Formats.Asn1
             int min = Math.Min(x.Length, y.Length);
             int diff;
 
+#if NET7_0_OR_GREATER
+            int diffIndex = x.CommonPrefixLength(y);
+
+            if (diffIndex != min)
+            {
+                return (int)x[diffIndex] - y[diffIndex];
+            }
+#else
             for (int i = 0; i < min; i++)
             {
                 int xVal = x[i];
@@ -28,6 +36,7 @@ namespace System.Formats.Asn1
                     return diff;
                 }
             }
+#endif
 
             // The sorting rules (T-REC-X.690-201508 sec 11.6) say that the shorter one
             // counts as if it are padded with as many 0x00s on the right as required for

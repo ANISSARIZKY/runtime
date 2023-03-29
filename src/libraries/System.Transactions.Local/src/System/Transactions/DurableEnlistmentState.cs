@@ -36,7 +36,7 @@ namespace System.Transactions
 
     // Active state for a durable enlistment.  In this state the transaction can be aborted
     // asynchronously by calling abort.
-    internal class DurableEnlistmentActive : DurableEnlistmentState
+    internal sealed class DurableEnlistmentActive : DurableEnlistmentState
     {
         internal override void EnterState(InternalEnlistment enlistment)
         {
@@ -83,7 +83,7 @@ namespace System.Transactions
     // Aborting state for a durable enlistment.  In this state the transaction has been aborted,
     // by someone other than the enlistment.
     //
-    internal class DurableEnlistmentAborting : DurableEnlistmentState
+    internal sealed class DurableEnlistmentAborting : DurableEnlistmentState
     {
         internal override void EnterState(InternalEnlistment enlistment)
         {
@@ -96,7 +96,7 @@ namespace System.Transactions
                 TransactionsEtwProvider etwLog = TransactionsEtwProvider.Log;
                 if (etwLog.IsEnabled())
                 {
-                    etwLog.EnlistmentStatus(enlistment, NotificationCall.Rollback);
+                    etwLog.EnlistmentStatus(TraceSourceType.TraceSourceLtm, enlistment.EnlistmentTraceId, NotificationCall.Rollback);
                 }
 
                 // Send the Rollback notification to the enlistment
@@ -117,10 +117,7 @@ namespace System.Transactions
 
         internal override void Aborted(InternalEnlistment enlistment, Exception? e)
         {
-            if (enlistment.Transaction._innerException == null)
-            {
-                enlistment.Transaction._innerException = e;
-            }
+            enlistment.Transaction._innerException ??= e;
 
             // Transition to the ended state
             DurableEnlistmentEnded.EnterState(enlistment);
@@ -136,7 +133,7 @@ namespace System.Transactions
     // Committing state is when SPC has been sent to an enlistment but no response
     // has been received.
     //
-    internal class DurableEnlistmentCommitting : DurableEnlistmentState
+    internal sealed class DurableEnlistmentCommitting : DurableEnlistmentState
     {
         internal override void EnterState(InternalEnlistment enlistment)
         {
@@ -150,7 +147,7 @@ namespace System.Transactions
                 TransactionsEtwProvider etwLog = TransactionsEtwProvider.Log;
                 if (etwLog.IsEnabled())
                 {
-                    etwLog.EnlistmentStatus(enlistment, NotificationCall.SinglePhaseCommit);
+                    etwLog.EnlistmentStatus(TraceSourceType.TraceSourceLtm, enlistment.EnlistmentTraceId, NotificationCall.SinglePhaseCommit);
                 }
 
                 // Send the Commit notification to the enlistment
@@ -212,10 +209,7 @@ namespace System.Transactions
             // Transition to the ended state
             DurableEnlistmentEnded.EnterState(enlistment);
 
-            if (enlistment.Transaction._innerException == null)
-            {
-                enlistment.Transaction._innerException = e;
-            }
+            enlistment.Transaction._innerException ??= e;
 
             Debug.Assert(enlistment.Transaction.State != null);
             // Make the transaction in dobut
@@ -224,9 +218,9 @@ namespace System.Transactions
     }
 
     // Delegated state for a durable enlistment represents an enlistment that was
-    // origionally a PromotableSinglePhaseEnlisment that where promotion has happened.
+    // originally a PromotableSinglePhaseEnlisment that where promotion has happened.
     // These enlistments don't need to participate in the commit process anymore.
-    internal class DurableEnlistmentDelegated : DurableEnlistmentState
+    internal sealed class DurableEnlistmentDelegated : DurableEnlistmentState
     {
         internal override void EnterState(InternalEnlistment enlistment)
         {
@@ -252,10 +246,7 @@ namespace System.Transactions
             // Transition to the ended state
             DurableEnlistmentEnded.EnterState(enlistment);
 
-            if (enlistment.Transaction._innerException == null)
-            {
-                enlistment.Transaction._innerException = e;
-            }
+            enlistment.Transaction._innerException ??= e;
 
             Debug.Assert(enlistment.Transaction.State != null);
             // Start the transaction aborting
@@ -267,10 +258,7 @@ namespace System.Transactions
             // Transition to the ended state
             DurableEnlistmentEnded.EnterState(enlistment);
 
-            if (enlistment.Transaction._innerException == null)
-            {
-                enlistment.Transaction._innerException = e;
-            }
+            enlistment.Transaction._innerException ??= e;
 
             Debug.Assert(enlistment.Transaction.State != null);
             // Tell the transaction that the enlistment is InDoubt.  Note that
@@ -284,7 +272,7 @@ namespace System.Transactions
     // Ended state is the state that is entered when the durable enlistment has committed,
     // aborted, or said read only for an enlistment.  At this point there are no valid
     // operations on the enlistment.
-    internal class DurableEnlistmentEnded : DurableEnlistmentState
+    internal sealed class DurableEnlistmentEnded : DurableEnlistmentState
     {
         internal override void EnterState(InternalEnlistment enlistment)
         {

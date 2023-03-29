@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -17,7 +16,7 @@ namespace System.IO
         /// including the specified path in the error message.
         /// </summary>
         internal static Exception GetExceptionForLastWin32Error(string? path = "")
-            => GetExceptionForWin32Error(Marshal.GetLastWin32Error(), path);
+            => GetExceptionForWin32Error(Marshal.GetLastPInvokeError(), path);
 
         /// <summary>
         /// Converts the specified Win32 error into a corresponding <see cref="Exception"/> object, optionally
@@ -59,9 +58,23 @@ namespace System.IO
                     return new OperationCanceledException();
                 case Interop.Errors.ERROR_INVALID_PARAMETER:
                 default:
+                    string msg = string.IsNullOrEmpty(path)
+                        ? GetPInvokeErrorMessage(errorCode)
+                        : $"{GetPInvokeErrorMessage(errorCode)} : '{path}'";
                     return new IOException(
-                        string.IsNullOrEmpty(path) ? GetMessage(errorCode) : $"{GetMessage(errorCode)} : '{path}'",
+                        msg,
                         MakeHRFromErrorCode(errorCode));
+            }
+
+            static string GetPInvokeErrorMessage(int errorCode)
+            {
+                // Call Kernel32.GetMessage directly in CoreLib. It eliminates one level of indirection and it is necessary to
+                // produce correct error messages for CoreCLR Win32 PAL.
+#if NET7_0_OR_GREATER && !SYSTEM_PRIVATE_CORELIB
+                return Marshal.GetPInvokeErrorMessage(errorCode);
+#else
+                return Interop.Kernel32.GetMessage(errorCode);
+#endif
             }
         }
 
@@ -91,10 +104,5 @@ namespace System.IO
 
             return hr;
         }
-
-        /// <summary>
-        /// Returns a string message for the specified Win32 error code.
-        /// </summary>
-        internal static string GetMessage(int errorCode) => Interop.Kernel32.GetMessage(errorCode);
     }
 }

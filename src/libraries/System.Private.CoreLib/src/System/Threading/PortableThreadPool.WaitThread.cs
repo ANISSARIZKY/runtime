@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.Tracing;
 using Microsoft.Win32.SafeHandles;
 
 namespace System.Threading
@@ -11,8 +12,8 @@ namespace System.Threading
     /// </summary>
     internal sealed partial class CompleteWaitThreadPoolWorkItem : IThreadPoolWorkItem
     {
-        private RegisteredWaitHandle _registeredWaitHandle;
-        private bool _timedOut;
+        private readonly RegisteredWaitHandle _registeredWaitHandle;
+        private readonly bool _timedOut;
 
         public CompleteWaitThreadPoolWorkItem(RegisteredWaitHandle registeredWaitHandle, bool timedOut)
         {
@@ -21,7 +22,7 @@ namespace System.Threading
         }
     }
 
-    internal partial class PortableThreadPool
+    internal sealed partial class PortableThreadPool
     {
         /// <summary>
         /// A linked list of <see cref="WaitThread"/>s.
@@ -36,19 +37,15 @@ namespace System.Threading
         /// <param name="handle">A description of the requested registration.</param>
         internal void RegisterWaitHandle(RegisteredWaitHandle handle)
         {
-            if (PortableThreadPoolEventSource.Log.IsEnabled())
+            if (NativeRuntimeEventSource.Log.IsEnabled())
             {
-                PortableThreadPoolEventSource.Log.ThreadPoolIOEnqueue(handle);
+                NativeRuntimeEventSource.Log.ThreadPoolIOEnqueue(handle);
             }
 
             _waitThreadLock.Acquire();
             try
             {
-                WaitThreadNode? current = _waitThreadsHead;
-                if (current == null) // Lazily create the first wait thread.
-                {
-                    _waitThreadsHead = current = new WaitThreadNode(new WaitThread());
-                }
+                WaitThreadNode? current = _waitThreadsHead ??= new WaitThreadNode(new WaitThread()); // Lazily create the first wait thread.
 
                 // Register the wait handle on the first wait thread that is not at capacity.
                 WaitThreadNode prev;
@@ -75,9 +72,9 @@ namespace System.Threading
 
         internal static void CompleteWait(RegisteredWaitHandle handle, bool timedOut)
         {
-            if (PortableThreadPoolEventSource.Log.IsEnabled())
+            if (NativeRuntimeEventSource.Log.IsEnabled())
             {
-                PortableThreadPoolEventSource.Log.ThreadPoolIODequeue(handle);
+                NativeRuntimeEventSource.Log.ThreadPoolIODequeue(handle);
             }
 
             handle.PerformCallback(timedOut);
@@ -135,7 +132,7 @@ namespace System.Threading
             }
         }
 
-        private class WaitThreadNode
+        private sealed class WaitThreadNode
         {
             public WaitThread Thread { get; }
             public WaitThreadNode? Next { get; set; }
@@ -146,7 +143,7 @@ namespace System.Threading
         /// <summary>
         /// A thread pool wait thread.
         /// </summary>
-        internal class WaitThread
+        internal sealed class WaitThread
         {
             /// <summary>
             /// The wait handles registered on this wait thread.
@@ -183,11 +180,16 @@ namespace System.Threading
             public WaitThread()
             {
                 _waitHandles[0] = _changeHandlesEvent.SafeWaitHandle;
-                Thread waitThread = new Thread(WaitThreadStart, SmallStackSizeBytes);
-                waitThread.IsThreadPoolThread = true;
-                waitThread.IsBackground = true;
-                waitThread.Name = ".NET ThreadPool Wait";
-                waitThread.Start();
+
+                // Thread pool threads must start in the default execution context without transferring the context, so
+                // using UnsafeStart() instead of Start()
+                Thread waitThread = new Thread(WaitThreadStart, SmallStackSizeBytes)
+                {
+                    IsThreadPoolThread = true,
+                    IsBackground = true,
+                    Name = ".NET TP Wait"
+                };
+                waitThread.UnsafeStart();
             }
 
             /// <summary>
@@ -371,14 +373,18 @@ namespace System.Threading
                 // If the handle is a repeating handle, set up the next call. Otherwise, remove it from the wait thread.
                 if (registeredHandle.Repeating)
                 {
-                    registeredHandle.RestartTimeout();
+                    if (!registeredHandle.IsInfiniteTimeout)
+                    {
+                        registeredHandle.RestartTimeout();
+                    }
                 }
                 else
                 {
                     UnregisterWait(registeredHandle, blocking: false); // We shouldn't block the wait thread on the unregistration.
                 }
 
-                ThreadPool.UnsafeQueueWaitCompletion(new CompleteWaitThreadPoolWorkItem(registeredHandle, timedOut));
+                ThreadPool.UnsafeQueueHighPriorityWorkItemInternal(
+                    new CompleteWaitThreadPoolWorkItem(registeredHandle, timedOut));
             }
 
             /// <summary>
@@ -436,9 +442,9 @@ namespace System.Threading
                 try
                 {
                     // If this handle is not already pending removal and hasn't already been removed
-                    if (Array.IndexOf(_registeredWaits, handle) != -1)
+                    if (Array.IndexOf(_registeredWaits, handle) >= 0)
                     {
-                        if (Array.IndexOf(_pendingRemoves, handle) == -1)
+                        if (Array.IndexOf(_pendingRemoves, handle) < 0)
                         {
                             _pendingRemoves[_numPendingRemoves++] = handle;
                             _changeHandlesEvent.Set(); // Tell the wait thread that there are changes pending.

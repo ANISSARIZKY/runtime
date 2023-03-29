@@ -310,7 +310,7 @@ namespace System.Numerics.Tensors
         /// <param name="reverseStride">False (default) to indicate that the first dimension is most major (farthest apart) and the last dimension is most minor (closest together): akin to row-major in a rank-2 tensor.  True to indicate that the last dimension is most major (farthest apart) and the first dimension is most minor (closest together): akin to column-major in a rank-2 tensor.</param>
         protected Tensor(Array fromArray, bool reverseStride)
         {
-            if (fromArray == null)
+            if (fromArray is null)
             {
                 throw new ArgumentNullException(nameof(fromArray));
             }
@@ -451,7 +451,7 @@ namespace System.Numerics.Tensors
 
             // the diagonal will be the length of the smaller axis
             // if offset it positive, the length will shift along the second axis
-            // if the offsett is negative, the length will shift along the first axis
+            // if the offset is negative, the length will shift along the first axis
             // In that way the length of the diagonal will be
             //   Min(offset < 0 ? axisLength0 + offset : axisLength0, offset > 0 ? axisLength1 - offset : axisLength1)
             // To illustrate, consider the following
@@ -640,20 +640,22 @@ namespace System.Numerics.Tensors
         {
             get
             {
-                if (indices == null)
+                if (indices is null)
                 {
                     throw new ArgumentNullException(nameof(indices));
                 }
+
                 var span = new ReadOnlySpan<int>(indices);
                 return this[span];
             }
 
             set
             {
-                if (indices == null)
+                if (indices is null)
                 {
                     throw new ArgumentNullException(nameof(indices));
                 }
+
                 var span = new ReadOnlySpan<int>(indices);
                 this[span] = value;
             }
@@ -678,19 +680,75 @@ namespace System.Numerics.Tensors
         }
 
         /// <summary>
-        /// Gets the value at the specied index, where index is a linearized version of n-dimension indices using strides.
+        /// Gets the value at the specified index, where index is a linearized version of n-dimension indices using strides.
         /// </summary>
         /// <param name="index">An integer index computed as a dot-product of indices.</param>
         /// <returns>The value at the specified position in this Tensor.</returns>
         public abstract T GetValue(int index);
 
         /// <summary>
-        /// Sets the value at the specied index, where index is a linearized version of n-dimension indices using strides.
+        /// Sets the value at the specified index, where index is a linearized version of n-dimension indices using strides.
         /// </summary>
         /// <param name="index">An integer index computed as a dot-product of indices.</param>
         /// <param name="value">The new value to set at the specified position in this Tensor.</param>
         public abstract void SetValue(int index, T value);
 
+        /// <summary>
+        /// The type that implements enumerators for <see cref="Tensor{T}"/> instances.
+        /// </summary>
+        public struct Enumerator : IEnumerator<T>
+        {
+            private readonly Tensor<T> _tensor;
+            private int _index;
+
+            internal Enumerator(Tensor<T> tensor)
+            {
+                Debug.Assert(tensor != null);
+
+                _tensor = tensor;
+                _index = 0;
+                Current = default!;
+            }
+
+            public T Current { get; private set; }
+
+            object? IEnumerator.Current => Current;
+
+            public bool MoveNext()
+            {
+                if (_index < _tensor.Length)
+                {
+                    Current = _tensor.GetValue(_index);
+                    ++_index;
+                    return true;
+                }
+                else
+                {
+                    Current = default!;
+                    return false;
+                }
+            }
+
+            /// <summary>
+            /// Resets the enumerator to the beginning.
+            /// </summary>
+            public void Reset()
+            {
+                _index = 0;
+                Current = default!;
+            }
+
+            /// <summary>
+            /// Disposes the enumerator.
+            /// </summary>
+            public void Dispose() { }
+        }
+
+        /// <summary>
+        /// Gets an enumerator that enumerates the elements of the <see cref="Tensor{T}"/>.
+        /// </summary>
+        /// <returns>An enumerator for the current <see cref="Tensor{T}"/>.</returns>
+        public Enumerator GetEnumerator() => new Enumerator(this);
 
         #region statics
         /// <summary>
@@ -717,10 +775,7 @@ namespace System.Numerics.Tensors
         #endregion
 
         #region IEnumerable members
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return ((IEnumerable<T>)this).GetEnumerator();
-        }
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         #endregion
 
         #region ICollection members
@@ -828,13 +883,7 @@ namespace System.Numerics.Tensors
         #endregion
 
         #region IEnumerable<T> members
-        IEnumerator<T> IEnumerable<T>.GetEnumerator()
-        {
-            for (int i = 0; i < Length; i++)
-            {
-                yield return GetValue(i);
-            }
-        }
+        IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
         #endregion
 
         #region ICollection<T> members
@@ -885,10 +934,11 @@ namespace System.Numerics.Tensors
         /// </param>
         protected virtual void CopyTo(T[] array, int arrayIndex)
         {
-            if (array == null)
+            if (array is null)
             {
                 throw new ArgumentNullException(nameof(array));
             }
+
             if (array.Length < arrayIndex + Length)
             {
                 throw new ArgumentException(SR.NumberGreaterThenAvailableSpace, nameof(array));

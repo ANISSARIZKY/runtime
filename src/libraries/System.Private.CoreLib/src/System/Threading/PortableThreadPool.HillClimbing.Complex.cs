@@ -3,11 +3,11 @@
 
 namespace System.Threading
 {
-    internal partial class PortableThreadPool
+    internal sealed partial class PortableThreadPool
     {
-        private partial class HillClimbing
+        private sealed partial class HillClimbing
         {
-            private struct Complex
+            private readonly struct Complex
             {
                 public Complex(double real, double imaginary)
                 {

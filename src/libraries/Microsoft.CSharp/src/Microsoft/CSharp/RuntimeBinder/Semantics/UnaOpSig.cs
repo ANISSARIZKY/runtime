@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.CSharp.RuntimeBinder.Syntax;
 
 namespace Microsoft.CSharp.RuntimeBinder.Semantics
@@ -49,7 +50,8 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
                 Set the values of the UnaOpFullSig from the given UnaOpSig. The ExpressionBinder is needed to get
                 the predefined type. Returns true iff the predef type is found.
             ***************************************************************************************************/
-            public UnaOpFullSig(ExpressionBinder fnc, UnaOpSig uos)
+            [RequiresUnreferencedCode(Binder.TrimmerWarning)]
+            public UnaOpFullSig(UnaOpSig uos)
             {
                 this.pt = uos.pt;
                 this.grfuom = uos.grfuom;

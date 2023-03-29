@@ -81,9 +81,21 @@ void sgen_workers_set_num_active_workers (int generation, int num_workers);
 #ifndef DISABLE_SGEN_MAJOR_MARKSWEEP_CONC
 void sgen_workers_start_all_workers (int generation, SgenObjectOperations *object_ops_nopar, SgenObjectOperations *object_ops_par, SgenWorkersFinishCallback finish_job);
 #else
-#define sgen_workers_start_all_workers(...)
+#define sgen_workers_start_all_workers(generation, object_ops_nopar, object_ops_par, finish_job) (void)object_ops_par; // avoid compiler warning: variable 'object_ops_par' set but not used
 #endif
+
 void sgen_workers_enqueue_job (int generation, SgenThreadPoolJob *job, gboolean enqueue);
+
+/*
+ * LOCKING: Assumes the GC lock is held.
+ */
+void sgen_workers_enqueue_deferred_job (int generation, SgenThreadPoolJob *job, gboolean enqueue);
+
+/*
+ * LOCKING: Assumes the GC lock is held.
+ */
+void sgen_workers_flush_deferred_jobs (int generation, gboolean signal);
+
 void sgen_workers_join (int generation);
 gboolean sgen_workers_have_idle_work (int generation);
 gboolean sgen_workers_all_done (void);

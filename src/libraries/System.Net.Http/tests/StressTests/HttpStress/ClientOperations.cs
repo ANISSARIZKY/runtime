@@ -42,7 +42,8 @@ namespace HttpStress
         public int TaskNum { get; }
         public bool IsCancellationRequested { get; private set; }
 
-        public Version HttpVersion => _config.HttpVersion;
+        public Version HttpVersion => _client.DefaultRequestVersion;
+        public HttpVersionPolicy VersionPolicy => _client.DefaultVersionPolicy;
         public int MaxRequestParameters => _config.MaxParameters;
         public int MaxRequestUriSize => _config.MaxRequestUriSize;
         public int MaxRequestHeaderCount => _config.MaxRequestHeaderCount;
@@ -54,6 +55,7 @@ namespace HttpStress
         public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, HttpCompletionOption httpCompletion = HttpCompletionOption.ResponseContentRead, CancellationToken? token = null)
         {
             request.Version = HttpVersion;
+            request.VersionPolicy = VersionPolicy;
 
             if (token != null)
             {
@@ -83,8 +85,8 @@ namespace HttpStress
                     await Task.WhenAny(task, Task.Delay(_random.Next(0, 60), cts.Token));
                 }
 
-                cts.Cancel();
                 IsCancellationRequested = true;
+                cts.Cancel();
                 return WithVersionValidation(await task);
             }
             else
@@ -153,8 +155,8 @@ namespace HttpStress
                 string CreateHeaderValue() => HttpUtility.UrlEncode(GetRandomString(1, 30, alphaNumericOnly: false));
                 string[] values = Enumerable.Range(0, _random.Next(1, 6)).Select(_ => CreateHeaderValue()).ToArray();
                 totalSize += name.Length + values.Select(v => v.Length + 2).Sum();
-                
-                if (totalSize > MaxRequestHeaderTotalSize) 
+
+                if (totalSize > MaxRequestHeaderTotalSize)
                 {
                     break;
                 }
@@ -189,7 +191,7 @@ namespace HttpStress
                     using var req = new HttpRequestMessage(HttpMethod.Get, "/get");
                     int expectedLength = ctx.SetExpectedResponseContentLengthHeader(req.Headers);
                     using HttpResponseMessage m = await ctx.SendAsync(req);
-                    
+
                     ValidateStatusCode(m);
                     ValidateServerContent(await m.Content.ReadAsStringAsync(), expectedLength);
                 }),
@@ -282,7 +284,7 @@ namespace HttpStress
                     {
                         using var req = new HttpRequestMessage(HttpMethod.Get, "/abort");
                         ctx.SetExpectedResponseContentLengthHeader(req.Headers, minLength: 2);
-                        
+
                         await ctx.SendAsync(req);
 
                         throw new Exception("Completed unexpectedly");
@@ -296,23 +298,13 @@ namespace HttpStress
 
                         if (e is IOException ioe)
                         {
-                            if (ctx.HttpVersion < HttpVersion.Version20)
+                            if (ctx.HttpVersion < HttpVersion.Version20 ||
+                                e is HttpProtocolException protocolException &&
+                                (protocolException.ErrorCode == 0x2 ||  // INTERNAL_ERROR, UseKestrel (https://github.com/dotnet/aspnetcore/issues/12256)
+                                 protocolException.ErrorCode == 0x8 ||  // CANCEL, UseHttpSys
+                                 protocolException.ErrorCode == 0x102)) // H3_INTERNAL_ERROR (258)
                             {
                                 return;
-                            }
-
-                            string? name = e.InnerException?.GetType().Name;
-                            switch (name)
-                            {
-                                case "Http2ProtocolException":
-                                case "Http2ConnectionException":
-                                case "Http2StreamException":
-                                    if ((e.InnerException?.Message?.Contains("INTERNAL_ERROR") ?? false) || // UseKestrel (https://github.com/aspnet/AspNetCore/issues/12256)
-                                        (e.InnerException?.Message?.Contains("CANCEL") ?? false)) // UseHttpSys
-                                    {
-                                        return;
-                                    }
-                                    break;
                             }
                         }
 
@@ -490,12 +482,12 @@ namespace HttpStress
         {
             if (actualContent != expectedContent)
             {
-                int divergentIndex = 
+                int divergentIndex =
                     Enumerable
                         .Zip(actualContent, expectedContent)
-                        .Select((x,i) => (x.First, x.Second, i))
+                        .Select((x, i) => (x.First, x.Second, i))
                         .Where(x => x.First != x.Second)
-                        .Select(x => (int?) x.i)
+                        .Select(x => (int?)x.i)
                         .FirstOrDefault()
                         .GetValueOrDefault(Math.Min(actualContent.Length, expectedContent.Length));
 

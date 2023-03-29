@@ -15,6 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Security;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Tracing;
 
 namespace System.Threading
@@ -56,6 +57,8 @@ namespace System.Threading
         // Barrier Events
         //
 
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:UnrecognizedReflectionPattern",
+                   Justification = "Parameters to this method are primitive and are trimmer safe")]
         [Event(BARRIER_PHASEFINISHED_ID, Level = EventLevel.Verbose, Version = 1)]
         public void Barrier_PhaseFinished(bool currentSense, long phaseNum)
         {

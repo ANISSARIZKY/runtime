@@ -90,7 +90,15 @@ namespace Test01
 
     public class Program
     {
-        static Random random = new Random( 12345 );
+        public const int DefaultSeed = 20010415;
+        public static int Seed = Environment.GetEnvironmentVariable("CORECLR_SEED") switch
+        {
+            string seedStr when seedStr.Equals("random", StringComparison.OrdinalIgnoreCase) => new Random().Next(),
+            string seedStr when int.TryParse(seedStr, out int envSeed) => envSeed,
+            _ => DefaultSeed
+        };
+
+        static Random random = new Random(Seed);
         [MethodImpl( MethodImplOptions.NoInlining )]
         static SimpleVector3 RandomSimpleVector3()
             => new SimpleVector3( (float)random.NextDouble(), (float)random.NextDouble(), (float)random.NextDouble() );
@@ -125,7 +133,7 @@ namespace Test01
             Console.WriteLine("SIMD Vector3: {0},{1},{2}", c.X, c.Y, c.Z);
             return c.X + c.Y + c.Z;
         }
-        public static int Main( string[] args )
+        public static int Main()
         {
             int returnVal = 100;
 

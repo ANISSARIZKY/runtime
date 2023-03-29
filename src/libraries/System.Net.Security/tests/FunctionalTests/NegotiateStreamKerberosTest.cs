@@ -150,6 +150,7 @@ namespace System.Net.Security.Tests
 
                     Assert.Equal(expectedAuthenticationType, auth.RemoteIdentity.AuthenticationType);
                     Assert.Equal(serverSPN, auth.RemoteIdentity.Name);
+                    (auth.RemoteIdentity as IDisposable)?.Dispose();
 
                     Assert.True(auth.IsAuthenticated);
                     Assert.True(auth.IsEncrypted);
@@ -157,7 +158,7 @@ namespace System.Net.Security.Tests
                     Assert.True(auth.IsSigned);
 
                     // Send a message to the server. Encode the test data into a byte array.
-                    byte[] message = Encoding.UTF8.GetBytes("Hello from the client.");
+                    byte[] message = "Hello from the client."u8.ToArray();
                     await auth.WriteAsync(message, 0, message.Length);
                 }
             }
@@ -177,7 +178,7 @@ namespace System.Net.Security.Tests
                 string clientName = Configuration.Security.NegotiateClient.Host;
                 int clientPort = Configuration.Security.NegotiateClient.Port;
                 await controlClient.ConnectAsync(clientName, clientPort)
-                    .TimeoutAfter(TimeSpan.FromSeconds(15));
+                    .WaitAsync(TimeSpan.FromSeconds(15));
                 var serverStream = controlClient.GetStream();
 
                 using (var serverAuth = new NegotiateStream(serverStream, leaveInnerStreamOpen: false))
@@ -186,7 +187,7 @@ namespace System.Net.Security.Tests
                         CredentialCache.DefaultNetworkCredentials,
                         ProtectionLevel.EncryptAndSign,
                         TokenImpersonationLevel.Identification)
-                        .TimeoutAfter(TimeSpan.FromSeconds(15));
+                        .WaitAsync(TimeSpan.FromSeconds(15));
 
                     Assert.True(serverAuth.IsAuthenticated, "IsAuthenticated");
                     Assert.True(serverAuth.IsEncrypted, "IsEncrypted");
@@ -195,12 +196,13 @@ namespace System.Net.Security.Tests
 
                     Assert.Equal(expectedAuthenticationType, serverAuth.RemoteIdentity.AuthenticationType);
                     Assert.Equal(expectedUser, serverAuth.RemoteIdentity.Name);
+                    (serverAuth.RemoteIdentity as IDisposable)?.Dispose();
 
                     // Receive a message from the client.
                     var message = "Hello from the client.";
                     using (var reader = new StreamReader(serverAuth))
                     {
-                        var response = await reader.ReadToEndAsync().TimeoutAfter(TimeSpan.FromSeconds(15));
+                        var response = await reader.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(15));
                         Assert.Equal(message, response);
                     }
                 }

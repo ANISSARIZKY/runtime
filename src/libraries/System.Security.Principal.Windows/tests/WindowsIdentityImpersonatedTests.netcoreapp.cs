@@ -3,6 +3,8 @@
 
 using System;
 using System.ComponentModel;
+using System.Linq;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -24,11 +26,11 @@ public class WindowsIdentityImpersonatedTests : IClassFixture<WindowsIdentityFix
         Assert.False(string.IsNullOrEmpty(_fixture.TestAccount.AccountName));
     }
 
-    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotWindowsNanoServer))]
+    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.CanRunImpersonatedTests))]
     [OuterLoop]
     public async Task RunImpersonatedAsync_TaskAndTaskOfT()
     {
-        WindowsIdentity currentWindowsIdentity = WindowsIdentity.GetCurrent();
+        using WindowsIdentity currentWindowsIdentity = WindowsIdentity.GetCurrent();
 
         await WindowsIdentity.RunImpersonatedAsync(_fixture.TestAccount.AccountTokenHandle, async () =>
         {
@@ -37,7 +39,10 @@ public class WindowsIdentityImpersonatedTests : IClassFixture<WindowsIdentityFix
             Asserts(currentWindowsIdentity);
         });
 
-        Assert.Equal(WindowsIdentity.GetCurrent().Name, currentWindowsIdentity.Name);
+        using (WindowsIdentity currentIdentity = WindowsIdentity.GetCurrent())
+        {
+            Assert.Equal(currentIdentity.Name, currentWindowsIdentity.Name);
+        }
 
         int result = await WindowsIdentity.RunImpersonatedAsync(_fixture.TestAccount.AccountTokenHandle, async () =>
         {
@@ -48,139 +53,62 @@ public class WindowsIdentityImpersonatedTests : IClassFixture<WindowsIdentityFix
         });
 
         Assert.Equal(42, result);
-        Assert.Equal(WindowsIdentity.GetCurrent().Name, currentWindowsIdentity.Name);
+        using (WindowsIdentity currentIdentity = WindowsIdentity.GetCurrent())
+        {
+            Assert.Equal(currentIdentity.Name, currentWindowsIdentity.Name);
+        }
 
         // Assertions
         void Asserts(WindowsIdentity currentWindowsIdentity)
         {
-            Assert.Equal(_fixture.TestAccount.AccountName, WindowsIdentity.GetCurrent().Name);
-            Assert.NotEqual(currentWindowsIdentity.Name, WindowsIdentity.GetCurrent().Name);
+            using WindowsIdentity currentIdentity = WindowsIdentity.GetCurrent();
+            Assert.Equal(_fixture.TestAccount.AccountName, currentIdentity.Name);
+            Assert.NotEqual(currentWindowsIdentity.Name, currentIdentity.Name);
         }
     }
-}
 
-public class WindowsIdentityFixture : IDisposable
-{
-    public WindowsTestAccount TestAccount { get; private set; }
-
-    public WindowsIdentityFixture()
+    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.CanRunImpersonatedTests))]
+    [OuterLoop]
+    public void RunImpersonated_NameResolution()
     {
-        TestAccount = new WindowsTestAccount("CorFxTstWiIde01kiu");
-    }
+        using WindowsIdentity currentWindowsIdentity = WindowsIdentity.GetCurrent();
 
-    public void Dispose()
-    {
-        TestAccount.Dispose();
-    }
-}
-
-public sealed class WindowsTestAccount : IDisposable
-{
-    private readonly string _userName;
-    private SafeAccessTokenHandle _accountTokenHandle;
-    public SafeAccessTokenHandle AccountTokenHandle => _accountTokenHandle;
-    public string AccountName { get; private set; }
-
-    public WindowsTestAccount(string userName)
-    {
-        _userName = userName;
-        CreateUser();
-    }
-
-    private void CreateUser()
-    {
-        string testAccountPassword;
-        using (RandomNumberGenerator rng = new RNGCryptoServiceProvider())
+        WindowsIdentity.RunImpersonated(_fixture.TestAccount.AccountTokenHandle, () =>
         {
-            byte[] randomBytes = new byte[33];
-            rng.GetBytes(randomBytes);
-
-            // Add special chars to ensure it satisfies password requirements.
-            testAccountPassword = Convert.ToBase64String(randomBytes) + "_-As@!%*(1)4#2";
-
-            USER_INFO_1 userInfo = new USER_INFO_1
+            using (WindowsIdentity currentIdentity = WindowsIdentity.GetCurrent())
             {
-                usri1_name = _userName,
-                usri1_password = testAccountPassword,
-                usri1_priv = 1
-            };
-
-            // Create user and remove/create if already exists
-            uint result = NetUserAdd(null, 1, ref userInfo, out uint param_err);
-
-            // error codes https://docs.microsoft.com/en-us/windows/desktop/netmgmt/network-management-error-codes
-            // 0 == NERR_Success
-            if (result == 2224) // NERR_UserExists
-            {
-                result = NetUserDel(null, userInfo.usri1_name);
-                if (result != 0)
-                {
-                    throw new Win32Exception((int)result);
-                }
-                result = NetUserAdd(null, 1, ref userInfo, out param_err);
-                if (result != 0)
-                {
-                    throw new Win32Exception((int)result);
-                }
+                Assert.Equal(_fixture.TestAccount.AccountName, currentIdentity.Name);
             }
 
-            const int LOGON32_PROVIDER_DEFAULT = 0;
-            const int LOGON32_LOGON_INTERACTIVE = 2;
+            IPAddress[] a1 = Dns.GetHostAddressesAsync("").GetAwaiter().GetResult();
+            IPAddress[] a2 = Dns.GetHostAddresses("");
 
-            if (!LogonUser(_userName, ".", testAccountPassword, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT, out _accountTokenHandle))
-            {
-                _accountTokenHandle = null;
-                throw new Exception($"Failed to get SafeAccessTokenHandle for test account {_userName}", new Win32Exception());
-            }
-
-            bool gotRef = false;
-            try
-            {
-                _accountTokenHandle.DangerousAddRef(ref gotRef);
-                IntPtr logonToken = _accountTokenHandle.DangerousGetHandle();
-                AccountName = new WindowsIdentity(logonToken).Name;
-            }
-            finally
-            {
-                if (gotRef)
-                    _accountTokenHandle.DangerousRelease();
-            }
-        }
+            Assert.True(a1.Length > 0);
+            Assert.True(a1.SequenceEqual(a2));
+        });
     }
 
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool LogonUser(string userName, string domain, string password, int logonType, int logonProvider, out SafeAccessTokenHandle safeAccessTokenHandle);
-
-    [DllImport("netapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    internal static extern uint NetUserAdd([MarshalAs(UnmanagedType.LPWStr)]string servername, uint level, ref USER_INFO_1 buf, out uint parm_err);
-
-    [DllImport("netapi32.dll")]
-    internal static extern uint NetUserDel([MarshalAs(UnmanagedType.LPWStr)]string servername, [MarshalAs(UnmanagedType.LPWStr)]string username);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct USER_INFO_1
+    [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.CanRunImpersonatedTests))]
+    [OuterLoop]
+    public async Task RunImpersonatedAsync_NameResolution()
     {
-        public string usri1_name;
-        public string usri1_password;
-        public uint usri1_password_age;
-        public uint usri1_priv;
-        public string usri1_home_dir;
-        public string usri1_comment;
-        public uint usri1_flags;
-        public string usri1_script_path;
-    }
+        using WindowsIdentity currentWindowsIdentity = WindowsIdentity.GetCurrent();
 
-    public void Dispose()
-    {
-        _accountTokenHandle?.Dispose();
+        // make sure the assembly is loaded.
+        _ = Dns.GetHostAddresses("");
 
-        uint result = NetUserDel(null, _userName);
-
-        // 2221= NERR_UserNotFound
-        if (result != 0 && result != 2221)
+        await WindowsIdentity.RunImpersonatedAsync(_fixture.TestAccount.AccountTokenHandle, async () =>
         {
-            throw new Win32Exception((int)result);
-        }
+            using (WindowsIdentity currentIdentity = WindowsIdentity.GetCurrent())
+            {
+                Assert.Equal(_fixture.TestAccount.AccountName, currentIdentity.Name);
+            }
+
+            IPAddress[] a1 = await Dns.GetHostAddressesAsync("");
+            IPAddress[] a2 = Dns.GetHostAddresses("");
+
+            Assert.True(a1.Length > 0);
+            Assert.True(a1.SequenceEqual(a2));
+        });
     }
 }
-

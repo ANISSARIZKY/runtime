@@ -15,12 +15,10 @@ namespace System.Collections.Generic
     {
         private ArrayBuilder<T> _builder; // mutable struct; do not make this readonly
 
-        public LargeArrayBuilder(bool initialize) : this()
-        {
-            // This is a workaround for C# not having parameterless struct constructors yet.
-            // Once it gets them, replace this with a parameterless constructor.
-            Debug.Assert(initialize);
-        }
+        /// <summary>
+        /// Constructs a new builder.
+        /// </summary>
+        public LargeArrayBuilder() => this = default;
 
         public int Count => _builder.Count;
 
@@ -34,8 +32,6 @@ namespace System.Collections.Generic
                 _builder.Add(item);
             }
         }
-
-        public void SlowAdd(T item) => _builder.Add(item);
 
         public T[] ToArray() => _builder.ToArray();
 

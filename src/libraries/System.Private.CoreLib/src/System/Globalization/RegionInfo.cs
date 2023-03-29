@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.Globalization
 {
@@ -24,10 +25,7 @@ namespace System.Globalization
 
         public RegionInfo(string name)
         {
-            if (name == null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
+            ArgumentNullException.ThrowIfNull(name);
 
             // The InvariantCulture has no matching region
             if (name.Length == 0)
@@ -62,7 +60,7 @@ namespace System.Globalization
                 throw new ArgumentException(SR.Format(SR.Argument_CultureIsNeutral, culture), nameof(culture));
             }
 
-            if (culture == CultureInfo.LOCALE_CUSTOM_DEFAULT)
+            if (culture == CultureInfo.LOCALE_CUSTOM_DEFAULT || culture == CultureInfo.LOCALE_CUSTOM_UNSPECIFIED)
             {
                 // Not supposed to be neutral
                 throw new ArgumentException(SR.Format(SR.Argument_CustomCultureCannotBePassedByNumber, culture), nameof(culture));
@@ -184,7 +182,7 @@ namespace System.Globalization
         /// RegionInfos are considered equal if and only if they have the same name
         /// (ie: en-US)
         /// </summary>
-        public override bool Equals(object? value)
+        public override bool Equals([NotNullWhen(true)] object? value)
         {
             return value is RegionInfo otherRegion
                 && Name.Equals(otherRegion.Name);

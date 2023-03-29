@@ -99,16 +99,15 @@ namespace System.Net.Http.Tests
                 u = p.GetProxy(fooWss);
                 Assert.True(u != null && u.Host == "1.1.1.1" && u.Port == 3000);
 
-                // Try valid URI with unsupported protocol. It will be ignored
-                // to mimic curl behavior.
+                // Try with socks5 protocol
                 Environment.SetEnvironmentVariable("https_proxy", "socks5://1.1.1.4:3004");
                 Assert.True(HttpEnvironmentProxy.TryCreate(out p));
                 Assert.NotNull(p);
                 u = p.GetProxy(fooHttps);
-                Assert.True(u != null && u.Host == "1.1.1.1" && u.Port == 3000);
+                Assert.True(u != null && u.Host == "1.1.1.4" && u.Port == 3004);
 
                 u = p.GetProxy(fooWss);
-                Assert.True(u != null && u.Host == "1.1.1.1" && u.Port == 3000);
+                Assert.True(u != null && u.Host == "1.1.1.4" && u.Port == 3004);
 
                 // Set https to valid URI but different from http.
                 Environment.SetEnvironmentVariable("https_proxy", "http://1.1.1.5:3005");
@@ -132,14 +131,17 @@ namespace System.Net.Http.Tests
         [InlineData("http://1.1.1.5:3005", "1.1.1.5", "3005", null, null)]
         [InlineData("http://foo@1.1.1.5", "1.1.1.5", "80", "foo", "")]
         [InlineData("http://[::1]:80", "[::1]", "80", null, null)]
-        [InlineData("foo:bar@[::1]:3128", "[::1]", "3128", "foo", "bar")]
+        [InlineData("foo:PLACEHOLDER@[::1]:3128", "[::1]", "3128", "foo", "PLACEHOLDER")]
         [InlineData("foo:Pass$!#\\.$@127.0.0.1:3128", "127.0.0.1", "3128", "foo", "Pass$!#\\.$")]
         [InlineData("[::1]", "[::1]", "80", null, null)]
-        [InlineData("domain\\foo:bar@1.1.1.1", "1.1.1.1", "80", "foo", "bar")]
-        [InlineData("domain%5Cfoo:bar@1.1.1.1", "1.1.1.1", "80", "foo", "bar")]
+        [InlineData("domain\\foo:PLACEHOLDER@1.1.1.1", "1.1.1.1", "80", "foo", "PLACEHOLDER")]
+        [InlineData("domain%5Cfoo:PLACEHOLDER@1.1.1.1", "1.1.1.1", "80", "foo", "PLACEHOLDER")]
         [InlineData("HTTP://ABC.COM/", "abc.com", "80", null, null)]
         [InlineData("http://10.30.62.64:7890/", "10.30.62.64", "7890", null, null)]
         [InlineData("http://1.2.3.4:8888/foo", "1.2.3.4", "8888", null, null)]
+        [InlineData("socks4://1.2.3.4:8888/foo", "1.2.3.4", "8888", null, null)]
+        [InlineData("socks4a://1.2.3.4:8888/foo", "1.2.3.4", "8888", null, null)]
+        [InlineData("socks5://1.2.3.4:8888/foo", "1.2.3.4", "8888", null, null)]
         public void HttpProxy_Uri_Parsing(string _input, string _host, string _port, string _user, string _password)
         {
             RemoteExecutor.Invoke((input, host, port, user, password) =>
@@ -184,7 +186,7 @@ namespace System.Net.Http.Tests
             {
                 IWebProxy p;
 
-                Environment.SetEnvironmentVariable("all_proxy", "http://foo:bar@1.1.1.1:3000");
+                Environment.SetEnvironmentVariable("all_proxy", "http://foo:PLACEHOLDER@1.1.1.1:3000");
                 Assert.True(HttpEnvironmentProxy.TryCreate(out p));
                 Assert.NotNull(p);
                 Assert.NotNull(p.Credentials);
@@ -196,7 +198,7 @@ namespace System.Net.Http.Tests
                 Assert.NotNull(p.Credentials);
 
                 // Use different user for http and https
-                Environment.SetEnvironmentVariable("https_proxy", "http://foo1:bar1@1.1.1.1:3000");
+                Environment.SetEnvironmentVariable("https_proxy", "http://foo1:PLACEHOLDER1@1.1.1.1:3000");
                 Assert.True(HttpEnvironmentProxy.TryCreate(out p));
                 Assert.NotNull(p);
                 Uri u = p.GetProxy(fooHttp);
@@ -209,6 +211,27 @@ namespace System.Net.Http.Tests
             }).Dispose();
         }
 
+
+        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        public void HttpProxy_CredentialParsing_DefaultCredentials()
+        {
+            RemoteExecutor.Invoke(() =>
+            {
+                IWebProxy p;
+
+                Environment.SetEnvironmentVariable("all_proxy", "http://:@1.1.1.1:3000");
+                Assert.True(HttpEnvironmentProxy.TryCreate(out p));
+                Assert.NotNull(p);
+                Assert.Equal(CredentialCache.DefaultCredentials, p.Credentials.GetCredential(p.GetProxy(fooHttp), ""));
+                Assert.Equal(CredentialCache.DefaultCredentials, p.Credentials.GetCredential(p.GetProxy(fooHttps), ""));
+
+                Environment.SetEnvironmentVariable("http_proxy", "http://:@[::1]:80");
+                Assert.True(HttpEnvironmentProxy.TryCreate(out p));
+                Assert.NotNull(p);
+                Assert.Equal(CredentialCache.DefaultCredentials, p.Credentials.GetCredential(p.GetProxy(fooHttp), ""));
+            }).Dispose();
+        }
+
         [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
         public void HttpProxy_Exceptions_Match()
         {
@@ -217,7 +240,7 @@ namespace System.Net.Http.Tests
                 IWebProxy p;
 
                 Environment.SetEnvironmentVariable("no_proxy", ".test.com,, foo.com");
-                Environment.SetEnvironmentVariable("all_proxy", "http://foo:bar@1.1.1.1:3000");
+                Environment.SetEnvironmentVariable("all_proxy", "http://foo:PLACEHOLDER@1.1.1.1:3000");
                 Assert.True(HttpEnvironmentProxy.TryCreate(out p));
                 Assert.NotNull(p);
 
@@ -241,7 +264,7 @@ namespace System.Net.Http.Tests
         [MemberData(nameof(HttpProxyNoProxyEnvVarMemberData))]
         public void HttpProxy_TryCreate_CaseInsensitiveVariables(string proxyEnvVar, string noProxyEnvVar)
         {
-            string proxy = "http://foo:bar@1.1.1.1:3000";
+            string proxy = "http://foo:PLACEHOLDER@1.1.1.1:3000";
 
             var options = new RemoteInvokeOptions();
             options.StartInfo.EnvironmentVariables.Add(proxyEnvVar, proxy);
@@ -274,7 +297,7 @@ namespace System.Net.Http.Tests
         public void HttpProxy_TryCreateAndPossibleCgi_HttpProxyUpperCaseDisabledInCgi(
             string proxyEnvVar, bool cgi, bool expectedProxyUse)
         {
-            string proxy = "http://foo:bar@1.1.1.1:3000";
+            string proxy = "http://foo:PLACEHOLDER@1.1.1.1:3000";
 
             var options = new RemoteInvokeOptions();
             options.StartInfo.EnvironmentVariables.Add(proxyEnvVar, proxy);

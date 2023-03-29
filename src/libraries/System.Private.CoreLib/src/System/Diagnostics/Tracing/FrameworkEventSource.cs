@@ -2,13 +2,15 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Runtime.CompilerServices;
-using Internal.Runtime.CompilerServices;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.Diagnostics.Tracing
 {
     [EventSource(Guid = "8E9F5090-2D75-4d03-8A81-E5AFBF85DAF1", Name = "System.Diagnostics.Eventing.FrameworkEventSource")]
-    internal sealed class FrameworkEventSource : EventSource
+    [EventSourceAutoGenerate]
+    internal sealed partial class FrameworkEventSource : EventSource
     {
+        private const string EventSourceSuppressMessage = "Parameters to this method are primitive and are trimmer safe";
         public static readonly FrameworkEventSource Log = new FrameworkEventSource();
 
         // Keyword definitions.  These represent logical groups of events that can be turned on and off independently
@@ -28,10 +30,13 @@ namespace System.Diagnostics.Tracing
             public const EventTask ThreadTransfer = (EventTask)3;
         }
 
-        // The FrameworkEventSource GUID is {8E9F5090-2D75-4d03-8A81-E5AFBF85DAF1}
-        private FrameworkEventSource() : base(new Guid(0x8e9f5090, 0x2d75, 0x4d03, 0x8a, 0x81, 0xe5, 0xaf, 0xbf, 0x85, 0xda, 0xf1), "System.Diagnostics.Eventing.FrameworkEventSource") { }
+        // Parameterized constructor to block initialization and ensure the EventSourceGenerator is creating the default constructor
+        // as you can't make a constructor partial.
+        private FrameworkEventSource(int _) { }
 
         // optimized for common signatures (used by the ThreadTransferSend/Receive events)
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:UnrecognizedReflectionPattern",
+                   Justification = EventSourceSuppressMessage)]
         [NonEvent]
         private unsafe void WriteEvent(int eventId, long arg1, int arg2, string? arg3, bool arg4, int arg5, int arg6)
         {
@@ -65,6 +70,8 @@ namespace System.Diagnostics.Tracing
         }
 
         // optimized for common signatures (used by the ThreadTransferSend/Receive events)
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:UnrecognizedReflectionPattern",
+                   Justification = EventSourceSuppressMessage)]
         [NonEvent]
         private unsafe void WriteEvent(int eventId, long arg1, int arg2, string? arg3)
         {

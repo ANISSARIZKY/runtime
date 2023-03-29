@@ -4,7 +4,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-#nullable enable
 namespace System.Text.Json
 {
     internal struct BitStack
@@ -48,7 +47,7 @@ namespace System.Text.Json
         {
             if (_currentDepth < AllocationFreeMaxDepth)
             {
-                _allocationFreeContainer = _allocationFreeContainer << 1;
+                _allocationFreeContainer <<= 1;
             }
             else
             {
@@ -61,10 +60,7 @@ namespace System.Text.Json
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void PushToArray(bool value)
         {
-            if (_array == null)
-            {
-                _array = new int[DefaultInitialArraySize];
-            }
+            _array ??= new int[DefaultInitialArraySize];
 
             int index = _currentDepth - AllocationFreeMaxDepth;
 
@@ -102,7 +98,7 @@ namespace System.Text.Json
         public bool Pop()
         {
             _currentDepth--;
-            bool inObject = false;
+            bool inObject;
             if (_currentDepth < AllocationFreeMaxDepth)
             {
                 _allocationFreeContainer >>= 1;

@@ -4,8 +4,11 @@
 // Changes to this file must follow the https://aka.ms/api-review process.
 // ------------------------------------------------------------------------------
 
+using System.Runtime.Versioning;
+
 namespace System.Transactions
 {
+    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
     public sealed partial class CommittableTransaction : System.Transactions.Transaction, System.IAsyncResult
     {
         public CommittableTransaction() { }
@@ -127,7 +130,7 @@ namespace System.Transactions
         public bool EnlistPromotableSinglePhase(System.Transactions.IPromotableSinglePhaseNotification promotableSinglePhaseNotification, System.Guid promoterType) { throw null; }
         public System.Transactions.Enlistment EnlistVolatile(System.Transactions.IEnlistmentNotification enlistmentNotification, System.Transactions.EnlistmentOptions enlistmentOptions) { throw null; }
         public System.Transactions.Enlistment EnlistVolatile(System.Transactions.ISinglePhaseNotification singlePhaseNotification, System.Transactions.EnlistmentOptions enlistmentOptions) { throw null; }
-        public override bool Equals(object? obj) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? obj) { throw null; }
         public override int GetHashCode() { throw null; }
         public byte[] GetPromotedToken() { throw null; }
         public static bool operator ==(System.Transactions.Transaction? x, System.Transactions.Transaction? y) { throw null; }
@@ -186,10 +189,11 @@ namespace System.Transactions
     }
     public static partial class TransactionManager
     {
-        public static System.TimeSpan DefaultTimeout { get { throw null; } }
+        public static System.TimeSpan DefaultTimeout { get { throw null; } set { } }
         [System.Diagnostics.CodeAnalysis.DisallowNullAttribute]
         public static System.Transactions.HostCurrentTransactionCallback? HostCurrentCallback { get { throw null; } set { } }
-        public static System.TimeSpan MaximumTimeout { get { throw null; } }
+        public static System.TimeSpan MaximumTimeout { get { throw null; } set { } }
+        public static bool ImplicitDistributedTransactions { get; [System.Runtime.Versioning.SupportedOSPlatform("windows")] [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("Distributed transactions support may not be compatible with trimming. If your program creates a distributed transaction via System.Transactions, the correctness of the application cannot be guaranteed after trimming.")] set; }
         public static event System.Transactions.TransactionStartedEventHandler? DistributedTransactionStarted { add { } remove { } }
         public static void RecoveryComplete(System.Guid resourceManagerIdentifier) { }
         public static System.Transactions.Enlistment Reenlist(System.Guid resourceManagerIdentifier, byte[] recoveryInformation, System.Transactions.IEnlistmentNotification enlistmentNotification) { throw null; }
@@ -201,12 +205,13 @@ namespace System.Transactions
         public TransactionManagerCommunicationException(string? message) { }
         public TransactionManagerCommunicationException(string? message, System.Exception? innerException) { }
     }
-    public partial struct TransactionOptions
+    public partial struct TransactionOptions : System.IEquatable<System.Transactions.TransactionOptions>
     {
-        private int _dummyPrimitive;
+        private readonly int _dummyPrimitive;
         public System.Transactions.IsolationLevel IsolationLevel { get { throw null; } set { } }
         public System.TimeSpan Timeout { get { throw null; } set { } }
-        public override bool Equals(object? obj) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? obj) { throw null; }
+        public bool Equals(System.Transactions.TransactionOptions other) { throw null; }
         public override int GetHashCode() { throw null; }
         public static bool operator ==(System.Transactions.TransactionOptions x, System.Transactions.TransactionOptions y) { throw null; }
         public static bool operator !=(System.Transactions.TransactionOptions x, System.Transactions.TransactionOptions y) { throw null; }
@@ -218,6 +223,7 @@ namespace System.Transactions
         public TransactionPromotionException(string? message) { }
         public TransactionPromotionException(string? message, System.Exception? innerException) { }
     }
+    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
     public sealed partial class TransactionScope : System.IDisposable
     {
         public TransactionScope() { }

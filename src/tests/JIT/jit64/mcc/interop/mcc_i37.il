@@ -3,10 +3,10 @@
 
 
 .assembly extern System.Runtime.Extensions { auto }
+.assembly extern xunit.core {}
 .assembly extern mscorlib { auto }
 
-.assembly MCCTest {}
-.module mcc_i37.exe
+.assembly 'mcc_i37' {}
 
 
 .namespace MCCTest
@@ -124,8 +124,11 @@
       ret
     } // end of method MyClass::.ctor
 
-    .method private static int32 Main(string[] args)
+    .method private static int32 Main()
     {
+      .custom instance void [xunit.core]Xunit.FactAttribute::.ctor() = (
+          01 00 00 00
+      )
       .entrypoint
       .maxstack  64
       .locals init	(

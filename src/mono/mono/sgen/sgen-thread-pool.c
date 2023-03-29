@@ -55,7 +55,7 @@ get_job_and_set_in_progress (SgenThreadPoolContext *context)
 static ssize_t
 find_job_in_queue (SgenThreadPoolContext *context, SgenThreadPoolJob *job)
 {
-	for (ssize_t i = 0; i < context->job_queue.next_slot; ++i) {
+	for (size_t i = 0; i < context->job_queue.next_slot; ++i) {
 		if (context->job_queue.data [i] == job)
 			return i;
 	}
@@ -80,7 +80,7 @@ continue_idle_job (SgenThreadPoolContext *context, void *thread_data)
 {
 	if (!context->continue_idle_job_func)
 		return FALSE;
-	return context->continue_idle_job_func (thread_data, context - pool_contexts);
+	return context->continue_idle_job_func (thread_data, GPTRDIFF_TO_INT (context - pool_contexts));
 }
 
 static gboolean
@@ -261,6 +261,11 @@ sgen_thread_pool_create_context (int num_threads, SgenThreadPoolThreadInitFunc i
 
 	sgen_pointer_queue_init (&pool_contexts [contexts_num].job_queue, 0);
 
+	// Job batches normally split into num_threads * 4 jobs. Make room for up to four job batches in the deferred queue (should reduce flushes during minor collections).
+	pool_contexts [context_id].deferred_jobs_len = (num_threads * 4 * 4) + 1;
+	pool_contexts [context_id].deferred_jobs = (void **)sgen_alloc_internal_dynamic (sizeof (void *) * pool_contexts [context_id].deferred_jobs_len, INTERNAL_MEM_THREAD_POOL_JOB, TRUE);
+	pool_contexts [context_id].deferred_jobs_count = 0;
+
 	contexts_num++;
 
 	return context_id;
@@ -339,6 +344,45 @@ sgen_thread_pool_job_enqueue (int context_id, SgenThreadPoolJob *job)
 	mono_os_cond_broadcast (&work_cond);
 
 	mono_os_mutex_unlock (&lock);
+}
+
+/*
+ * LOCKING: Assumes the GC lock is held  (or it will race with sgen_thread_pool_flush_deferred_jobs)
+ */
+void
+sgen_thread_pool_job_enqueue_deferred (int context_id, SgenThreadPoolJob *job)
+{
+	// Fast path assumes the GC lock is held.
+	pool_contexts [context_id].deferred_jobs [pool_contexts [context_id].deferred_jobs_count++] = job;
+	if (pool_contexts [context_id].deferred_jobs_count >= pool_contexts [context_id].deferred_jobs_len) {
+		// Slow path, flush jobs into queue, but don't signal workers.
+		sgen_thread_pool_flush_deferred_jobs (context_id, FALSE);
+	}
+}
+
+/*
+ * LOCKING: Assumes the GC lock is held (or it will race with sgen_thread_pool_job_enqueue_deferred).
+ */
+void
+sgen_thread_pool_flush_deferred_jobs (int context_id, gboolean signal)
+{
+	if (!signal && !sgen_thread_pool_have_deferred_jobs (context_id))
+		return;
+
+	mono_os_mutex_lock (&lock);
+	for (int i = 0; i < pool_contexts [context_id].deferred_jobs_count; i++) {
+		sgen_pointer_queue_add (&pool_contexts[context_id].job_queue, pool_contexts [context_id].deferred_jobs [i]);
+		pool_contexts [context_id].deferred_jobs [i] = NULL;
+	}
+	pool_contexts [context_id].deferred_jobs_count = 0;
+	if (signal)
+		mono_os_cond_broadcast (&work_cond);
+	mono_os_mutex_unlock (&lock);
+}
+
+gboolean sgen_thread_pool_have_deferred_jobs (int context_id)
+{
+	return pool_contexts [context_id].deferred_jobs_count != 0;
 }
 
 void
@@ -441,6 +485,21 @@ sgen_thread_pool_job_free (SgenThreadPoolJob *job)
 void
 sgen_thread_pool_job_enqueue (int context_id, SgenThreadPoolJob *job)
 {
+}
+
+void
+sgen_thread_pool_job_enqueue_deferred (int context_id, SgenThreadPoolJob *job)
+{
+}
+
+void
+sgen_thread_pool_flush_deferred_jobs (int context_id, gboolean signal)
+{
+}
+
+gboolean sgen_thread_pool_have_deferred_jobs (int context_id)
+{
+	return FALSE;
 }
 
 void

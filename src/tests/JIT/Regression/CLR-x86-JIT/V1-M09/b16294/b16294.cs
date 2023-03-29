@@ -10,13 +10,21 @@ namespace DefaultNamespace
 
     public class Bug
     {
+        public const int DefaultSeed = 20010415;
+        public static int Seed = Environment.GetEnvironmentVariable("CORECLR_SEED") switch
+        {
+            string seedStr when seedStr.Equals("random", StringComparison.OrdinalIgnoreCase) => new Random().Next(),
+            string seedStr when int.TryParse(seedStr, out int envSeed) => envSeed,
+            _ => DefaultSeed
+        };
+
         public virtual void runTest()
         {
-            Random rand = new Random((int)DateTime.Now.Ticks);
+            Random rand = new Random(Seed);
             Object o = ((UInt64)rand.Next((int)UInt64.MinValue, Int32.MaxValue));
         }
 
-        public static int Main(String[] args)
+        public static int Main()
         {
             new Bug().runTest();
             return 100;

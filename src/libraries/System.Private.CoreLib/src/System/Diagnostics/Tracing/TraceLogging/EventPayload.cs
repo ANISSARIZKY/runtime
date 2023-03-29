@@ -1,30 +1,22 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#if ES_BUILD_STANDALONE
-using System;
-using System.Diagnostics;
-#endif
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
-#if ES_BUILD_STANDALONE
-namespace Microsoft.Diagnostics.Tracing
-#else
 namespace System.Diagnostics.Tracing
-#endif
 {
     /// <summary>
     /// EventPayload class holds the list of parameters and their corresponding values for user defined types passed to
     /// EventSource APIs.
     /// Preserving the order of the elements as they were found inside user defined types is the most important characteristic of this class.
     /// </summary>
-    internal class EventPayload : IDictionary<string, object?>
+    internal sealed class EventPayload : IDictionary<string, object?>
     {
-        internal EventPayload(List<string> payloadNames, List<object?> payloadValues)
+        internal EventPayload(string[] payloadNames, object?[] payloadValues)
         {
-            Debug.Assert(payloadNames.Count == payloadValues.Count);
+            Debug.Assert(payloadNames.Length == payloadValues.Length);
 
             m_names = payloadNames;
             m_values = payloadValues;
@@ -37,8 +29,7 @@ namespace System.Diagnostics.Tracing
         {
             get
             {
-                if (key == null)
-                    throw new System.ArgumentNullException(nameof(key));
+                ArgumentNullException.ThrowIfNull(key);
 
                 int position = 0;
                 foreach (string name in m_names)
@@ -77,8 +68,7 @@ namespace System.Diagnostics.Tracing
 
         public bool ContainsKey(string key)
         {
-            if (key == null)
-                throw new System.ArgumentNullException(nameof(key));
+            ArgumentNullException.ThrowIfNull(key);
 
             foreach (string item in m_names)
             {
@@ -88,7 +78,7 @@ namespace System.Diagnostics.Tracing
             return false;
         }
 
-        public int Count => m_names.Count;
+        public int Count => m_names.Length;
 
         public bool IsReadOnly => true;
 
@@ -100,11 +90,7 @@ namespace System.Diagnostics.Tracing
             }
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            var instance = this as IEnumerable<KeyValuePair<string, object?>>;
-            return instance.GetEnumerator();
-        }
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         public void CopyTo(KeyValuePair<string, object?>[] payloadEntries, int count)
         {
@@ -123,8 +109,7 @@ namespace System.Diagnostics.Tracing
 
         public bool TryGetValue(string key, [MaybeNullWhen(false)] out object? value)
         {
-            if (key == null)
-                throw new System.ArgumentNullException(nameof(key));
+            ArgumentNullException.ThrowIfNull(key);
 
             int position = 0;
             foreach (string name in m_names)
@@ -142,8 +127,8 @@ namespace System.Diagnostics.Tracing
         }
 
 #region private
-        private readonly List<string> m_names;
-        private readonly List<object?> m_values;
+        private readonly string[] m_names;
+        private readonly object?[] m_values;
 #endregion
     }
 }

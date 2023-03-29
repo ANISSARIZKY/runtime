@@ -142,7 +142,7 @@ worker_try_finish (WorkerData *data)
 			 * Log to be able to get the duration of normal concurrent M&S phase.
 			 * Worker indexes are 1 based, since 0 is logically considered gc thread.
 			 */
-			sgen_binary_protocol_worker_finish_stats (data - &context->workers_data [0] + 1, context->generation, context->forced_stop, data->major_scan_time, data->los_scan_time, data->total_time + sgen_timestamp () - last_start);
+			sgen_binary_protocol_worker_finish_stats (GPTRDIFF_TO_INT (data - &context->workers_data [0] + 1), context->generation, context->forced_stop, data->major_scan_time, data->los_scan_time, data->total_time + sgen_timestamp () - last_start);
 			goto work_available;
 		}
 	}
@@ -168,7 +168,7 @@ worker_try_finish (WorkerData *data)
 	mono_os_mutex_unlock (&context->finished_lock);
 
 	data->total_time += (sgen_timestamp () - last_start);
-	sgen_binary_protocol_worker_finish_stats (data - &context->workers_data [0] + 1, context->generation, context->forced_stop, data->major_scan_time, data->los_scan_time, data->total_time);
+	sgen_binary_protocol_worker_finish_stats (GPTRDIFF_TO_INT (data - &context->workers_data [0] + 1), context->generation, context->forced_stop, data->major_scan_time, data->los_scan_time, data->total_time);
 
 	sgen_gray_object_queue_trim_free_list (&data->private_gray_queue);
 	return;
@@ -187,6 +187,32 @@ sgen_workers_enqueue_job (int generation, SgenThreadPoolJob *job, gboolean enque
 	}
 
 	sgen_thread_pool_job_enqueue (worker_contexts [generation].thread_pool_context, job);
+}
+
+/*
+ * LOCKING: Assumes the GC lock is held.
+ */
+
+void
+sgen_workers_enqueue_deferred_job (int generation, SgenThreadPoolJob *job, gboolean enqueue)
+{
+	if (!enqueue) {
+		job->func (NULL, job);
+		sgen_thread_pool_job_free (job);
+		return;
+	}
+
+	sgen_thread_pool_job_enqueue_deferred (worker_contexts [generation].thread_pool_context, job);
+}
+
+/*
+ * LOCKING: Assumes the GC lock is held.
+ */
+
+void
+sgen_workers_flush_deferred_jobs (int generation, gboolean signal)
+{
+	sgen_thread_pool_flush_deferred_jobs (generation, signal);
 }
 
 static gboolean
@@ -471,6 +497,7 @@ sgen_workers_start_all_workers (int generation, SgenObjectOperations *object_ops
 	WorkerContext *context = &worker_contexts [generation];
 	int i;
 	SGEN_ASSERT (0, !context->started, "Why are we starting to work without finishing previous cycle");
+	SGEN_ASSERT (0, !sgen_thread_pool_have_deferred_jobs (generation), "All deferred jobs should have been flushed");
 
 	context->idle_func_object_ops_par = object_ops_par;
 	context->idle_func_object_ops_nopar = object_ops_nopar;
@@ -626,6 +653,16 @@ sgen_workers_enqueue_job (int generation, SgenThreadPoolJob *job, gboolean enque
 		sgen_thread_pool_job_free (job);
 		return;
 	}
+}
+
+void
+sgen_workers_enqueue_deferred_job (int generation, SgenThreadPoolJob *job, gboolean enqueue)
+{
+	sgen_workers_enqueue_job (generation, job, enqueue);
+}
+
+void sgen_workers_flush_deferred_jobs (int generation, gboolean signal)
+{
 }
 
 gboolean

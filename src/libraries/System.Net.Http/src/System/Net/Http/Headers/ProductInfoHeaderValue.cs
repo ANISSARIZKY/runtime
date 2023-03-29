@@ -8,18 +8,12 @@ namespace System.Net.Http.Headers
 {
     public class ProductInfoHeaderValue : ICloneable
     {
-        private ProductHeaderValue? _product;
-        private string? _comment;
+        private readonly ProductHeaderValue? _product;
+        private readonly string? _comment;
 
-        public ProductHeaderValue? Product
-        {
-            get { return _product; }
-        }
+        public ProductHeaderValue? Product => _product;
 
-        public string? Comment
-        {
-            get { return _comment; }
-        }
+        public string? Comment => _comment;
 
         public ProductInfoHeaderValue(string productName, string? productVersion)
             : this(new ProductHeaderValue(productName, productVersion))
@@ -28,10 +22,7 @@ namespace System.Net.Http.Headers
 
         public ProductInfoHeaderValue(ProductHeaderValue product)
         {
-            if (product == null)
-            {
-                throw new ArgumentNullException(nameof(product));
-            }
+            ArgumentNullException.ThrowIfNull(product);
 
             _product = product;
         }
@@ -50,10 +41,6 @@ namespace System.Net.Http.Headers
             _comment = source._comment;
         }
 
-        private ProductInfoHeaderValue()
-        {
-        }
-
         public override string ToString()
         {
             if (_product == null)
@@ -64,7 +51,7 @@ namespace System.Net.Http.Headers
             return _product.ToString();
         }
 
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             ProductInfoHeaderValue? other = obj as ProductInfoHeaderValue;
 
@@ -139,11 +126,11 @@ namespace System.Net.Http.Headers
             int current = startIndex;
 
             // Caller must remove leading whitespace.
-            string? comment = null;
-            ProductHeaderValue? product = null;
+            string? comment;
+            ProductHeaderValue? product;
             if (input[current] == '(')
             {
-                int commentLength = 0;
+                int commentLength;
                 if (HttpRuleParser.GetCommentLength(input, current, out commentLength) != HttpParseResult.Parsed)
                 {
                     return 0;
@@ -151,8 +138,10 @@ namespace System.Net.Http.Headers
 
                 comment = input.Substring(current, commentLength);
 
-                current = current + commentLength;
-                current = current + HttpRuleParser.GetWhitespaceLength(input, current);
+                current += commentLength;
+                current += HttpRuleParser.GetWhitespaceLength(input, current);
+
+                parsedValue = new ProductInfoHeaderValue(comment);
             }
             else
             {
@@ -164,12 +153,11 @@ namespace System.Net.Http.Headers
                     return 0;
                 }
 
-                current = current + productLength;
+                current += productLength;
+
+                parsedValue = new ProductInfoHeaderValue(product!);
             }
 
-            parsedValue = new ProductInfoHeaderValue();
-            parsedValue._product = product;
-            parsedValue._comment = comment;
             return current - startIndex;
         }
 

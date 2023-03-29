@@ -5,7 +5,7 @@ using System.Reflection.Context.Projection;
 
 namespace System.Reflection.Context.Custom
 {
-    internal class CustomConstructorInfo : ProjectingConstructorInfo
+    internal sealed class CustomConstructorInfo : ProjectingConstructorInfo
     {
         public CustomConstructorInfo(ConstructorInfo template, CustomReflectionContext context)
             : base(template, context.Projector)
@@ -24,7 +24,7 @@ namespace System.Reflection.Context.Custom
 
         public override object[] GetCustomAttributes(Type attributeType, bool inherit)
         {
-            return AttributeUtils.GetCustomAttributes(ReflectionContext, this, attributeType, inherit);
+            return AttributeUtils.GetCustomAttributes(ReflectionContext, this, attributeType);
         }
 
         public override bool IsDefined(Type attributeType, bool inherit)

@@ -28,7 +28,7 @@ namespace System.Net.WebSockets
 
         // return value here signifies if a Sec-WebSocket-Protocol header should be returned by the server.
         internal static bool ProcessWebSocketProtocolHeader(string? clientSecWebSocketProtocol,
-            string subProtocol,
+            string? subProtocol,
             out string acceptProtocol)
         {
             acceptProtocol = string.Empty;
@@ -76,48 +76,20 @@ namespace System.Net.WebSockets
                     subProtocol));
         }
 
-        internal static void ValidateOptions(string subProtocol, int receiveBufferSize, int sendBufferSize, TimeSpan keepAliveInterval)
+        internal static void ValidateOptions(string? subProtocol, int receiveBufferSize, int sendBufferSize, TimeSpan keepAliveInterval)
         {
             if (subProtocol != null)
             {
                 WebSocketValidate.ValidateSubprotocol(subProtocol);
             }
 
-            if (receiveBufferSize < MinReceiveBufferSize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(receiveBufferSize), receiveBufferSize,
-                    SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, MinReceiveBufferSize));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(receiveBufferSize, MinReceiveBufferSize);
+            ArgumentOutOfRangeException.ThrowIfLessThan(sendBufferSize, MinSendBufferSize);
 
-            if (sendBufferSize < MinSendBufferSize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sendBufferSize), sendBufferSize,
-                    SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, MinSendBufferSize));
-            }
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(receiveBufferSize, MaxBufferSize);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(sendBufferSize, MaxBufferSize);
 
-            if (receiveBufferSize > MaxBufferSize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(receiveBufferSize), receiveBufferSize,
-                    SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooBig,
-                        nameof(receiveBufferSize),
-                        receiveBufferSize,
-                        MaxBufferSize));
-            }
-
-            if (sendBufferSize > MaxBufferSize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sendBufferSize), sendBufferSize,
-                    SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooBig,
-                        nameof(sendBufferSize),
-                        sendBufferSize,
-                        MaxBufferSize));
-            }
-
-            if (keepAliveInterval < Timeout.InfiniteTimeSpan) // -1 millisecond
-            {
-                throw new ArgumentOutOfRangeException(nameof(keepAliveInterval), keepAliveInterval,
-                    SR.Format(SR.net_WebSockets_ArgumentOutOfRange_TooSmall, Timeout.InfiniteTimeSpan.ToString()));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(keepAliveInterval, Timeout.InfiniteTimeSpan);
         }
 
         internal const int MinSendBufferSize = 16;

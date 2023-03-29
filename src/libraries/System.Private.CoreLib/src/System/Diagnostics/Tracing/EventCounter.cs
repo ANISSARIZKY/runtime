@@ -1,28 +1,26 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#if ES_BUILD_STANDALONE
-using System;
-using System.Diagnostics;
-#endif
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Versioning;
 using System.Threading;
 
-#if ES_BUILD_STANDALONE
-namespace Microsoft.Diagnostics.Tracing
-#else
 namespace System.Diagnostics.Tracing
-#endif
 {
     /// <summary>
     /// Provides the ability to collect statistics through EventSource
     ///
-    /// See https://github.com/dotnet/corefx/blob/master/src/System.Diagnostics.Tracing/documentation/EventCounterTutorial.md
+    /// See https://github.com/dotnet/runtime/blob/main/src/libraries/System.Diagnostics.Tracing/documentation/EventCounterTutorial.md
     /// for a tutorial guide.
     ///
-    /// See https://github.com/dotnet/runtime/blob/master/src/libraries/System.Diagnostics.Tracing/tests/BasicEventSourceTest/TestEventCounter.cs
+    /// See https://github.com/dotnet/runtime/blob/main/src/libraries/System.Diagnostics.Tracing/tests/BasicEventSourceTest/TestEventCounter.cs
     /// which shows tests, which are also useful in seeing actual use.
     /// </summary>
+#if !ES_BUILD_STANDALONE
+#if !FEATURE_WASM_PERFTRACING
+    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
+#endif
+#endif
     public partial class EventCounter : DiagnosticCounter
     {
         /// <summary>
@@ -67,7 +65,7 @@ namespace System.Diagnostics.Tracing
             int count = Volatile.Read(ref _count);
             return count == 0 ?
                 $"EventCounter '{Name}' Count 0" :
-                $"EventCounter '{Name}' Count {count} Mean {(_sum / count).ToString("n3")}";
+                $"EventCounter '{Name}' Count {count} Mean {_sum / count:n3}";
         }
 
         #region Statistics Calculation
@@ -93,6 +91,9 @@ namespace System.Diagnostics.Tracing
             _count++;
         }
 
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+            Justification = "The DynamicDependency will preserve the properties of CounterPayload")]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(CounterPayload))]
         internal override void WritePayload(float intervalSec, int pollingIntervalMillisec)
         {
             lock (this)
@@ -170,7 +171,7 @@ namespace System.Diagnostics.Tracing
             }
         }
 
-        protected void Flush()
+        private void Flush()
         {
             Debug.Assert(Monitor.IsEntered(this));
             for (int i = 0; i < _bufferedValues.Length; i++)
@@ -191,7 +192,7 @@ namespace System.Diagnostics.Tracing
     /// This is the payload that is sent in the with EventSource.Write
     /// </summary>
     [EventData]
-    internal class CounterPayloadType
+    internal sealed class CounterPayloadType
     {
         public CounterPayloadType(CounterPayload payload) { Payload = payload; }
         public CounterPayload Payload { get; set; }

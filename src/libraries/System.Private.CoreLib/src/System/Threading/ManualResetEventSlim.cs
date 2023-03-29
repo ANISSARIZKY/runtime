@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Runtime.Versioning;
 
 namespace System.Threading
 {
@@ -76,7 +77,7 @@ namespace System.Threading
         {
             get
             {
-                ThrowIfDisposed();
+                ObjectDisposedException.ThrowIf(IsDisposed, this);
                 if (m_eventObj == null)
                 {
                     // Lazily initialize the event object if needed.
@@ -172,17 +173,8 @@ namespace System.Threading
         /// 0 or greater than the maximum allowed value.</exception>
         public ManualResetEventSlim(bool initialState, int spinCount)
         {
-            if (spinCount < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(spinCount));
-            }
-
-            if (spinCount > SpinCountState_MaxValue)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(spinCount),
-                    SR.Format(SR.ManualResetEventSlim_ctor_SpinCountOutOfRange, SpinCountState_MaxValue));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(spinCount);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(spinCount, SpinCountState_MaxValue);
 
             // We will suppress default spin  because the user specified a count.
             Initialize(initialState, spinCount);
@@ -311,11 +303,8 @@ namespace System.Threading
 
                 lock (eventObj)
                 {
-                    if (m_eventObj != null)
-                    {
-                        // If somebody is waiting, we must set the event.
-                        m_eventObj.Set();
-                    }
+                    // If somebody is waiting, we must set the event.
+                    m_eventObj?.Set();
                 }
             }
         }
@@ -329,12 +318,10 @@ namespace System.Threading
         /// </remarks>
         public void Reset()
         {
-            ThrowIfDisposed();
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
+
             // If there's an event, reset it.
-            if (m_eventObj != null)
-            {
-                m_eventObj.Reset();
-            }
+            m_eventObj?.Reset();
 
             // There is a race condition here. If another thread Sets the event, we will get into a state
             // where m_state will be unsignaled, yet the Win32 event object will have been signaled.
@@ -357,6 +344,7 @@ namespace System.Threading
         /// The caller of this method blocks indefinitely until the current instance is set. The caller will
         /// return immediately if the event is currently in a set state.
         /// </remarks>
+        [UnsupportedOSPlatform("browser")]
         public void Wait()
         {
             Wait(Timeout.Infinite, CancellationToken.None);
@@ -377,6 +365,7 @@ namespace System.Threading
         /// The caller of this method blocks indefinitely until the current instance is set. The caller will
         /// return immediately if the event is currently in a set state.
         /// </remarks>
+        [UnsupportedOSPlatform("browser")]
         public void Wait(CancellationToken cancellationToken)
         {
             Wait(Timeout.Infinite, cancellationToken);
@@ -397,13 +386,13 @@ namespace System.Threading
         /// <exception cref="System.InvalidOperationException">
         /// The maximum number of waiters has been exceeded.
         /// </exception>
+        [UnsupportedOSPlatform("browser")]
         public bool Wait(TimeSpan timeout)
         {
             long totalMilliseconds = (long)timeout.TotalMilliseconds;
-            if (totalMilliseconds < -1 || totalMilliseconds > int.MaxValue)
-            {
-                throw new ArgumentOutOfRangeException(nameof(timeout));
-            }
+
+            ArgumentOutOfRangeException.ThrowIfLessThan(totalMilliseconds, -1, nameof(timeout));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(totalMilliseconds, int.MaxValue, nameof(timeout));
 
             return Wait((int)totalMilliseconds, CancellationToken.None);
         }
@@ -428,13 +417,13 @@ namespace System.Threading
         /// <exception cref="System.InvalidOperationException">
         /// The maximum number of waiters has been exceeded.
         /// </exception>
+        [UnsupportedOSPlatform("browser")]
         public bool Wait(TimeSpan timeout, CancellationToken cancellationToken)
         {
             long totalMilliseconds = (long)timeout.TotalMilliseconds;
-            if (totalMilliseconds < -1 || totalMilliseconds > int.MaxValue)
-            {
-                throw new ArgumentOutOfRangeException(nameof(timeout));
-            }
+
+            ArgumentOutOfRangeException.ThrowIfLessThan(totalMilliseconds, -1, nameof(timeout));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(totalMilliseconds, int.MaxValue, nameof(timeout));
 
             return Wait((int)totalMilliseconds, cancellationToken);
         }
@@ -452,6 +441,7 @@ namespace System.Threading
         /// <exception cref="System.InvalidOperationException">
         /// The maximum number of waiters has been exceeded.
         /// </exception>
+        [UnsupportedOSPlatform("browser")]
         public bool Wait(int millisecondsTimeout)
         {
             return Wait(millisecondsTimeout, CancellationToken.None);
@@ -475,15 +465,13 @@ namespace System.Threading
         /// </exception>
         /// <exception cref="System.OperationCanceledException"><paramref
         /// name="cancellationToken"/> was canceled.</exception>
+        [UnsupportedOSPlatform("browser")]
         public bool Wait(int millisecondsTimeout, CancellationToken cancellationToken)
         {
-            ThrowIfDisposed();
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
             cancellationToken.ThrowIfCancellationRequested(); // an early convenience check
 
-            if (millisecondsTimeout < -1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(millisecondsTimeout));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(millisecondsTimeout, -1);
 
             if (!IsSet)
             {
@@ -634,14 +622,7 @@ namespace System.Threading
             }
         }
 
-        /// <summary>
-        /// Throw ObjectDisposedException if the MRES is disposed
-        /// </summary>
-        private void ThrowIfDisposed()
-        {
-            if ((m_combinedState & Dispose_BitMask) != 0)
-                throw new ObjectDisposedException(SR.ManualResetEventSlim_Disposed);
-        }
+        private bool IsDisposed => (m_combinedState & Dispose_BitMask) != 0;
 
         /// <summary>
         /// Private helper method to wake up waiters when a cancellationToken gets canceled.

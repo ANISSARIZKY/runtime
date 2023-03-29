@@ -22,8 +22,24 @@
 {
     ldc.i4.1
     stsfld int32 TestInt
-    ldc.i4.2
+    ldc.i8 2
     stsfld int64 TestLong
+    ret
+}
+
+.method public static void TestMethodFoo()
+{
+    ret
+}
+
+.method public static void TestMethodFoo(int32 myInt)
+{
+    ret
+}
+
+.method private static int32 TestMethodBar(int32 myInt)
+{
+    ldarg.0
     ret
 }
 

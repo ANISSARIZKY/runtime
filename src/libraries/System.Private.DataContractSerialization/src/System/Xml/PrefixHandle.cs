@@ -2,9 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Runtime.Serialization;
 using System.Diagnostics;
-
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Serialization;
 
 namespace System.Xml
 {
@@ -16,14 +16,14 @@ namespace System.Xml
         Max,
     }
 
-    internal class PrefixHandle : IEquatable<PrefixHandle>
+    internal sealed class PrefixHandle : IEquatable<PrefixHandle>
     {
         private readonly XmlBufferReader _bufferReader;
         private PrefixHandleType _type;
         private int _offset;
         private int _length;
         private static readonly string[] s_prefixStrings = { "", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
-        private static readonly byte[] s_prefixBuffer = { (byte)'a', (byte)'b', (byte)'c', (byte)'d', (byte)'e', (byte)'f', (byte)'g', (byte)'h', (byte)'i', (byte)'j', (byte)'k', (byte)'l', (byte)'m', (byte)'n', (byte)'o', (byte)'p', (byte)'q', (byte)'r', (byte)'s', (byte)'t', (byte)'u', (byte)'v', (byte)'w', (byte)'x', (byte)'y', (byte)'z' };
+        private static readonly byte[] s_prefixBuffer = "abcdefghijklmnopqrstuvwxyz"u8.ToArray();
 
         public PrefixHandle(XmlBufferReader bufferReader)
         {
@@ -32,7 +32,7 @@ namespace System.Xml
 
         public void SetValue(PrefixHandleType type)
         {
-            DiagnosticUtility.DebugAssert(type != PrefixHandleType.Buffer, "");
+            Debug.Assert(type != PrefixHandleType.Buffer);
             _type = type;
         }
 
@@ -116,19 +116,19 @@ namespace System.Xml
 
         public static string GetString(PrefixHandleType type)
         {
-            DiagnosticUtility.DebugAssert(type != PrefixHandleType.Buffer, "");
+            Debug.Assert(type != PrefixHandleType.Buffer);
             return s_prefixStrings[(int)type];
         }
 
         public static PrefixHandleType GetAlphaPrefix(int index)
         {
-            DiagnosticUtility.DebugAssert(index >= 0 && index < 26, "");
+            Debug.Assert(index >= 0 && index < 26);
             return (PrefixHandleType)(PrefixHandleType.A + index);
         }
 
         public static byte[] GetString(PrefixHandleType type, out int offset, out int length)
         {
-            DiagnosticUtility.DebugAssert(type != PrefixHandleType.Buffer, "");
+            Debug.Assert(type != PrefixHandleType.Buffer);
             if (type == PrefixHandleType.Empty)
             {
                 offset = 0;
@@ -177,7 +177,7 @@ namespace System.Xml
             return GetString().CompareTo(that.GetString());
         }
 
-        public bool Equals(PrefixHandle? prefix2)
+        public bool Equals([NotNullWhen(true)] PrefixHandle? prefix2)
         {
             if (prefix2 is null)
                 return false;
@@ -234,7 +234,7 @@ namespace System.Xml
         {
             return !prefix1.Equals(prefix2);
         }
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             return Equals(obj as PrefixHandle);
         }

@@ -42,7 +42,7 @@ namespace System.Threading.Tasks.Tests
         /// </summary>
         private const int LongTaskMilliseconds = 100;
 
-        [Theory]
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
         [OuterLoop]
         [InlineData(true)]
         [InlineData(false)]
@@ -110,7 +110,15 @@ namespace System.Threading.Tasks.Tests
             Assert.False(asyncResult.CompletedSynchronously, "Should not have completed synchronously.");
         }
 
-        [Theory]
+        [Fact]
+        public void AsyncWaitHandle_DisposeHandleThenCompleteTask_Succeeds()
+        {
+            var tcs = new TaskCompletionSource();
+            ((IAsyncResult)tcs.Task).AsyncWaitHandle.Dispose();
+            tcs.SetResult();
+        }
+
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
         [OuterLoop]
         [InlineData(true)]
         [InlineData(false)]

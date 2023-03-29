@@ -1,23 +1,26 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Buffers.Binary;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 
 namespace System.Resources
 #if RESOURCES_EXTENSIONS
     .Extensions
 #endif
 {
+#pragma warning disable IDE0065
 #if RESOURCES_EXTENSIONS
     using ResourceReader = DeserializingResourceReader;
 #endif
+#pragma warning restore IDE0065
 
     // Provides the default implementation of IResourceReader, reading
     // .resources file from the system default binary format.  This class
@@ -58,10 +61,11 @@ namespace System.Resources
         // it make sense to use anything less than one page?
         private const int DefaultFileStreamBufferSize = 4096;
 
-        private BinaryReader _store;    // backing store we're reading from.
-        // Used by RuntimeResourceSet and this class's enumerator.  Maps
-        // resource name to a value, a ResourceLocator, or a
-        // LooselyLinkedManifestResource.
+        // Backing store we're reading from. Usages outside of constructor
+        // initialization must be protected by lock (this).
+        private BinaryReader _store;
+        // Used by RuntimeResourceSet and this class's enumerator.
+        // Accesses must be protected by lock(_resCache).
         internal Dictionary<string, ResourceLocator>? _resCache;
         private long _nameSectionOffset;  // Offset to name section of file.
         private long _dataSectionOffset;  // Offset to Data section of file.
@@ -85,7 +89,6 @@ namespace System.Resources
 
         // Version number of .resources file, for compatibility
         private int _version;
-
 
         public
 #if RESOURCES_EXTENSIONS
@@ -115,10 +118,19 @@ namespace System.Resources
         ResourceReader(Stream stream)
 #endif
         {
-            if (stream == null)
+#if RESOURCES_EXTENSIONS
+            if (stream is null)
+            {
                 throw new ArgumentNullException(nameof(stream));
+            }
+#else
+            ArgumentNullException.ThrowIfNull(stream);
+#endif
+
             if (!stream.CanRead)
+            {
                 throw new ArgumentException(SR.Argument_StreamNotReadable);
+            }
 
             _resCache = new Dictionary<string, ResourceLocator>(FastResourceComparer.Default);
             _store = new BinaryReader(stream, Encoding.UTF8);
@@ -127,6 +139,8 @@ namespace System.Resources
 
             ReadResources();
         }
+
+        internal static bool AllowCustomResourceTypes { get; } = AppContext.TryGetSwitch("System.Resources.ResourceManager.AllowCustomResourceTypes", out bool allowReflection) ? allowReflection : true;
 
         public void Close()
         {
@@ -149,8 +163,7 @@ namespace System.Resources
                     // that we may call Close n times, but that's safe.
                     BinaryReader copyOfStore = _store;
                     _store = null!;
-                    if (copyOfStore != null)
-                        copyOfStore.Close();
+                    copyOfStore?.Close();
                 }
                 _store = null!;
                 _namePositions = null;
@@ -161,13 +174,16 @@ namespace System.Resources
             }
         }
 
-        internal static unsafe int ReadUnalignedI4(int* p)
+        private static unsafe int ReadUnalignedI4(int* p)
         {
             return BinaryPrimitives.ReadInt32LittleEndian(new ReadOnlySpan<byte>(p, sizeof(int)));
         }
 
         private void SkipString()
         {
+            // Note: this method assumes that it is called either during object
+            // construction or within another method that locks on this.
+
             int stringLength = _store.Read7BitEncodedInt();
             if (stringLength < 0)
             {
@@ -178,7 +194,7 @@ namespace System.Resources
 
         private unsafe int GetNameHash(int index)
         {
-            Debug.Assert(index >= 0 && index < _numResources, "Bad index into hash array.  index: " + index);
+            Debug.Assert(index >= 0 && index < _numResources, $"Bad index into hash array.  index: {index}");
 
             if (_ums == null)
             {
@@ -194,7 +210,7 @@ namespace System.Resources
 
         private unsafe int GetNamePosition(int index)
         {
-            Debug.Assert(index >= 0 && index < _numResources, "Bad index into name position array.  index: " + index);
+            Debug.Assert(index >= 0 && index < _numResources, $"Bad index into name position array.  index: {index}");
             int r;
             if (_ums == null)
             {
@@ -226,6 +242,7 @@ namespace System.Resources
             return new ResourceEnumerator(this);
         }
 
+        // Called from RuntimeResourceSet
         internal ResourceEnumerator GetEnumeratorInternal()
         {
             return new ResourceEnumerator(this);
@@ -235,6 +252,7 @@ namespace System.Resources
         // To read the data, seek to _dataSectionOffset + dataPos, then
         // read the resource type & data.
         // This does a binary search through the names.
+        // Called from RuntimeResourceSet
         internal int FindPosForResource(string name)
         {
             Debug.Assert(_store != null, "ResourceReader is closed!");
@@ -319,6 +337,8 @@ namespace System.Resources
         private unsafe bool CompareStringEqualsName(string name)
         {
             Debug.Assert(_store != null, "ResourceReader is closed!");
+            Debug.Assert(Monitor.IsEntered(this)); // uses _store
+
             int byteLen = _store.Read7BitEncodedInt();
             if (byteLen < 0)
             {
@@ -381,7 +401,19 @@ namespace System.Resources
                     string? s = null;
                     char* charPtr = (char*)_ums.PositionPointer;
 
-                    s = new string(charPtr, 0, byteLen / 2);
+                    if (BitConverter.IsLittleEndian)
+                    {
+                        s = new string(charPtr, 0, byteLen / 2);
+                    }
+                    else
+                    {
+                        char[] arr = new char[byteLen / 2];
+                        for (int i = 0; i < arr.Length; i++)
+                        {
+                            arr[i] = (char)BinaryPrimitives.ReverseEndianness((short)charPtr[i]);
+                        }
+                        s = new string(arr);
+                    }
 
                     _ums.Position += byteLen;
                     dataOffset = _store.ReadInt32();
@@ -439,68 +471,74 @@ namespace System.Resources
         }
 
         // This takes a virtual offset into the data section and reads a String
-        // from that location.
-        // Anyone who calls LoadObject should make sure they take a lock so
-        // no one can cause us to do a seek in here.
+        // from that location. Called from RuntimeResourceSet
         internal string? LoadString(int pos)
         {
             Debug.Assert(_store != null, "ResourceReader is closed!");
-            _store.BaseStream.Seek(_dataSectionOffset + pos, SeekOrigin.Begin);
-            string? s = null;
-            int typeIndex = _store.Read7BitEncodedInt();
-            if (_version == 1)
+
+            lock (this)
             {
-                if (typeIndex == -1)
-                    return null;
-                if (FindType(typeIndex) != typeof(string))
-                    throw new InvalidOperationException(SR.Format(SR.InvalidOperation_ResourceNotString_Type, FindType(typeIndex).FullName));
-                s = _store.ReadString();
-            }
-            else
-            {
-                ResourceTypeCode typeCode = (ResourceTypeCode)typeIndex;
-                if (typeCode != ResourceTypeCode.String && typeCode != ResourceTypeCode.Null)
+                _store.BaseStream.Seek(_dataSectionOffset + pos, SeekOrigin.Begin);
+                string? s = null;
+                int typeIndex = _store.Read7BitEncodedInt();
+                if (_version == 1)
                 {
-                    string? typeString;
-                    if (typeCode < ResourceTypeCode.StartOfUserTypes)
-                        typeString = typeCode.ToString();
-                    else
-                        typeString = FindType(typeCode - ResourceTypeCode.StartOfUserTypes).FullName;
-                    throw new InvalidOperationException(SR.Format(SR.InvalidOperation_ResourceNotString_Type, typeString));
-                }
-                if (typeCode == ResourceTypeCode.String) // ignore Null
+                    if (typeIndex == -1)
+                        return null;
+                    if (FindType(typeIndex) != typeof(string))
+                        throw new InvalidOperationException(SR.Format(SR.InvalidOperation_ResourceNotString_Type, FindType(typeIndex).FullName));
                     s = _store.ReadString();
+                }
+                else
+                {
+                    ResourceTypeCode typeCode = (ResourceTypeCode)typeIndex;
+                    if (typeCode != ResourceTypeCode.String && typeCode != ResourceTypeCode.Null)
+                    {
+                        string? typeString;
+                        if (typeCode < ResourceTypeCode.StartOfUserTypes)
+                            typeString = typeCode.ToString();
+                        else
+                            typeString = FindType(typeCode - ResourceTypeCode.StartOfUserTypes).FullName;
+                        throw new InvalidOperationException(SR.Format(SR.InvalidOperation_ResourceNotString_Type, typeString));
+                    }
+                    if (typeCode == ResourceTypeCode.String) // ignore Null
+                        s = _store.ReadString();
+                }
+                return s;
             }
-            return s;
         }
 
         // Called from RuntimeResourceSet
         internal object? LoadObject(int pos)
         {
-            if (_version == 1)
-                return LoadObjectV1(pos);
-            return LoadObjectV2(pos, out _);
+            lock (this)
+            {
+                return _version == 1 ? LoadObjectV1(pos) : LoadObjectV2(pos, out _);
+            }
         }
 
+        // Called from RuntimeResourceSet
         internal object? LoadObject(int pos, out ResourceTypeCode typeCode)
         {
-            if (_version == 1)
+            lock (this)
             {
-                object? o = LoadObjectV1(pos);
-                typeCode = (o is string) ? ResourceTypeCode.String : ResourceTypeCode.StartOfUserTypes;
-                return o;
+                if (_version == 1)
+                {
+                    object? o = LoadObjectV1(pos);
+                    typeCode = (o is string) ? ResourceTypeCode.String : ResourceTypeCode.StartOfUserTypes;
+                    return o;
+                }
+                return LoadObjectV2(pos, out typeCode);
             }
-            return LoadObjectV2(pos, out typeCode);
         }
 
         // This takes a virtual offset into the data section and reads an Object
         // from that location.
-        // Anyone who calls LoadObject should make sure they take a lock so
-        // no one can cause us to do a seek in here.
-        internal object? LoadObjectV1(int pos)
+        private object? LoadObjectV1(int pos)
         {
             Debug.Assert(_store != null, "ResourceReader is closed!");
             Debug.Assert(_version == 1, ".resources file was not a V1 .resources file!");
+            Debug.Assert(Monitor.IsEntered(this)); // uses _store
 
             try
             {
@@ -520,6 +558,8 @@ namespace System.Resources
 
         private object? _LoadObjectV1(int pos)
         {
+            Debug.Assert(Monitor.IsEntered(this)); // uses _store
+
             _store.BaseStream.Seek(_dataSectionOffset + pos, SeekOrigin.Begin);
             int typeIndex = _store.Read7BitEncodedInt();
             if (typeIndex == -1)
@@ -561,7 +601,11 @@ namespace System.Resources
                 return new TimeSpan(_store.ReadInt64());
             else if (type == typeof(decimal))
             {
+#if RESOURCES_EXTENSIONS
                 int[] bits = new int[4];
+#else
+                Span<int> bits = stackalloc int[4];
+#endif
                 for (int i = 0; i < bits.Length; i++)
                     bits[i] = _store.ReadInt32();
                 return new decimal(bits);
@@ -572,10 +616,11 @@ namespace System.Resources
             }
         }
 
-        internal object? LoadObjectV2(int pos, out ResourceTypeCode typeCode)
+        private object? LoadObjectV2(int pos, out ResourceTypeCode typeCode)
         {
             Debug.Assert(_store != null, "ResourceReader is closed!");
             Debug.Assert(_version >= 2, ".resources file was not a V2 (or higher) .resources file!");
+            Debug.Assert(Monitor.IsEntered(this)); // uses _store
 
             try
             {
@@ -595,6 +640,8 @@ namespace System.Resources
 
         private object? _LoadObjectV2(int pos, out ResourceTypeCode typeCode)
         {
+            Debug.Assert(Monitor.IsEntered(this)); // uses _store
+
             _store.BaseStream.Seek(_dataSectionOffset + pos, SeekOrigin.Begin);
             typeCode = (ResourceTypeCode)_store.Read7BitEncodedInt();
 
@@ -731,6 +778,7 @@ namespace System.Resources
         [MemberNotNull(nameof(_typeNamePositions))]
         private void ReadResources()
         {
+            Debug.Assert(!Monitor.IsEntered(this)); // only called during init
             Debug.Assert(_store != null, "ResourceReader is closed!");
 
             try
@@ -753,6 +801,8 @@ namespace System.Resources
         [MemberNotNull(nameof(_typeNamePositions))]
         private void _ReadResources()
         {
+            Debug.Assert(!Monitor.IsEntered(this)); // only called during init
+
             // Read ResourceManager header
             // Check for magic number
             int magicNum = _store.ReadInt32();
@@ -917,45 +967,71 @@ namespace System.Resources
         // and initialize Reflection.
         private Type FindType(int typeIndex)
         {
+            if (!AllowCustomResourceTypes)
+            {
+                throw new NotSupportedException(SR.ResourceManager_ReflectionNotAllowed);
+            }
+
             if (typeIndex < 0 || typeIndex >= _typeTable.Length)
             {
                 throw new BadImageFormatException(SR.BadImageFormat_InvalidType);
             }
-            if (_typeTable[typeIndex] == null)
+
+            [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+                Justification = "UseReflectionToGetType will get trimmed out when AllowCustomResourceTypes is set to false. " +
+                "When set to true, we will already throw a warning for this feature switch, so we suppress this one in order for" +
+                "the user to only get one error.")]
+            Type UseReflectionToGetTypeLocal(int typeIndex) => UseReflectionToGetType(typeIndex);
+
+            return _typeTable[typeIndex] ?? UseReflectionToGetTypeLocal(typeIndex);
+        }
+
+        [RequiresUnreferencedCode("The CustomResourceTypesSupport feature switch has been enabled for this app which is being trimmed. " +
+            "Custom readers as well as custom objects on the resources file are not observable by the trimmer and so required assemblies, types and members may be removed.")]
+        private Type UseReflectionToGetType(int typeIndex)
+        {
+            Debug.Assert(Monitor.IsEntered(this)); // uses _store
+
+            long oldPos = _store.BaseStream.Position;
+            try
             {
-                long oldPos = _store.BaseStream.Position;
-                try
-                {
-                    _store.BaseStream.Position = _typeNamePositions[typeIndex];
-                    string typeName = _store.ReadString();
-                    _typeTable[typeIndex] = Type.GetType(typeName, true);
-                }
-                // If serialization isn't supported, we convert FileNotFoundException to
-                // NotSupportedException for consistency with v2. This is a corner-case, but the
-                // idea is that we want to give the user a more accurate error message. Even if
-                // the dependency were found, we know it will require serialization since it
-                // can't be one of the types we special case. So if the dependency were found,
-                // it would go down the serialization code path, resulting in NotSupported for
-                // SKUs without serialization.
-                //
-                // We don't want to regress the expected case by checking the type info before
-                // getting to Type.GetType -- this is costly with v1 resource formats.
-                catch (FileNotFoundException)
-                {
-                    throw new NotSupportedException(SR.NotSupported_ResourceObjectSerialization);
-                }
-                finally
-                {
-                    _store.BaseStream.Position = oldPos;
-                }
+                _store.BaseStream.Position = _typeNamePositions[typeIndex];
+                string typeName = _store.ReadString();
+                _typeTable[typeIndex] = Type.GetType(typeName, true);
+                Debug.Assert(_typeTable[typeIndex] != null, "Should have found a type!");
+                return _typeTable[typeIndex]!;
             }
-            Debug.Assert(_typeTable[typeIndex] != null, "Should have found a type!");
-            return _typeTable[typeIndex]!;
+// If-defing this coud out from Resources Extensions since they will by definition always support deserialization
+// So we shouldn't attempt to wrap the original exception with a NotSupportedException since that can be misleading.
+// For that reason, the bellow code is only relevant when building CoreLib's ResourceReader.
+#if !RESOURCES_EXTENSIONS
+            // If serialization isn't supported, we convert FileNotFoundException to
+            // NotSupportedException for consistency with v2. This is a corner-case, but the
+            // idea is that we want to give the user a more accurate error message. Even if
+            // the dependency were found, we know it will require serialization since it
+            // can't be one of the types we special case. So if the dependency were found,
+            // it would go down the serialization code path, resulting in NotSupported for
+            // SKUs without serialization.
+            //
+            // We don't want to regress the expected case by checking the type info before
+            // getting to Type.GetType -- this is costly with v1 resource formats.
+            catch (FileNotFoundException fileNotFoundException) when (!_permitDeserialization)
+            {
+                // Include the FileNotFoundException as an inner exception to make it more diagnosable
+                throw new NotSupportedException(SR.NotSupported_ResourceObjectSerialization, fileNotFoundException);
+            }
+#endif
+            finally
+            {
+                _store.BaseStream.Position = oldPos;
+            }
         }
 
         private string TypeNameFromTypeCode(ResourceTypeCode typeCode)
         {
             Debug.Assert(typeCode >= 0, "can't be negative");
+            Debug.Assert(Monitor.IsEntered(this)); // uses _store
+
             if (typeCode < ResourceTypeCode.StartOfUserTypes)
             {
                 Debug.Assert(!string.Equals(typeCode.ToString(), "LastPrimitive"), "Change ResourceTypeCode metadata order so LastPrimitive isn't what Enum.ToString prefers.");
@@ -1033,30 +1109,30 @@ namespace System.Resources
                     if (!_currentIsValid) throw new InvalidOperationException(SR.InvalidOperation_EnumNotStarted);
                     if (_reader._resCache == null) throw new InvalidOperationException(SR.ResourceReaderIsClosed);
 
-                    string key;
+                    string key = _reader.AllocateStringForNameIndex(_currentName, out _dataPosition); // AllocateStringForNameIndex could lock on _reader
+
                     object? value = null;
-                    lock (_reader)
-                    { // locks should be taken in the same order as in RuntimeResourceSet.GetObject to avoid deadlock
-                        lock (_reader._resCache)
+                    // Lock the cache first, then the reader (in this case, we don't actually need to lock the reader and cache at the same time).
+                    // Lock order MUST match RuntimeResourceSet.GetObject to avoid deadlock.
+                    Debug.Assert(!Monitor.IsEntered(_reader));
+                    lock (_reader._resCache)
+                    {
+                        if (_reader._resCache.TryGetValue(key, out ResourceLocator locator))
                         {
-                            key = _reader.AllocateStringForNameIndex(_currentName, out _dataPosition); // AllocateStringForNameIndex could lock on _reader
-                            if (_reader._resCache.TryGetValue(key, out ResourceLocator locator))
-                            {
-                                value = locator.Value;
-                            }
-                            if (value == null)
-                            {
-                                if (_dataPosition == -1)
-                                    value = _reader.GetValueForNameIndex(_currentName);
-                                else
-                                    value = _reader.LoadObject(_dataPosition);
-                                // If enumeration and subsequent lookups happen very
-                                // frequently in the same process, add a ResourceLocator
-                                // to _resCache here.  But WinForms enumerates and
-                                // just about everyone else does lookups.  So caching
-                                // here may bloat working set.
-                            }
+                            value = locator.Value;
                         }
+                    }
+                    if (value is null)
+                    {
+                        if (_dataPosition == -1)
+                            value = _reader.GetValueForNameIndex(_currentName);
+                        else
+                            value = _reader.LoadObject(_dataPosition);
+                        // If enumeration and subsequent lookups happen very
+                        // frequently in the same process, add a ResourceLocator
+                        // to _resCache here (we'll also need to extend the lock block!).
+                        // But WinForms enumerates and just about everyone else does lookups.
+                        // So caching here may bloat working set.
                     }
                     return new DictionaryEntry(key, value);
                 }

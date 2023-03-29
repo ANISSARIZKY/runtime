@@ -40,7 +40,7 @@ namespace System.Dynamic
         /// <returns>The new set of binding restrictions.</returns>
         public BindingRestrictions Merge(BindingRestrictions restrictions)
         {
-            ContractUtils.RequiresNotNull(restrictions, nameof(restrictions));
+            ArgumentNullException.ThrowIfNull(restrictions);
             if (this == Empty)
             {
                 return restrictions;
@@ -62,8 +62,8 @@ namespace System.Dynamic
         /// <returns>The new binding restrictions.</returns>
         public static BindingRestrictions GetTypeRestriction(Expression expression, Type type)
         {
-            ContractUtils.RequiresNotNull(expression, nameof(expression));
-            ContractUtils.RequiresNotNull(type, nameof(type));
+            ArgumentNullException.ThrowIfNull(expression);
+            ArgumentNullException.ThrowIfNull(type);
 
             return new TypeRestriction(expression, type);
         }
@@ -93,7 +93,7 @@ namespace System.Dynamic
         /// <returns>The new binding restrictions.</returns>
         public static BindingRestrictions GetInstanceRestriction(Expression expression, object? instance)
         {
-            ContractUtils.RequiresNotNull(expression, nameof(expression));
+            ArgumentNullException.ThrowIfNull(expression);
 
             return new InstanceRestriction(expression, instance);
         }
@@ -109,7 +109,7 @@ namespace System.Dynamic
         /// </remarks>
         public static BindingRestrictions GetExpressionRestriction(Expression expression)
         {
-            ContractUtils.RequiresNotNull(expression, nameof(expression));
+            ArgumentNullException.ThrowIfNull(expression);
             ContractUtils.Requires(expression.Type == typeof(bool), nameof(expression));
             return new CustomRestriction(expression);
         }
@@ -242,7 +242,7 @@ namespace System.Dynamic
                 _expression = expression;
             }
 
-            public override bool Equals(object? obj)
+            public override bool Equals([NotNullWhen(true)] object? obj)
             {
                 return obj is CustomRestriction other && other._expression == _expression;
             }
@@ -265,7 +265,7 @@ namespace System.Dynamic
                 _type = type;
             }
 
-            public override bool Equals(object? obj)
+            public override bool Equals([NotNullWhen(true)] object? obj)
             {
                 return obj is TypeRestriction other && other._expression == _expression && TypeUtils.AreEquivalent(other._type, _type);
             }
@@ -287,7 +287,7 @@ namespace System.Dynamic
                 _instance = instance;
             }
 
-            public override bool Equals(object? obj)
+            public override bool Equals([NotNullWhen(true)] object? obj)
             {
                 return obj is InstanceRestriction other && other._expression == _expression && other._instance == _instance;
             }
@@ -344,7 +344,7 @@ namespace System.Dynamic
 
             public BindingRestrictionsProxy(BindingRestrictions node)
             {
-                ContractUtils.RequiresNotNull(node, nameof(node));
+                ArgumentNullException.ThrowIfNull(node);
                 _node = node;
             }
 

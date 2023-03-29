@@ -25,17 +25,17 @@ namespace BasicEventSourceTests
     public partial class TestsManifestGeneration
     {
         // Specifies whether the process is elevated or not.
-        private static readonly Lazy<bool> s_isElevated = new Lazy<bool>(AdminHelpers.IsProcessElevated);
-        private static bool IsProcessElevated => s_isElevated.Value;
         private static bool IsProcessElevatedAndNotWindowsNanoServerAndRemoteExecutorSupported =>
-            IsProcessElevated && PlatformDetection.IsNotWindowsNanoServer && RemoteExecutor.IsSupported;
+            PlatformDetection.IsPrivilegedProcess && PlatformDetection.IsNotWindowsNanoServer && RemoteExecutor.IsSupported;
 
         /// ETW only works with elevated process
         [ConditionalFact(nameof(IsProcessElevatedAndNotWindowsNanoServerAndRemoteExecutorSupported))]
         public void Test_EventSource_EtwManifestGeneration()
         {
+            RemoteInvokeOptions options = new RemoteInvokeOptions { TimeOut = 300_000 /* ms */ };
             RemoteExecutor.Invoke(() =>
             {
+                RemoteInvokeOptions localOptions = new RemoteInvokeOptions { TimeOut = 300_000 /* ms */ };
                 using (RemoteInvokeHandle handle = RemoteExecutor.Invoke(() =>
                 {
                     var es = new SimpleEventSource();
@@ -44,7 +44,7 @@ namespace BasicEventSourceTests
                         es.WriteSimpleInt(i);
                         Thread.Sleep(100);
                     }
-                }))
+                }, localOptions))
                 {
                     var etlFileName = @"file.etl";
                     var tracesession = new TraceEventSession("testname", etlFileName);
@@ -54,12 +54,25 @@ namespace BasicEventSourceTests
                     Thread.Sleep(TimeSpan.FromSeconds(5));
 
                     tracesession.Flush();
+
                     tracesession.DisableProvider("SimpleEventSource");
                     tracesession.Dispose();
 
-                    Assert.True(VerifyManifestAndRemoveFile(etlFileName));
+                    var manifestExists = false;
+                    var max_retries = 50;
+
+                    for (int i = 0; i < max_retries; i++)
+                    {
+                        if (VerifyManifestAndRemoveFile(etlFileName))
+                        {
+                            manifestExists = true;
+                            break;
+                        }
+                        Thread.Sleep(1000);
+                    }
+                    Assert.True(manifestExists);
                 }
-            }).Dispose();
+            }, options).Dispose();
         }
 
         [ConditionalFact(nameof(IsProcessElevatedAndNotWindowsNanoServerAndRemoteExecutorSupported))]
@@ -78,8 +91,9 @@ namespace BasicEventSourceTests
                 }))
                 {
                     var initialFileName = @"initialFile.etl";
-                    var rolloverFile = @"rolloverFile.etl";
+                    var rolloverFileName = @"rolloverFile.etl";
                     var tracesession = new TraceEventSession("testname", initialFileName);
+                    var max_retries = 50;
 
                     tracesession.EnableProvider("SimpleEventSource");
 
@@ -87,7 +101,7 @@ namespace BasicEventSourceTests
 
                     tracesession.Flush();
 
-                    tracesession.SetFileName(rolloverFile);
+                    tracesession.SetFileName(rolloverFileName);
 
                     Thread.Sleep(TimeSpan.FromSeconds(5));
 
@@ -96,8 +110,29 @@ namespace BasicEventSourceTests
                     tracesession.DisableProvider("SimpleEventSource");
                     tracesession.Dispose();
 
-                    Assert.True(VerifyManifestAndRemoveFile(initialFileName));
-                    Assert.True(VerifyManifestAndRemoveFile(rolloverFile));
+                    bool initialFileHasManifest = false;
+                    bool rollOverFileHasManifest = false;
+
+                    for (int i = 0; i < max_retries; i++)
+                    {
+                        if (VerifyManifestAndRemoveFile(initialFileName))
+                        {
+                            initialFileHasManifest = true;
+                            break;
+                        }
+                        Thread.Sleep(1000);
+                    }
+                    for (int i = 0; i < max_retries; i++)
+                    {
+                        if (VerifyManifestAndRemoveFile(rolloverFileName))
+                        {
+                            rollOverFileHasManifest = true;
+                            break;
+                        }
+                        Thread.Sleep(1000);
+                    }
+                    Assert.True(initialFileHasManifest);
+                    Assert.True(rollOverFileHasManifest);
                 }
             }).Dispose();
         }

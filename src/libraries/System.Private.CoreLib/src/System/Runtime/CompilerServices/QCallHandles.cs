@@ -4,8 +4,6 @@
 // Wrappers used to pass objects to and from QCalls.
 
 using System.Threading;
-using Internal.Runtime.CompilerServices;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.Runtime.CompilerServices
 {
@@ -47,7 +45,7 @@ namespace System.Runtime.CompilerServices
         }
     }
 
-    // Wraps RuntimeModule into a handle. Used to pass RuntimeModule to native code wihtout letting it be collected
+    // Wraps RuntimeModule into a handle. Used to pass RuntimeModule to native code without letting it be collected
     internal unsafe ref struct QCallModule
     {
         private void* _ptr;
@@ -59,14 +57,14 @@ namespace System.Runtime.CompilerServices
             _module = module.GetUnderlyingNativeHandle();
         }
 
-        internal QCallModule(ref System.Reflection.Emit.ModuleBuilder module)
+        internal QCallModule(ref System.Reflection.Emit.RuntimeModuleBuilder module)
         {
             _ptr = Unsafe.AsPointer(ref module);
-            _module = module.GetNativeHandle().GetUnderlyingNativeHandle();
+            _module = module.InternalModule.GetUnderlyingNativeHandle();
         }
     }
 
-    // Wraps RuntimeAssembly into a handle. Used to pass RuntimeAssembly to native code wihtout letting it be collected
+    // Wraps RuntimeAssembly into a handle. Used to pass RuntimeAssembly to native code without letting it be collected
     internal unsafe ref struct QCallAssembly
     {
         private void* _ptr;
@@ -75,11 +73,11 @@ namespace System.Runtime.CompilerServices
         internal QCallAssembly(ref System.Reflection.RuntimeAssembly assembly)
         {
             _ptr = Unsafe.AsPointer(ref assembly);
-            _assembly = assembly.GetUnderlyingNativeHandle();
+            _assembly = assembly?.GetUnderlyingNativeHandle() ?? IntPtr.Zero;
         }
     }
 
-    // Wraps RuntimeType into a handle. Used to pass RuntimeType to native code wihtout letting it be collected
+    // Wraps RuntimeType into a handle. Used to pass RuntimeType to native code without letting it be collected
     internal unsafe ref struct QCallTypeHandle
     {
         private void* _ptr;
@@ -88,10 +86,7 @@ namespace System.Runtime.CompilerServices
         internal QCallTypeHandle(ref System.RuntimeType type)
         {
             _ptr = Unsafe.AsPointer(ref type);
-            if (type != null)
-                _handle = type.GetUnderlyingNativeHandle();
-            else
-                _handle = IntPtr.Zero;
+            _handle = type?.GetUnderlyingNativeHandle() ?? IntPtr.Zero;
         }
 
         internal QCallTypeHandle(ref System.RuntimeTypeHandle rth)

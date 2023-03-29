@@ -13,7 +13,7 @@ namespace System.Globalization.Tests
             yield return new object[] { NumberFormatInfo.InvariantInfo, new int[] { 3 } };
             yield return new object[] { CultureInfo.GetCultureInfo("en-US").NumberFormat, new int[] { 3 } };
 
-            if (PlatformDetection.IsNotBrowser && !PlatformDetection.IsUbuntu && !PlatformDetection.IsWindows7 && !PlatformDetection.IsWindows8x && !PlatformDetection.IsFedora)
+            if (PlatformDetection.IsNotUsingLimitedCultures && !PlatformDetection.IsUbuntu && !PlatformDetection.IsWindows7 && !PlatformDetection.IsWindows8x && !PlatformDetection.IsFedora)
             {
                 yield return new object[] { CultureInfo.GetCultureInfo("ur-IN").NumberFormat, new int[] { 3, 2 } };
             }
@@ -21,6 +21,7 @@ namespace System.Globalization.Tests
 
         [Theory]
         [MemberData(nameof(CurrencyGroupSizes_TestData))]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/79867", typeof(PlatformDetection), nameof(PlatformDetection.IsArm64Process), nameof(PlatformDetection.IsWindows))]
         public void CurrencyGroupSizes_Get_ReturnsExpected(NumberFormatInfo format, int[] expected)
         {
             Assert.Equal(expected, format.CurrencyGroupSizes);

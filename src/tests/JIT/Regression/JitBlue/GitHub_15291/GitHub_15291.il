@@ -10,9 +10,10 @@
 .assembly extern System.Runtime { auto }
 .assembly extern mscorlib { auto }
 
-.assembly GitHub_15219 {}
+.assembly 'GitHub_15291' {}
+.assembly extern xunit.core {}
 
-.class private auto ansi beforefieldinit P
+.class public auto ansi beforefieldinit P
        extends [mscorlib]System.Object
 {
   .method public hidebysig static uint32
@@ -101,6 +102,9 @@
 
   .method public hidebysig static int32  Main() cil managed
   {
+    .custom instance void [xunit.core]Xunit.FactAttribute::.ctor() = (
+        01 00 00 00
+    )
     .entrypoint
     .maxstack  3
     .locals init ([0] uint32 r64,

@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using System.Diagnostics;
 using System.Threading;
@@ -38,6 +39,8 @@ namespace System.Net.NetworkInformation
         private static readonly AutoResetEvent s_runLoopStartedEvent = new AutoResetEvent(false);
         private static readonly AutoResetEvent s_runLoopEndedEvent = new AutoResetEvent(false);
 
+        [UnsupportedOSPlatform("illumos")]
+        [UnsupportedOSPlatform("solaris")]
         public static event NetworkAddressChangedEventHandler? NetworkAddressChanged
         {
             add
@@ -75,6 +78,8 @@ namespace System.Net.NetworkInformation
             }
         }
 
+        [UnsupportedOSPlatform("illumos")]
+        [UnsupportedOSPlatform("solaris")]
         public static event NetworkAvailabilityChangedEventHandler? NetworkAvailabilityChanged
         {
             add
@@ -177,8 +182,11 @@ namespace System.Net.NetworkInformation
                         IntPtr.Zero);
                 }
             }
-            s_runLoopThread = new Thread(RunLoopThreadStart);
-            s_runLoopThread.IsBackground = true;
+            s_runLoopThread = new Thread(RunLoopThreadStart)
+            {
+                 IsBackground = true,
+                 Name = ".NET Network Address Change"
+            };
             s_runLoopThread.Start();
             s_runLoopStartedEvent.WaitOne(); // Wait for the new thread to finish initialization.
         }
@@ -251,7 +259,7 @@ namespace System.Net.NetworkInformation
                     NetworkAddressChangedEventHandler handler = subscriber.Key;
                     ExecutionContext? ec = subscriber.Value;
 
-                    if (ec == null) // Flow supressed
+                    if (ec == null) // Flow suppressed
                     {
                         handler(null, EventArgs.Empty);
                     }
@@ -273,7 +281,7 @@ namespace System.Net.NetworkInformation
                     NetworkAvailabilityChangedEventHandler handler = subscriber.Key;
                     ExecutionContext? ec = subscriber.Value;
 
-                    if (ec == null) // Flow supressed
+                    if (ec == null) // Flow suppressed
                     {
                         handler(null, args);
                     }

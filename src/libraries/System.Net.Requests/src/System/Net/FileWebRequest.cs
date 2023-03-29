@@ -14,7 +14,7 @@ namespace System.Net
         private string _method = WebRequestMethods.File.DownloadFile;
         private FileAccess _fileAccess = FileAccess.Read;
         private ManualResetEventSlim? _blockReaderUntilRequestStreamDisposed;
-        private WebResponse? _response;
+        private FileWebResponse? _response;
         private WebFileStream? _stream;
         private readonly Uri _uri;
         private long _contentLength;
@@ -25,7 +25,6 @@ namespace System.Net
         private bool _syncHint;
         private int _aborted;
 
-#pragma warning disable SYSLIB0014
         internal FileWebRequest(Uri uri)
         {
             if (uri.Scheme != (object)Uri.UriSchemeFile)
@@ -36,16 +35,17 @@ namespace System.Net
             _uri = uri;
         }
 
-        [Obsolete("Serialization is obsoleted for this type. https://go.microsoft.com/fwlink/?linkid=14202")]
+        [Obsolete("Serialization has been deprecated for FileWebRequest.")]
         protected FileWebRequest(SerializationInfo serializationInfo, StreamingContext streamingContext) : base(serializationInfo, streamingContext)
         {
             throw new PlatformNotSupportedException();
         }
-#pragma warning restore SYSLIB0014
 
+        [Obsolete("Serialization has been deprecated for FileWebRequest.")]
         void ISerializable.GetObjectData(SerializationInfo serializationInfo, StreamingContext streamingContext) =>
             GetObjectData(serializationInfo, streamingContext);
 
+        [Obsolete("Serialization has been deprecated for FileWebRequest.")]
         protected override void GetObjectData(SerializationInfo serializationInfo, StreamingContext streamingContext)
         {
             throw new PlatformNotSupportedException();
@@ -60,10 +60,7 @@ namespace System.Net
             get { return _contentLength; }
             set
             {
-                if (value < 0)
-                {
-                    throw new ArgumentException(SR.net_clsmall, nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
                 _contentLength = value;
             }
         }
@@ -110,7 +107,7 @@ namespace System.Net
 
         public override Uri RequestUri => _uri;
 
-        private static Exception CreateRequestAbortedException() =>
+        private static WebException CreateRequestAbortedException() =>
             new WebException(SR.Format(SR.net_requestaborted, WebExceptionStatus.RequestCanceled), WebExceptionStatus.RequestCanceled);
 
         private void CheckAndMarkAsyncGetRequestStreamPending()
@@ -141,7 +138,7 @@ namespace System.Net
             }
         }
 
-        private Stream CreateWriteStream()
+        private WebFileStream CreateWriteStream()
         {
             try
             {
@@ -159,15 +156,15 @@ namespace System.Net
         public override IAsyncResult BeginGetRequestStream(AsyncCallback? callback, object? state)
         {
             CheckAndMarkAsyncGetRequestStreamPending();
-            Task<Stream> t = Task.Factory.StartNew(s => ((FileWebRequest)s!).CreateWriteStream(),
+            Task<Stream> t = Task.Factory.StartNew<Stream>(s => ((FileWebRequest)s!).CreateWriteStream(),
                 this, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
-            return TaskToApm.Begin(t, callback, state);
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
         public override Task<Stream> GetRequestStreamAsync()
         {
             CheckAndMarkAsyncGetRequestStreamPending();
-            return Task.Factory.StartNew(s =>
+            return Task.Factory.StartNew<Stream>(s =>
             {
                 FileWebRequest thisRef = (FileWebRequest)s!;
                 Stream writeStream = thisRef.CreateWriteStream();
@@ -209,7 +206,7 @@ namespace System.Net
 
             try
             {
-                return _response ?? (_response = new FileWebResponse(this, _uri, _fileAccess, !_syncHint));
+                return _response ??= new FileWebResponse(this, _uri, _fileAccess, !_syncHint);
             }
             catch (Exception e)
             {
@@ -222,7 +219,7 @@ namespace System.Net
             CheckAndMarkAsyncGetResponsePending();
             Task<WebResponse> t = Task.Factory.StartNew(s => ((FileWebRequest)s!).CreateResponse(),
                  this, CancellationToken.None, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
-            return TaskToApm.Begin(t, callback, state);
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
         public override Task<WebResponse> GetResponseAsync()
@@ -239,14 +236,14 @@ namespace System.Net
 
         public override Stream EndGetRequestStream(IAsyncResult asyncResult)
         {
-            Stream stream = TaskToApm.End<Stream>(asyncResult);
+            Stream stream = TaskToAsyncResult.End<Stream>(asyncResult);
             _writePending = false;
             return stream;
         }
 
         public override WebResponse EndGetResponse(IAsyncResult asyncResult)
         {
-            WebResponse response = TaskToApm.End<WebResponse>(asyncResult);
+            WebResponse response = TaskToAsyncResult.End<WebResponse>(asyncResult);
             _readPending = false;
             return response;
         }

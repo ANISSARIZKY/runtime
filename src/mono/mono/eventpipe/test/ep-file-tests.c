@@ -1,9 +1,9 @@
-#include "mono/eventpipe/ep.h"
-#include "mono/eventpipe/ep-config.h"
-#include "mono/eventpipe/ep-event.h"
-#include "mono/eventpipe/ep-event-instance.h"
-#include "mono/eventpipe/ep-file.h"
-#include "eglib/test/test.h"
+#include <eventpipe/ep.h>
+#include <eventpipe/ep-config.h>
+#include <eventpipe/ep-event.h>
+#include <eventpipe/ep-event-instance.h>
+#include <eventpipe/ep-file.h>
+#include <eglib/test/test.h>
 
 #define TEST_PROVIDER_NAME "MyTestProvider"
 #define TEST_FILE "./ep_test_create_file.txt"
@@ -79,7 +79,7 @@ test_file_write_event (EventPipeSerializationFormat format, bool write_event, bo
 	test_location = 2;
 
 	if (write_event) {
-		provider = ep_create_provider (TEST_PROVIDER_NAME, NULL, NULL, NULL);
+		provider = ep_create_provider (TEST_PROVIDER_NAME, NULL, NULL);
 		ep_raise_error_if_nok (provider != NULL);
 
 		test_location = 3;
@@ -115,7 +115,7 @@ ep_on_exit:
 	ep_delete_provider (provider);
 	ep_event_free (ep_event);
 	ep_event_instance_free (ep_event_instance);
-	ep_event_metdata_event_free (metadata_event);
+	ep_event_metadata_event_free (metadata_event);
 	ep_file_free (file);
 	ep_file_stream_writer_free (file_stream_writer);
 

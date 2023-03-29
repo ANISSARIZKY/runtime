@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.Net.Http
 {
@@ -12,6 +13,7 @@ namespace System.Net.Http
         // public string AlpnProtocolName { get; }
 
         public string IdnHost { get; }
+        public string HostValue { get; }
         public int Port { get; }
 
         public HttpAuthority(string host, int port)
@@ -22,19 +24,27 @@ namespace System.Net.Http
             var builder = new UriBuilder(Uri.UriSchemeHttp, host, port);
             Uri uri = builder.Uri;
 
-            // TODO https://github.com/dotnet/runtime/issues/25782:
-            // Uri.IdnHost is missing '[', ']' characters around IPv6 address.
-            // So, we need to add them manually for now.
-            IdnHost = uri.HostNameType == UriHostNameType.IPv6 ? "[" + uri.IdnHost + "]" : uri.IdnHost;
+            if (uri.HostNameType == UriHostNameType.IPv6)
+            {
+                // This includes brackets for IPv6 and ScopeId for IPv6 LLA so Connect works.
+                IdnHost = $"[{uri.IdnHost}]";
+                // This is bracket enclosed IPv6 without ScopeID for LLA
+                HostValue = uri.Host;
+            }
+            else
+            {
+                // IPv4 address, dns or puny encoded name
+                HostValue = IdnHost = uri.IdnHost;
+            }
             Port = port;
         }
 
-        public bool Equals(HttpAuthority? other)
+        public bool Equals([NotNullWhen(true)] HttpAuthority? other)
         {
             return other != null && string.Equals(IdnHost, other.IdnHost) && Port == other.Port;
         }
 
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             return obj is HttpAuthority other && Equals(other);
         }

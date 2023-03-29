@@ -188,8 +188,8 @@ namespace System.Xml.Linq
         public static System.Xml.Linq.XDocument Load(System.IO.Stream stream, System.Xml.Linq.LoadOptions options) { throw null; }
         public static System.Xml.Linq.XDocument Load(System.IO.TextReader textReader) { throw null; }
         public static System.Xml.Linq.XDocument Load(System.IO.TextReader textReader, System.Xml.Linq.LoadOptions options) { throw null; }
-        public static System.Xml.Linq.XDocument Load(string uri) { throw null; }
-        public static System.Xml.Linq.XDocument Load(string uri, System.Xml.Linq.LoadOptions options) { throw null; }
+        public static System.Xml.Linq.XDocument Load([System.Diagnostics.CodeAnalysis.StringSyntaxAttribute("Uri")] string uri) { throw null; }
+        public static System.Xml.Linq.XDocument Load([System.Diagnostics.CodeAnalysis.StringSyntaxAttribute("Uri")] string uri, System.Xml.Linq.LoadOptions options) { throw null; }
         public static System.Xml.Linq.XDocument Load(System.Xml.XmlReader reader) { throw null; }
         public static System.Xml.Linq.XDocument Load(System.Xml.XmlReader reader, System.Xml.Linq.LoadOptions options) { throw null; }
         public static System.Threading.Tasks.Task<System.Xml.Linq.XDocument> LoadAsync(System.IO.Stream stream, System.Xml.Linq.LoadOptions options, System.Threading.CancellationToken cancellationToken) { throw null; }
@@ -214,8 +214,7 @@ namespace System.Xml.Linq
     {
         public XDocumentType(string name, string? publicId, string? systemId, string? internalSubset) { }
         public XDocumentType(System.Xml.Linq.XDocumentType other) { }
-        [System.Diagnostics.CodeAnalysis.AllowNull]
-        public string InternalSubset { get { throw null; } set { } }
+        public string? InternalSubset { get { throw null; } set { } }
         public string Name { get { throw null; } set { } }
         public override System.Xml.XmlNodeType NodeType { get { throw null; } }
         public string? PublicId { get { throw null; } set { } }
@@ -256,8 +255,8 @@ namespace System.Xml.Linq
         public static System.Xml.Linq.XElement Load(System.IO.Stream stream, System.Xml.Linq.LoadOptions options) { throw null; }
         public static System.Xml.Linq.XElement Load(System.IO.TextReader textReader) { throw null; }
         public static System.Xml.Linq.XElement Load(System.IO.TextReader textReader, System.Xml.Linq.LoadOptions options) { throw null; }
-        public static System.Xml.Linq.XElement Load(string uri) { throw null; }
-        public static System.Xml.Linq.XElement Load(string uri, System.Xml.Linq.LoadOptions options) { throw null; }
+        public static System.Xml.Linq.XElement Load([System.Diagnostics.CodeAnalysis.StringSyntaxAttribute("Uri")] string uri) { throw null; }
+        public static System.Xml.Linq.XElement Load([System.Diagnostics.CodeAnalysis.StringSyntaxAttribute("Uri")] string uri, System.Xml.Linq.LoadOptions options) { throw null; }
         public static System.Xml.Linq.XElement Load(System.Xml.XmlReader reader) { throw null; }
         public static System.Xml.Linq.XElement Load(System.Xml.XmlReader reader, System.Xml.Linq.LoadOptions options) { throw null; }
         public static System.Threading.Tasks.Task<System.Xml.Linq.XElement> LoadAsync(System.IO.Stream stream, System.Xml.Linq.LoadOptions options, System.Threading.CancellationToken cancellationToken) { throw null; }
@@ -359,7 +358,7 @@ namespace System.Xml.Linq
         public string LocalName { get { throw null; } }
         public System.Xml.Linq.XNamespace Namespace { get { throw null; } }
         public string NamespaceName { get { throw null; } }
-        public override bool Equals(object? obj) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? obj) { throw null; }
         public static System.Xml.Linq.XName Get(string expandedName) { throw null; }
         public static System.Xml.Linq.XName Get(string localName, string namespaceName) { throw null; }
         public override int GetHashCode() { throw null; }
@@ -379,7 +378,7 @@ namespace System.Xml.Linq
         public static System.Xml.Linq.XNamespace None { get { throw null; } }
         public static System.Xml.Linq.XNamespace Xml { get { throw null; } }
         public static System.Xml.Linq.XNamespace Xmlns { get { throw null; } }
-        public override bool Equals(object? obj) { throw null; }
+        public override bool Equals([System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] object? obj) { throw null; }
         public static System.Xml.Linq.XNamespace Get(string namespaceName) { throw null; }
         public override int GetHashCode() { throw null; }
         public System.Xml.Linq.XName GetName(string localName) { throw null; }

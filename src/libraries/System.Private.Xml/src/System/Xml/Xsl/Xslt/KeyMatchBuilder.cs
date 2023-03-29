@@ -14,7 +14,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace System.Xml.Xsl.Xslt
 {
-    internal class KeyMatchBuilder : XPathBuilder, XPathPatternParser.IPatternBuilder
+    internal sealed class KeyMatchBuilder : XPathBuilder, XPathPatternParser.IPatternBuilder
     {
         private int _depth;
         private readonly PathConvertor _convertor;
@@ -34,7 +34,7 @@ namespace System.Xml.Xsl.Xslt
             _depth++;
         }
 
-        [return: NotNullIfNotNull("result")]
+        [return: NotNullIfNotNull(nameof(result))]
         public override QilNode? EndBuild(QilNode? result)
         {
             _depth--;
@@ -55,14 +55,14 @@ namespace System.Xml.Xsl.Xslt
 
         // -------------------------------------- GetPredicateBuilder() ---------------------------------------
 
-        public virtual IXPathBuilder<QilNode> GetPredicateBuilder(QilNode ctx)
+        public IXPathBuilder<QilNode> GetPredicateBuilder(QilNode ctx)
         {
             return this;
         }
 
         // This code depends on particula shapes that XPathBuilder generates.
         // It works only on pathes.
-        internal class PathConvertor : QilReplaceVisitor
+        internal sealed class PathConvertor : QilReplaceVisitor
         {
             private new readonly XPathQilFactory f;
             private QilNode? _fixup;

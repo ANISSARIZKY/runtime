@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Run CoreCLR OSS tests on Linux or Mac
 # Use the instructions here:
-#    https://github.com/dotnet/runtime/blob/master/docs/workflow/building/coreclr/unix-test-instructions.md
+#    https://github.com/dotnet/runtime/blob/main/docs/workflow/building/coreclr/unix-test-instructions.md
 #
 # Summary:
 # 1. On Linux/Mac, in coreclr, ./build.sh
@@ -23,8 +23,8 @@ CORECLRROOT=~/src/coreclr
 COREFXROOT=~/src/corefx
 WINDOWSCORECLRROOT=~/WindowsMachine/coreclr
 WINDOWSFLAVOR=windows.x64.Debug
-UNIXANYFLAVOR=OSX.AnyCPU.Debug
-UNIXARCHFLAVOR=OSX.x64.Debug
+UNIXANYFLAVOR=osx.AnyCPU.Debug
+UNIXARCHFLAVOR=osx.x64.Debug
 
 ARGS="\
 --testRootDir=${TESTROOT}/${WINDOWSFLAVOR} \

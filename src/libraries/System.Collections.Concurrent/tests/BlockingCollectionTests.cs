@@ -170,7 +170,7 @@ namespace System.Collections.Concurrent.Tests
             Assert.Equal(1, BlockingCollection<int>.TryTakeFromAny(producerArray, out ignored, -1));
         }
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsDebuggerTypeProxyAttributeSupported))]
         public static void TestDebuggerAttributes()
         {
             DebuggerAttributes.ValidateDebuggerDisplayReferences(new BlockingCollection<int>());
@@ -181,7 +181,7 @@ namespace System.Collections.Concurrent.Tests
             Assert.Equal(col, items);
         }
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsDebuggerTypeProxyAttributeSupported))]
         public static void TestDebuggerAttributes_Null()
         {
             Type proxyType = DebuggerAttributes.GetProxyType(new BlockingCollection<int>());
@@ -741,7 +741,7 @@ namespace System.Collections.Concurrent.Tests
         /// are consumed by consumers with no element lost nor consumed more than once.</summary>
         /// <param name="threads">Total number of producer and consumer threads.</param>
         /// <param name="numOfElementsPerThread">Number of elements to Add/Take per thread.</param>
-        [Theory]
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
         [InlineData(4, 2048, 2, 64)]
         [OuterLoop]
         private static void TestConcurrentAddAnyTakeAny(int numOfThreads, int numOfElementsPerThread, int numOfCollections, int boundOfCollections)
@@ -860,6 +860,35 @@ namespace System.Collections.Concurrent.Tests
             BlockingCollection<int> bc = new BlockingCollection<int>(new QueueProxy1<int>());
             Assert.Throws<InvalidOperationException>(() => bc.Add(1));
         }
+
+        [Fact]
+        public static void Test_AddTakeWithReject_DoNotCorruptCount()
+        {
+            var secondFalse = new FalseOnSecondAddOrTake();
+            BlockingCollection<int> bc = new BlockingCollection<int>(secondFalse, 2);
+
+            Assert.True(bc.TryAdd(1));
+            Assert.Equal(1, bc.Count);
+            Assert.Throws<InvalidOperationException>(() => bc.TryAdd(1));
+            Assert.Equal(1, bc.Count);
+            Assert.True(bc.TryAdd(1));
+            Assert.Equal(2, bc.Count);
+
+            secondFalse = new FalseOnSecondAddOrTake();
+            secondFalse.Enqueue(1);
+            secondFalse.Enqueue(1);
+            bc = new BlockingCollection<int> (secondFalse, 2);
+
+            Assert.Equal(2, bc.Count);
+            int item;
+            Assert.True(bc.TryTake(out item));
+            Assert.Equal(1, bc.Count);
+            Assert.Throws<InvalidOperationException>(() => bc.TryTake(out item));
+            Assert.Equal(1, bc.Count);
+            Assert.True(bc.TryTake(out item));
+            Assert.Equal(0, bc.Count);
+        }
+
 
         /// <summary>Verifies that the correct exceptions are thrown for invalid inputs.</summary>
         /// <returns>True if test succeeds and false otherwise.</returns>
@@ -1293,6 +1322,28 @@ namespace System.Collections.Concurrent.Tests
             bool IProducerConsumerCollection<T>.TryAdd(T item)
             {
                 return false;
+            }
+        }
+
+        private class FalseOnSecondAddOrTake : ConcurrentQueue<int>, IProducerConsumerCollection<int>
+        {
+            private int _add;
+            private int _take;
+
+            bool IProducerConsumerCollection<int>.TryAdd(int value)
+            {
+                if (Interlocked.Increment(ref _add) == 2) return false;
+
+                Enqueue(value);
+                return true;
+
+            }
+            bool IProducerConsumerCollection<int>.TryTake(out int value)
+            {
+                value = default;
+                if (Interlocked.Increment(ref _take) == 2) return false;
+
+                return TryDequeue(out value);
             }
         }
 

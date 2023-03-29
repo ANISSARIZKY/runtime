@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
 
@@ -25,6 +26,7 @@ namespace System.ComponentModel.DataAnnotations
         private string? _errorMessage;
         private Func<string>? _errorMessageResourceAccessor;
         private string? _errorMessageResourceName;
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.NonPublicProperties)]
         private Type? _errorMessageResourceType;
         private volatile bool _hasBaseIsValid;
         private string? _defaultErrorMessage;
@@ -66,6 +68,14 @@ namespace System.ComponentModel.DataAnnotations
             _errorMessageResourceAccessor = errorMessageAccessor;
         }
 
+        /// <summary>
+        /// Internal constructor used for delayed population of the error message delegate.
+        /// </summary>
+        private protected ValidationAttribute(bool populateErrorMessageResourceAccessor)
+        {
+            Debug.Assert(populateErrorMessageResourceAccessor is false, "Use the default constructor instead");
+        }
+
         #endregion
 
         #region Internal Properties
@@ -76,13 +86,25 @@ namespace System.ComponentModel.DataAnnotations
         /// This property was added after the public contract for DataAnnotations was created.
         /// It is internal to avoid changing the DataAnnotations contract.
         /// </summary>
-        internal string? DefaultErrorMessage
+        private protected string? DefaultErrorMessage
         {
-            set
+            init
             {
                 _defaultErrorMessage = value;
                 _errorMessageResourceAccessor = null;
                 CustomErrorMessageSet = true;
+            }
+        }
+
+        /// <summary>
+        /// Sets the delayed resource accessor in cases where we can't pass it directly to the base constructor.
+        /// </summary>
+        private protected Func<string> ErrorMessageResourceAccessor
+        {
+            init
+            {
+                Debug.Assert(_defaultErrorMessage is null && _errorMessageResourceName is null && _errorMessage is null && _errorMessageResourceType is null);
+                _errorMessageResourceAccessor = value;
             }
         }
 
@@ -175,6 +197,7 @@ namespace System.ComponentModel.DataAnnotations
         ///         Use <see cref="ErrorMessage" /> instead of this pair if error messages are not localized.
         ///     </para>
         /// </value>
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.NonPublicProperties)]
         public Type? ErrorMessageResourceType
         {
             get => _errorMessageResourceType;
@@ -241,11 +264,7 @@ namespace System.ComponentModel.DataAnnotations
             Debug.Assert(_errorMessageResourceType != null);
             Debug.Assert(!string.IsNullOrEmpty(_errorMessageResourceName));
             var property = _errorMessageResourceType
-                .GetTypeInfo().GetDeclaredProperty(_errorMessageResourceName);
-            if (property != null && !ValidationAttributeStore.IsStatic(property))
-            {
-                property = null;
-            }
+                .GetProperty(_errorMessageResourceName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
             if (property != null)
             {
@@ -276,6 +295,15 @@ namespace System.ComponentModel.DataAnnotations
             _errorMessageResourceAccessor = () => (string)property.GetValue(null, null)!;
         }
 
+        private protected ValidationResult CreateFailedValidationResult(ValidationContext validationContext)
+        {
+            string[]? memberNames = validationContext.MemberName is { } memberName
+                ? new[] { memberName }
+                : null;
+
+            return new ValidationResult(FormatErrorMessage(validationContext.DisplayName), memberNames);
+        }
+
         #endregion
 
         #region Protected & Public Methods
@@ -285,7 +313,7 @@ namespace System.ComponentModel.DataAnnotations
         /// </summary>
         /// <remarks>
         ///     The error message will be re-evaluated every time this function is called.
-        ///     It applies the <paramref name="name" /> (for example, the name of a field) to the formated error message, resulting
+        ///     It applies the <paramref name="name" /> (for example, the name of a field) to the formatted error message, resulting
         ///     in something like "The field 'name' has an incorrect value".
         ///     <para>
         ///         Derived classes can override this method to customize how errors are generated.
@@ -367,18 +395,10 @@ namespace System.ComponentModel.DataAnnotations
                     SR.ValidationAttribute_IsValid_NotImplemented);
             }
 
-            var result = ValidationResult.Success;
-
             // call overridden method.
-            if (!IsValid(value))
-            {
-                string[]? memberNames = validationContext.MemberName is { } memberName
-                    ? new[] { memberName }
-                    : null;
-                result = new ValidationResult(FormatErrorMessage(validationContext.DisplayName), memberNames);
-            }
-
-            return result;
+            return IsValid(value)
+                ? ValidationResult.Success
+                : CreateFailedValidationResult(validationContext);
         }
 
         /// <summary>
@@ -409,10 +429,7 @@ namespace System.ComponentModel.DataAnnotations
         /// </exception>
         public ValidationResult? GetValidationResult(object? value, ValidationContext validationContext)
         {
-            if (validationContext == null)
-            {
-                throw new ArgumentNullException(nameof(validationContext));
-            }
+            ArgumentNullException.ThrowIfNull(validationContext);
 
             var result = IsValid(value, validationContext);
 
@@ -479,10 +496,7 @@ namespace System.ComponentModel.DataAnnotations
         /// </exception>
         public void Validate(object? value, ValidationContext validationContext)
         {
-            if (validationContext == null)
-            {
-                throw new ArgumentNullException(nameof(validationContext));
-            }
+            ArgumentNullException.ThrowIfNull(validationContext);
 
             ValidationResult? result = GetValidationResult(value, validationContext);
 

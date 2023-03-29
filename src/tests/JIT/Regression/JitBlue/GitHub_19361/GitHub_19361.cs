@@ -57,9 +57,17 @@ namespace Repro
         }
     }
 
-    class Program
+    public class Program
     {
-        static readonly Random Rng = new Random(38237);
+        public const int DefaultSeed = 20010415;
+        public static int Seed = Environment.GetEnvironmentVariable("CORECLR_SEED") switch
+        {
+            string seedStr when seedStr.Equals("random", StringComparison.OrdinalIgnoreCase) => new Random().Next(),
+            string seedStr when int.TryParse(seedStr, out int envSeed) => envSeed,
+            _ => DefaultSeed
+        };
+
+        static readonly Random Rng = new Random(Seed);
 
         public static List<CompositeSource> GetCompositeSources()
         {
@@ -84,7 +92,7 @@ namespace Repro
             return list;
         }
 
-        static int Main()
+        public static int Main()
         {
             Console.WriteLine("Starting stress loop");
             var compositeSources = GetCompositeSources();

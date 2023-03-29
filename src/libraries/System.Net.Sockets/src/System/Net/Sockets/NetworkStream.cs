@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,6 +23,9 @@ namespace System.Net.Sockets
         // Used by the class to indicate that the stream is writable.
         private bool _writeable;
 
+        // Whether Dispose has been called. 0 == false, 1 == true
+        private int _disposed;
+
         // Creates a new instance of the System.Net.Sockets.NetworkStream class for the specified System.Net.Sockets.Socket.
         public NetworkStream(Socket socket)
             : this(socket, FileAccess.ReadWrite, ownsSocket: false)
@@ -40,10 +44,8 @@ namespace System.Net.Sockets
 
         public NetworkStream(Socket socket, FileAccess access, bool ownsSocket)
         {
-            if (socket == null)
-            {
-                throw new ArgumentNullException(nameof(socket));
-            }
+            ArgumentNullException.ThrowIfNull(socket);
+
             if (!socket.Blocking)
             {
                 // Stream.Read*/Write* are incompatible with the semantics of non-blocking sockets, and
@@ -328,22 +330,51 @@ namespace System.Net.Sockets
 
         private int _closeTimeout = Socket.DefaultCloseTimeout; // -1 = respect linger options
 
+        /// <summary>Closes the <see cref="NetworkStream"/> after waiting the specified time to allow data to be sent.</summary>
+        /// <param name="timeout">The number of milliseconds to wait to send any remaining data before closing.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="timeout"/> is less than -1.</exception>
+        /// <remarks>
+        /// The Close method frees both unmanaged and managed resources associated with the <see cref="NetworkStream"/>.
+        /// If the <see cref="NetworkStream"/> owns the underlying <see cref="Socket"/>, it is closed as well.
+        /// If a <see cref="NetworkStream"/> was associated with a <see cref="TcpClient"/>, the <see cref="Close(int)"/> method
+        /// will close the TCP connection, but not dispose of the associated <see cref="TcpClient"/>.
+        /// </remarks>
         public void Close(int timeout)
         {
-            if (timeout < -1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(timeout));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(timeout, -1);
             _closeTimeout = timeout;
             Dispose();
         }
-        private volatile bool _disposed;
+
+        /// <summary>Closes the <see cref="NetworkStream"/> after waiting the specified time to allow data to be sent.</summary>
+        /// <param name="timeout">The amount of time to wait to send any remaining data before closing.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="timeout"/> is less than -1 milliseconds or greater than <see cref="int.MaxValue"/> milliseconds.</exception>
+        /// <remarks>
+        /// The Close method frees both unmanaged and managed resources associated with the <see cref="NetworkStream"/>.
+        /// If the <see cref="NetworkStream"/> owns the underlying <see cref="Socket"/>, it is closed as well.
+        /// If a <see cref="NetworkStream"/> was associated with a <see cref="TcpClient"/>, the <see cref="Close(int)"/> method
+        /// will close the TCP connection, but not dispose of the associated <see cref="TcpClient"/>.
+        /// </remarks>
+        public void Close(TimeSpan timeout) => Close(ToTimeoutMilliseconds(timeout));
+
+        private static int ToTimeoutMilliseconds(TimeSpan timeout)
+        {
+            long totalMilliseconds = (long)timeout.TotalMilliseconds;
+
+            ArgumentOutOfRangeException.ThrowIfLessThan(totalMilliseconds, -1, nameof(timeout));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(totalMilliseconds, int.MaxValue, nameof(timeout));
+
+            return (int)totalMilliseconds;
+        }
+
         protected override void Dispose(bool disposing)
         {
-            // Mark this as disposed before changing anything else.
-            bool disposed = _disposed;
-            _disposed = true;
-            if (!disposed && disposing)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            if (disposing)
             {
                 // The only resource we need to free is the network stream, since this
                 // is based on the client socket, closing the stream will cause us
@@ -417,12 +448,7 @@ namespace System.Net.Sockets
         public override int EndRead(IAsyncResult asyncResult)
         {
             ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (asyncResult == null)
-            {
-                throw new ArgumentNullException(nameof(asyncResult));
-            }
+            ArgumentNullException.ThrowIfNull(asyncResult);
 
             try
             {
@@ -481,12 +507,7 @@ namespace System.Net.Sockets
         public override void EndWrite(IAsyncResult asyncResult)
         {
             ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (asyncResult == null)
-            {
-                throw new ArgumentNullException(nameof(asyncResult));
-            }
+            ArgumentNullException.ThrowIfNull(asyncResult);
 
             try
             {
@@ -536,7 +557,7 @@ namespace System.Net.Sockets
             }
         }
 
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             bool canRead = CanRead; // Prevent race with Dispose.
             ThrowIfDisposed();
@@ -596,7 +617,7 @@ namespace System.Net.Sockets
             }
         }
 
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
             bool canWrite = CanWrite; // Prevent race with Dispose.
             ThrowIfDisposed();
@@ -664,12 +685,7 @@ namespace System.Net.Sockets
 
         private void ThrowIfDisposed()
         {
-            if (_disposed)
-            {
-                ThrowObjectDisposedException();
-            }
-
-            void ThrowObjectDisposedException() => throw new ObjectDisposedException(GetType().FullName);
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
         }
 
         private static IOException WrapException(string resourceFormatString, Exception innerException)

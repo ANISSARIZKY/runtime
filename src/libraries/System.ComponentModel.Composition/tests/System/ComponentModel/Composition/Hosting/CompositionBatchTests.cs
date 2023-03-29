@@ -729,7 +729,7 @@ namespace System.ComponentModel.Composition
 
             Assert.Equal("Contract", definition.ContractName);
             Assert.Equal("Value", part.GetExportedValue(definition));
-            Assert.Equal(1, definition.Metadata.Count); // containts type identity
+            Assert.Equal(1, definition.Metadata.Count); // contains type identity
         }
 
         [Fact]
@@ -802,7 +802,6 @@ namespace System.ComponentModel.Composition
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void AddPart_ReturnedComposablePart_ExportsArrayWithNullElementAsExportsArgumentToSetImports_ShouldThrowArgument()
         {
             CompositionBatch batch = new CompositionBatch();

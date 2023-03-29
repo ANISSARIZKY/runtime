@@ -1,10 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace System.Net.Sockets
 {
     /// <summary>
-    /// Presents UDP receive result information from a call to the <see cref="UdpClient.ReceiveAsync"/> method
+    /// Presents UDP receive result information from a call to the <see cref="UdpClient.ReceiveAsync()"/> and <see cref="UdpClient.ReceiveAsync(System.Threading.CancellationToken)"/> method
     /// </summary>
     public struct UdpReceiveResult : IEquatable<UdpReceiveResult>
     {
@@ -18,15 +20,8 @@ namespace System.Net.Sockets
         /// <param name="remoteEndPoint">The remote endpoint of the UDP packet</param>
         public UdpReceiveResult(byte[] buffer, IPEndPoint remoteEndPoint)
         {
-            if (buffer == null)
-            {
-                throw new ArgumentNullException(nameof(buffer));
-            }
-
-            if (remoteEndPoint == null)
-            {
-                throw new ArgumentNullException(nameof(remoteEndPoint));
-            }
+            ArgumentNullException.ThrowIfNull(buffer);
+            ArgumentNullException.ThrowIfNull(remoteEndPoint);
 
             _buffer = buffer;
             _remoteEndPoint = remoteEndPoint;
@@ -68,7 +63,7 @@ namespace System.Net.Sockets
         /// </summary>
         /// <param name="obj">The object to compare with this instance</param>
         /// <returns>true if obj is an instance of <see cref="UdpReceiveResult"/> and equals the value of the instance; otherwise, false</returns>
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj is UdpReceiveResult other && Equals(other);
 
         /// <summary>

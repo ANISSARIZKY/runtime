@@ -98,61 +98,6 @@
 	#define UCONTEXT_REG_EDI(ctx) (((ucontext_t*)(ctx))->uc_mcontext.gregs [EDI])
 	#define UCONTEXT_REG_EIP(ctx) (((ucontext_t*)(ctx))->uc_mcontext.gregs [EIP])
 #else
-
-#if defined(HOST_ANDROID) && !defined(HAVE_UCONTEXT_H)
-/* No ucontext.h as of NDK v6b */
-typedef int greg_t;
-#define NGREG 19
-typedef greg_t gregset_t [NGREG];
-enum
-{
-  REG_GS = 0,
-# define REG_GS         REG_GS
-  REG_FS,
-# define REG_FS         REG_FS
-  REG_ES,
-# define REG_ES         REG_ES
-  REG_DS,
-# define REG_DS         REG_DS
-  REG_EDI,
-# define REG_EDI        REG_EDI
-  REG_ESI,
-# define REG_ESI        REG_ESI
-  REG_EBP,
-# define REG_EBP        REG_EBP
-  REG_ESP,
-# define REG_ESP        REG_ESP
-  REG_EBX,
-# define REG_EBX        REG_EBX
-  REG_EDX,
-# define REG_EDX        REG_EDX
-  REG_ECX,
-# define REG_ECX        REG_ECX
-  REG_EAX,
-# define REG_EAX        REG_EAX
-  REG_TRAPNO,
-# define REG_TRAPNO     REG_TRAPNO
-  REG_ERR,
-# define REG_ERR        REG_ERR
-  REG_EIP,
-# define REG_EIP        REG_EIP
-};
-
-typedef struct {
-    gregset_t gregs;
-	/* Many missing fields */
-} mcontext_t;
-
-typedef struct ucontext {
-    unsigned long int uc_flags;
-    struct ucontext *uc_link;
-    stack_t uc_stack;
-    mcontext_t uc_mcontext;
-	/* Many missing fields */
-} ucontext_t;
-
-#endif
-
 	#define UCONTEXT_REG_EAX(ctx) (((ucontext_t*)(ctx))->uc_mcontext.gregs [REG_EAX])
 	#define UCONTEXT_REG_EBX(ctx) (((ucontext_t*)(ctx))->uc_mcontext.gregs [REG_EBX])
 	#define UCONTEXT_REG_ECX(ctx) (((ucontext_t*)(ctx))->uc_mcontext.gregs [REG_ECX])
@@ -317,7 +262,7 @@ typedef struct ucontext {
 #define UCONTEXT_REG_XMM15(ctx) (UCONTEXT_FREGS ((ctx)) [AMD64_XMM15])
 #endif
 
-#elif defined(__mono_ppc__)
+#elif defined(TARGET_POWERPC)
 
 #if HAVE_UCONTEXT_H
 #include <ucontext.h>
@@ -329,7 +274,7 @@ typedef struct ucontext {
 #include <asm/ptrace.h>
 	typedef ucontext_t os_ucontext;
 
-#ifdef __mono_ppc64__
+#ifdef TARGET_POWERPC64
 	#define UCONTEXT_REG_Rn(ctx, n)   (((os_ucontext*)(ctx))->uc_mcontext.gp_regs [(n)])
 	#define UCONTEXT_REG_FPRn(ctx, n) (((os_ucontext*)(ctx))->uc_mcontext.fp_regs [(n)])
 	#define UCONTEXT_REG_NIP(ctx)     (((os_ucontext*)(ctx))->uc_mcontext.gp_regs [PT_NIP])
@@ -463,9 +408,22 @@ typedef struct ucontext {
 #elif defined(__APPLE__)
 #include <machine/_mcontext.h>
 #include <sys/_types/_ucontext64.h>
+
 	/* mach/arm/_structs.h */
+#if __has_feature(ptrauth_calls)
+	#define UCONTEXT_REG_PC(ctx) (host_mgreg_t)__darwin_arm_thread_state64_get_pc_fptr (((ucontext64_t*)(ctx))->uc_mcontext64->__ss)
+	#define UCONTEXT_REG_SP(ctx) __darwin_arm_thread_state64_get_sp (((ucontext64_t*)(ctx))->uc_mcontext64->__ss)
+	#define UCONTEXT_REG_LR(ctx) __darwin_arm_thread_state64_get_lr (((ucontext64_t*)(ctx))->uc_mcontext64->__ss)
+	#define UCONTEXT_REG_SET_PC(ctx,val) __darwin_arm_thread_state64_set_pc_fptr (((ucontext64_t*)(ctx))->uc_mcontext64->__ss, (val))
+	#define UCONTEXT_REG_SET_SP(ctx, val) __darwin_arm_thread_state64_set_sp (((ucontext64_t*)(ctx))->uc_mcontext64->__ss, (val))
+#else
 	#define UCONTEXT_REG_PC(ctx) (((ucontext64_t*)(ctx))->uc_mcontext64->__ss.__pc)
 	#define UCONTEXT_REG_SP(ctx) (((ucontext64_t*)(ctx))->uc_mcontext64->__ss.__sp)
+	#define UCONTEXT_REG_SET_PC(ctx,val) do { \
+		UCONTEXT_REG_PC (ctx) = (__uint64_t)(val); \
+	} while (0)
+#endif
+
 	#define UCONTEXT_REG_R0(ctx) (((ucontext64_t*)(ctx))->uc_mcontext64->__ss.__x [ARMREG_R0])
 	#define UCONTEXT_GREGS(ctx) (&(((ucontext64_t*)(ctx))->uc_mcontext64->__ss.__x))
 #elif defined(__FreeBSD__)
@@ -475,7 +433,13 @@ typedef struct ucontext {
 	#define UCONTEXT_REG_SP(ctx) (((ucontext_t*)(ctx))->uc_mcontext.mc_gpregs.gp_sp)
 	#define UCONTEXT_REG_R0(ctx) (((ucontext_t*)(ctx))->uc_mcontext.mc_gpregs.gp_x [ARMREG_R0])
 	#define UCONTEXT_GREGS(ctx) (&(((ucontext_t*)(ctx))->uc_mcontext.mc_gpregs.gp_x))
-#else
+#elif defined(__OpenBSD__)
+	/* ucontext_t == sigcontext */
+	#define UCONTEXT_REG_PC(ctx) (((ucontext_t*)(ctx))->sc_elr)
+	#define UCONTEXT_REG_SP(ctx) (((ucontext_t*)(ctx))->sc_sp)
+	#define UCONTEXT_REG_R0(ctx) (((ucontext_t*)(ctx))->sc_x [ARMREG_R0])
+	#define UCONTEXT_GREGS(ctx) (&(((ucontext_t*)(ctx))->sc_x))
+#elif !defined(HOST_WIN32)
 #include <ucontext.h>
 	#define UCONTEXT_REG_PC(ctx) (((ucontext_t*)(ctx))->uc_mcontext.pc)
 	#define UCONTEXT_REG_SP(ctx) (((ucontext_t*)(ctx))->uc_mcontext.sp)
@@ -483,54 +447,16 @@ typedef struct ucontext {
 	#define UCONTEXT_GREGS(ctx) (&(((ucontext_t*)(ctx))->uc_mcontext.regs))
 #endif
 
-#elif defined(__mips__)
-
-# if HAVE_UCONTEXT_H
-#  include <ucontext.h>
-# endif
-
-/* No ucontext.h */
-#if defined(TARGET_ANDROID)
-
-#define NGREG   32
-#define NFPREG  32
-
-typedef unsigned long gregset_t[NGREG];
-
-typedef struct fpregset {
-	union {
-		double  fp_dregs[NFPREG];
-		struct {
-			float           _fp_fregs;
-			unsigned int    _fp_pad;
-		} fp_fregs[NFPREG];
-	} fp_r;
-} fpregset_t;
-
-typedef struct
-  {
-    unsigned int regmask;
-    unsigned int status;
-    unsigned long pc;
-    gregset_t gregs;
-    fpregset_t fpregs;
-	  /* missing fields follow */
-} mcontext_t;
-
-typedef struct ucontext
-  {
-    unsigned long int uc_flags;
-    struct ucontext *uc_link;
-    stack_t uc_stack;
-    mcontext_t uc_mcontext;
-	  /* missing fields follow */
-  } ucontext_t;
-
+#ifndef UCONTEXT_REG_SET_PC
+#define UCONTEXT_REG_SET_PC(ctx, val) do { \
+	UCONTEXT_REG_PC (ctx) = (guint64)(val); \
+	 } while (0)
 #endif
-
-# define UCONTEXT_GREGS(ctx)	(((ucontext_t *)(ctx))->uc_mcontext.gregs)
-# define UCONTEXT_FPREGS(ctx)	(((ucontext_t *)(ctx))->uc_mcontext.fpregs.fp_r.fp_dregs)
-# define UCONTEXT_REG_PC(ctx)	(((ucontext_t *)(ctx))->uc_mcontext.pc)
+#ifndef UCONTEXT_REG_SET_SP
+#define UCONTEXT_REG_SET_SP(ctx, val) do { \
+	UCONTEXT_REG_SP (ctx) = (val); \
+	 } while (0)
+#endif
 
 #elif defined(__s390x__)
 
@@ -541,7 +467,6 @@ typedef struct ucontext
 # define UCONTEXT_GREGS(ctx)	 (((ucontext_t *)(ctx))->uc_mcontext.gregs)
 # define UCONTEXT_FREGS(ctx)     (((ucontext_t *)(ctx))->uc_mcontext.fpregs->fprs)
 # define UCONTEXT_REG_Rn(ctx, n) (((ucontext_t *)(ctx))->uc_mcontext.gregs[(n)])
-# define UCONTEXT_SP(ctx)        (((ucontext_t *)(ctx))->uc_stack.ss_sp)
 # define UCONTEXT_IP(ctx)         (((ucontext_t *)(ctx))->uc_mcontext.psw.addr)
 
 #endif

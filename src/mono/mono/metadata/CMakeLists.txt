@@ -1,8 +1,14 @@
+project(metadata C)
+
 #
 # This library contains the icall tables if the runtime was configured with DISABLE_ICALL_TABLES
 #
 if(DISABLE_ICALL_TABLES)
-add_library(mono-icall-table STATIC "../metadata/icall-table.c")
+add_library(mono-icall-table STATIC "icall-table.c")
+target_link_libraries(mono-icall-table PRIVATE monoapi eglib_api)
+target_include_directories(mono-icall-table PRIVATE ${PROJECT_BINARY_DIR}/../..
+  ${PROJECT_SOURCE_DIR}/../..
+  ${PROJECT_SOURCE_DIR}/..)
 install(TARGETS mono-icall-table LIBRARY)
 else()
 set(icall_table_sources "icall-table.c")
@@ -15,49 +21,20 @@ set(ilgen_base_sources
     method-builder-ilgen.c
     method-builder-ilgen.h
     method-builder-ilgen-internals.h
-    marshal-ilgen.c
-    marshal-ilgen.h
+    marshal-lightweight.c
+    marshal-lightweight.h
+    marshal-shared.c
+    marshal-shared.h
     sgen-mono-ilgen.c
     sgen-mono-ilgen.h)
 
-if(NOT ENABLE_ILGEN)
-addprefix(mono_ilgen_sources ../metadata "${ilgen_base_sources}")
-set_source_files_properties(${mono_ilgen_sources} PROPERTIES COMPILE_DEFINITIONS "HAVE_SGEN_GC")
-add_library(mono-ilgen STATIC "${mono_ilgen_sources}")
-install(TARGETS mono-ilgen LIBRARY)
-else()
 set(ilgen_sources ${ilgen_base_sources})
-endif()
 
 set(metadata_win32_sources
-    console-win32.c
-    w32file-win32.c
-    icall-windows.c
-    marshal-windows.c
-    mono-security-windows.c
-    w32mutex-win32.c
-    w32semaphore-win32.c
-    w32event-win32.c
-    w32process-win32.c
-    w32socket-win32.c
-    w32error-win32.c)
+    w32event-win32.c)
 
 set(metadata_unix_sources
-    console-unix.c
-    w32mutex-unix.c
-    w32semaphore-unix.c
-    w32event-unix.c
-    w32process-unix.c
-    w32process-unix-internals.h
-    w32process-unix-osx.c
-    w32process-unix-bsd.c
-    w32process-unix-haiku.c
-    w32process-unix-default.c
-    w32socket-unix.c
-    w32file-unix.c
-    w32file-unix-glob.c
-    w32file-unix-glob.h
-    w32error-unix.c)
+    w32event-unix.c)
 
 if(HOST_WIN32)
 set(metadata_platform_sources ${metadata_win32_sources})
@@ -71,8 +48,6 @@ set(metadata_common_sources
     appdomain-icalls.h
     assembly.c
     assembly-internals.h
-    attach.h
-    attach.c
     cil-coff.h
     class.c
     class-getters.h
@@ -86,27 +61,21 @@ set(metadata_common_sources
     class-setup-vtable.c
     cominterop.c
     cominterop.h
-    console-io.h
+    components.h
+    components.c
     coree.c
     coree.h
     coree-internals.h
     debug-helpers.c
-    debug-mono-symfile.h
     debug-mono-symfile.c
     debug-mono-ppdb.h
     debug-mono-ppdb.c
     domain-internals.h
     environment.c
-    environment.h
     exception.c
-    exception.h
     exception-internals.h
-    w32file.c
-    w32file.h
-    w32file-internals.h
-    filewatcher.c
-    filewatcher.h
     gc-internals.h
+    gc_wrapper.h
     icall.c
     icall-internals.h
     icall-def.h
@@ -114,6 +83,9 @@ set(metadata_common_sources
     icall-eventpipe.c
     image.c
     image-internals.h
+    webcil-loader.h
+    webcil-loader.c
+    jit-info.h
     jit-info.c
     loader.c
     lock-tracer.c
@@ -125,15 +97,15 @@ set(metadata_common_sources
     mempool.h
     mempool-internals.h
     metadata.c
-    metadata-verify.c
     metadata-internals.h
+    metadata-update.h
+    metadata-update.c
     method-builder.h
     method-builder-internals.h
     method-builder.c
     mono-basic-block.c
     mono-basic-block.h
     mono-config.c
-    mono-debug.h
     mono-debug.c
     debug-internals.h
     mono-endian.c
@@ -142,55 +114,25 @@ set(metadata_common_sources
     mono-hash.h
     mono-conc-hash.c
     mono-conc-hash.h
-    mono-mlist.c
-    mono-mlist.h
-    mono-perfcounters.c
-    mono-perfcounters.h
-    mono-perfcounters-def.h
+    weak-hash.c
+    weak-hash.h
     mono-ptr-array.h
-    mono-route.c
     monitor.h
-    normalization-tables.h
-    number-formatter.h
-    number-ms.h
     object.c
-    object-forward.h
     object-internals.h
     opcodes.c
     property-bag.h
     property-bag.c
-    w32socket.c
-    w32socket.h
-    w32socket-internals.h
-    w32process.c
-    w32process.h
-    w32process-internals.h
     profiler.c
     profiler-private.h
-    rand.h
-    rand.c
-    remoting.h
-    remoting.c
     runtime.c
-    mono-security.c
-    security.h
-    security-core-clr.c
-    security-core-clr.h
-    security-manager.c
-    security-manager.h
     string-icalls.c
     string-icalls.h
     sysmath.c
     tabledefs.h
     threads.c
     threads-types.h
-    threadpool.c
-    threadpool.h
-    threadpool-worker.h
-    threadpool-io.c
-    threadpool-io.h
     verify.c
-    verify-internals.h
     wrapper-types.h
     dynamic-image-internals.h
     dynamic-stream.c
@@ -199,9 +141,6 @@ set(metadata_common_sources
     custom-attrs-internals.h
     sre-internals.h
     reflection-internals.h
-    file-mmap-posix.c
-    file-mmap-windows.c
-    file-mmap.h
     object-offsets.h
     abi-details.h
     class-abi-details.h
@@ -210,22 +149,14 @@ set(metadata_common_sources
     seq-points-data.c
     handle.c
     handle.h
-    w32mutex.h
-    w32semaphore.h
     w32event.h
-    w32handle-namespace.h
-    w32handle-namespace.c
     w32handle.h
     w32handle.c
-    w32error.h
     reflection.c
     dynamic-image.c
     sre.c
     sre-encode.c
-    sre-save.c
     custom-attrs.c
-    fdhandle.h
-    fdhandle.c
     callspec.h
     callspec.c
     assembly-load-context.c
@@ -233,15 +164,11 @@ set(metadata_common_sources
     native-library.h
     native-library.c
     native-library-qcall.c
-    qcall-def.h
     loaded-images-internals.h
     loaded-images.c
-    loaded-images-netcore.c
     abi-details.h
     abi.c
     memory-manager.c
-    mono-config-dirs.h
-    mono-config-dirs.c
     icall-table.h
     ${icall_table_sources})
 
@@ -250,64 +177,35 @@ set(metadata_gc_dependent_sources
      gc.c
      monitor.c)
 
-set(metadata_sgen_sources
-    sgen-bridge.c
-    sgen-bridge.h
-    sgen-bridge-internals.h
-    sgen-old-bridge.c
-    sgen-new-bridge.c
-    sgen-tarjan-bridge.c
-    sgen-toggleref.c
-    sgen-toggleref.h
-    sgen-stw.c
-    sgen-mono.c
-    sgen-mono.h
-    sgen-client-mono.h)
+if(MONO_GC STREQUAL "sgen")
+    set(metadata_gc_sources
+        sgen-bridge.c
+        sgen-bridge-internals.h
+        sgen-new-bridge.c
+        sgen-tarjan-bridge.c
+        sgen-toggleref.c
+        sgen-toggleref.h
+        sgen-stw.c
+        sgen-mono.c
+        sgen-mono.h
+        sgen-client-mono.h)
+    set(metadata_compile_definitions "HAVE_SGEN_GC")
+elseif(MONO_GC STREQUAL "boehm")
+    set(metadata_gc_sources
+        boehm-gc.c)
+    set(metadata_compile_definitions "HAVE_BOEHM_GC")
+endif()
 
-addprefix(metadata_gc_dependent_real_sources ../metadata "${metadata_gc_dependent_sources}")
-addprefix(metadata_sgen_real_sources ../metadata "${metadata_sgen_sources}")
-addprefix(ilgen_real_sources ../metadata "${ilgen_sources}")
-set_source_files_properties(${metadata_sgen_real_sources};${metadata_gc_dependent_real_sources};${ilgen_real_sources} PROPERTIES COMPILE_DEFINITIONS "HAVE_SGEN_GC")
+set(metadata_sources "${metadata_platform_sources};${metadata_common_sources};${metadata_gc_dependent_sources};${metadata_gc_sources};${ilgen_sources}")
 
-#
-# We localize the usage of MONO_BINDIR etc. to just one source file, thus enabling
-# ccache to work even if the value of these defines change.
-#
-set(bindir "${CMAKE_INSTALL_FULL_BINDIR}")
-set(assembliesdir "${CMAKE_INSTALL_FULL_LIBDIR}")
-set(confdir "${CMAKE_INSTALL_FULL_SYSCONFDIR}")
-set(reloc_libdir "${CMAKE_INSTALL_LIBDIR}")
+add_library(metadata_objects OBJECT ${metadata_sources})
+target_compile_definitions(metadata_objects PRIVATE ${metadata_compile_definitions})
+target_link_libraries(metadata_objects PRIVATE monoapi eglib_api utils_objects)
+# note: metadata_objects is an object library, so this doesn't force linking with sgen,
+# it just adds the relevant include directories - which we need even with Boehm
+target_link_libraries(metadata_objects PRIVATE sgen_objects)
+target_compile_definitions(metadata_objects PRIVATE -DMONO_DLL_EXPORT)
+target_include_directories(metadata_objects PRIVATE ${PROJECT_BINARY_DIR}/../..
+  ${PROJECT_SOURCE_DIR}/../..
+  ${PROJECT_SOURCE_DIR}/..)
 
-set_source_files_properties(../metadata/mono-config-dirs.c PROPERTIES COMPILE_DEFINITIONS "MONO_BINDIR=\"${bindir}\";MONO_ASSEMBLIES=\"${assembliesdir}\";MONO_CFG_DIR=\"${confdir}\";MONO_RELOC_LIBDIR=\"../${reloc_libdir}\"")
-
-addprefix(metadata_sources ../metadata/ "${metadata_platform_sources};${metadata_common_sources};${metadata_gc_dependent_sources};${metadata_sgen_sources};${ilgen_sources}")
-
-set(metadata_public_headers_base
-	appdomain.h
-	assembly.h
-	attrdefs.h
-	blob.h
-	class.h
-	debug-helpers.h
-	debug-mono-symfile.h
-	environment.h
-	exception.h
-	image.h
-	loader.h
-	metadata.h
-	mono-config.h
-	mono-debug.h
-	mono-gc.h
-	mono-private-unstable.h
-	object.h
-	object-forward.h
-	opcodes.h
-	profiler.h
-	profiler-events.h
-	reflection.h
-	row-indexes.h
-	sgen-bridge.h
-	threads.h
-	tokentype.h
-	verify.h)
-addprefix(metadata_public_headers ../metadata/ "${metadata_public_headers_base}")

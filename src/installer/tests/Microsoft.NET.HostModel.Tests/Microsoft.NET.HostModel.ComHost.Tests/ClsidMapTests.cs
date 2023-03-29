@@ -20,7 +20,7 @@ namespace Microsoft.NET.HostModel.ComHost.Tests
 
         public ClsidMapTests(SharedTestState fixture)
         {
-            sharedTestState = fixture; 
+            sharedTestState = fixture;
         }
 
         [Fact]
@@ -122,7 +122,7 @@ namespace Microsoft.NET.HostModel.ComHost.Tests
             }
 
             using (var clsidMapFile = File.OpenText(clsidMapPath))
-            using (var clsidMapReader = new JsonTextReader(clsidMapFile))
+            using (var clsidMapReader = new JsonTextReader(clsidMapFile) { MaxDepth = null })
             {
                 return JObject.Load(clsidMapReader);
             }
@@ -154,15 +154,15 @@ namespace Microsoft.NET.HostModel.ComHost.Tests
                 RepoDirectories = new RepoDirectoriesProvider();
 
                 ComLibraryFixture = new TestProjectFixture("ComLibrary", RepoDirectories)
-                    .EnsureRestored(RepoDirectories.CorehostPackages)
+                    .EnsureRestored()
                     .BuildProject();
 
                 ComLibraryMissingGuidFixture = new TestProjectFixture("ComLibraryMissingGuid", RepoDirectories)
-                    .EnsureRestored(RepoDirectories.CorehostPackages)
+                    .EnsureRestored()
                     .BuildProject();
 
                 ComLibraryConflictingGuidFixture = new TestProjectFixture("ComLibraryConflictingGuid", RepoDirectories)
-                    .EnsureRestored(RepoDirectories.CorehostPackages)
+                    .EnsureRestored()
                     .BuildProject();
             }
 

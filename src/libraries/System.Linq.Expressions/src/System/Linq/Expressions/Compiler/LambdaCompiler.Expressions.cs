@@ -7,11 +7,14 @@ using System.Diagnostics;
 using System.Dynamic.Utils;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 
 namespace System.Linq.Expressions.Compiler
 {
-    internal partial class LambdaCompiler
+    internal sealed partial class LambdaCompiler
     {
+        private static readonly FieldInfo s_callSiteTargetField = typeof(CallSite<>).GetField("Target")!;
+
         [Flags]
         internal enum CompilationFlags
         {
@@ -183,7 +186,7 @@ namespace System.Linq.Expressions.Compiler
             if (typeof(LambdaExpression).IsAssignableFrom(expr.Type))
             {
                 // if the invoke target is a lambda expression tree, first compile it into a delegate
-                expr = Expression.Call(expr, expr.Type.GetMethod("Compile", Array.Empty<Type>())!);
+                expr = Expression.Call(expr, LambdaExpression.GetCompileMethod(expr.Type));
             }
 
             EmitMethodCall(expr, expr.Type.GetInvokeMethod(), node, CompilationFlags.EmitAsNoTail | CompilationFlags.EmitExpressionStart);
@@ -311,7 +314,7 @@ namespace System.Linq.Expressions.Compiler
             else
             {
                 // Multidimensional arrays, call get
-                _ilg.Emit(OpCodes.Call, arrayType.GetMethod("Get", BindingFlags.Public | BindingFlags.Instance)!);
+                _ilg.Emit(OpCodes.Call, TypeUtils.GetArrayGetMethod(arrayType));
             }
         }
 
@@ -339,7 +342,7 @@ namespace System.Linq.Expressions.Compiler
             else
             {
                 // Multidimensional arrays, call set
-                _ilg.Emit(OpCodes.Call, arrayType.GetMethod("Set", BindingFlags.Public | BindingFlags.Instance)!);
+                _ilg.Emit(OpCodes.Call, TypeUtils.GetArraySetMethod(arrayType));
             }
         }
 
@@ -526,10 +529,7 @@ namespace System.Linq.Expressions.Compiler
                     WriteBack? wb = EmitAddressWriteBack(argument, type);
                     if (wb != null)
                     {
-                        if (writeBacks == null)
-                        {
-                            writeBacks = new List<WriteBack>();
-                        }
+                        writeBacks ??= new List<WriteBack>();
 
                         writeBacks.Add(wb);
                     }
@@ -602,13 +602,19 @@ namespace System.Linq.Expressions.Compiler
             _ilg.Emit(OpCodes.Dup);
             LocalBuilder siteTemp = GetLocal(siteType);
             _ilg.Emit(OpCodes.Stloc, siteTemp);
-            _ilg.Emit(OpCodes.Ldfld, siteType.GetField("Target")!);
+            _ilg.Emit(OpCodes.Ldfld, GetCallSiteTargetField(siteType));
             _ilg.Emit(OpCodes.Ldloc, siteTemp);
             FreeLocal(siteTemp);
 
             List<WriteBack>? wb = EmitArguments(invoke, node, 1);
             _ilg.Emit(OpCodes.Callvirt, invoke);
             EmitWriteBack(wb);
+        }
+
+        private static FieldInfo GetCallSiteTargetField(Type siteType)
+        {
+            Debug.Assert(siteType.IsGenericType && siteType.GetGenericTypeDefinition() == typeof(CallSite<>));
+            return (FieldInfo)siteType.GetMemberWithSameMetadataDefinitionAs(s_callSiteTargetField);
         }
 
         private void EmitNewExpression(Expression expr)
@@ -920,11 +926,6 @@ namespace System.Linq.Expressions.Compiler
             }
         }
 
-        private void EmitDebugInfoExpression(Expression expr)
-        {
-            return;
-        }
-
         #region ListInit, MemberInit
 
         private void EmitListInitExpression(Expression expr)
@@ -1160,7 +1161,7 @@ namespace System.Linq.Expressions.Compiler
                         EmitMethodCallExpression(mc);
                         if (resultType.IsNullableType() && !TypeUtils.AreEquivalent(resultType, mc.Type))
                         {
-                            ConstructorInfo ci = resultType.GetConstructor(new Type[] { mc.Type })!;
+                            ConstructorInfo ci = TypeUtils.GetNullableConstructor(resultType);
                             _ilg.Emit(OpCodes.Newobj, ci);
                         }
                         _ilg.Emit(OpCodes.Br_S, exit);
@@ -1264,7 +1265,7 @@ namespace System.Linq.Expressions.Compiler
                         EmitMethodCallExpression(mc);
                         if (resultType.IsNullableType() && !TypeUtils.AreEquivalent(resultType, mc.Type))
                         {
-                            ConstructorInfo ci = resultType.GetConstructor(new Type[] { mc.Type })!;
+                            ConstructorInfo ci = TypeUtils.GetNullableConstructor(resultType);
                             _ilg.Emit(OpCodes.Newobj, ci);
                         }
                         _ilg.Emit(OpCodes.Br_S, exit);

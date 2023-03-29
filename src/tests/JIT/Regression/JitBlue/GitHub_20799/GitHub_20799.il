@@ -4,7 +4,7 @@
 .assembly extern System.Runtime { }
 .assembly extern System.Console { }
 .assembly GitHub_20799 { }
-.module GitHub_20799.exe
+.assembly extern xunit.core {}
 
 // GitHub 20799: a bug is reproduced when
 // 1) a method requires GSSecurityCookie (e.g. when allocating unsafe buffer using localloc)
@@ -33,7 +33,7 @@
   .field public int16 m_value
 }
 
-.class private auto ansi beforefieldinit GitHub_20799.Program
+.class public auto ansi beforefieldinit GitHub_20799.Program
        extends [System.Runtime]System.Object
 {
   .method private hidebysig static void  Use(bool arg1) cil managed noinlining
@@ -359,9 +359,12 @@
     IL_002f:  ret
   }
 
-  .method private hidebysig static int32
-          Main(string[] args) cil managed
+  .method public hidebysig static int32
+          Main() cil managed
   {
+    .custom instance void [xunit.core]Xunit.FactAttribute::.ctor() = (
+        01 00 00 00
+    )
     .entrypoint
 
     .maxstack  16

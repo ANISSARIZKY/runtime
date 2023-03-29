@@ -35,6 +35,7 @@ namespace System.Globalization
     public sealed class NumberFormatInfo : IFormatProvider, ICloneable
     {
         private static volatile NumberFormatInfo? s_invariantInfo;
+        internal static readonly string[] s_asciiDigits = new string[] { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
         internal int[] _numberGroupSizes = new int[] { 3 };
         internal int[] _currencyGroupSizes = new int[] { 3 };
@@ -71,37 +72,17 @@ namespace System.Globalization
 
         private bool _hasInvariantNumberSigns = true;
 
+        // When _allowHyphenDuringParsing is set to true, we'll allow the number parser to accept the hyphen `-` U+002D as a negative sign even if the culture
+        // negative sign is not the hyphen. For example, the Swedish culture (e.g. "sv-SE") has U+2212 as the negative sign.
+        private bool _allowHyphenDuringParsing;
+
         public NumberFormatInfo()
         {
         }
 
-        private static void VerifyDecimalSeparator(string decSep, string propertyName)
-        {
-            if (decSep == null)
-            {
-                throw new ArgumentNullException(propertyName);
-            }
-
-            if (decSep.Length == 0)
-            {
-                throw new ArgumentException(SR.Argument_EmptyDecString, propertyName);
-            }
-        }
-
-        private static void VerifyGroupSeparator(string groupSep, string propertyName)
-        {
-            if (groupSep == null)
-            {
-                throw new ArgumentNullException(propertyName);
-            }
-        }
-
         private static void VerifyNativeDigits(string[] nativeDig, string propertyName)
         {
-            if (nativeDig == null)
-            {
-                throw new ArgumentNullException(propertyName, SR.ArgumentNull_Array);
-            }
+            ArgumentNullException.ThrowIfNull(nativeDig);
 
             if (nativeDig.Length != 10)
             {
@@ -155,10 +136,26 @@ namespace System.Globalization
         }
 
         internal bool HasInvariantNumberSigns => _hasInvariantNumberSigns;
+        internal bool AllowHyphenDuringParsing => _allowHyphenDuringParsing;
 
-        private void UpdateHasInvariantNumberSigns()
+        private void InitializeInvariantAndNegativeSignFlags()
         {
             _hasInvariantNumberSigns = _positiveSign == "+" && _negativeSign == "-";
+
+            // The list of the Minus characters are picked up from the CLDR parse lenient data.
+            // e.g. https://github.com/unicode-org/cldr/blob/feb602b06bd18ba7333464bd648b68292e8aa54d/common/main/sw.xml#L1001
+
+            _allowHyphenDuringParsing = _negativeSign.Length == 1 &&
+                                        _negativeSign[0] switch {
+                                            '\u2012' or         // Figure Dash
+                                            '\u207B' or         // Superscript Minus
+                                            '\u208B' or         // Subscript Minus
+                                            '\u2212' or         // Minus Sign
+                                            '\u2796' or         // Heavy Minus Sign
+                                            '\uFE63' or         // Small Hyphen-Minus
+                                            '\uFF0D' => true,   // Fullwidth Hyphen-Minus
+                                            _ => false
+                                        };
         }
 
         internal NumberFormatInfo(CultureData? cultureData)
@@ -169,7 +166,7 @@ namespace System.Globalization
                 // don't need to verify their values (except for invalid parsing situations).
                 cultureData.GetNFIValues(this);
 
-                UpdateHasInvariantNumberSigns();
+                InitializeInvariantAndNegativeSignFlags();
             }
         }
 
@@ -243,7 +240,7 @@ namespace System.Globalization
             set
             {
                 VerifyWritable();
-                VerifyDecimalSeparator(value, nameof(value));
+                ArgumentException.ThrowIfNullOrEmpty(value);
                 _currencyDecimalSeparator = value;
             }
         }
@@ -280,10 +277,7 @@ namespace System.Globalization
             get => (int[])_currencyGroupSizes.Clone();
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
 
@@ -298,10 +292,7 @@ namespace System.Globalization
             get => (int[])_numberGroupSizes.Clone();
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
 
@@ -316,10 +307,7 @@ namespace System.Globalization
             get => (int[])_percentGroupSizes.Clone();
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 int[] inputSizes = (int[])value.Clone();
@@ -334,7 +322,7 @@ namespace System.Globalization
             set
             {
                 VerifyWritable();
-                VerifyGroupSeparator(value, nameof(value));
+                ArgumentNullException.ThrowIfNull(value);
                 _currencyGroupSeparator = value;
             }
         }
@@ -344,10 +332,7 @@ namespace System.Globalization
             get => _currencySymbol;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _currencySymbol = value;
@@ -381,10 +366,7 @@ namespace System.Globalization
             get => _nanSymbol;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _nanSymbol = value;
@@ -471,10 +453,7 @@ namespace System.Globalization
             get => _negativeInfinitySymbol;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _negativeInfinitySymbol = value;
@@ -486,14 +465,11 @@ namespace System.Globalization
             get => _negativeSign;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _negativeSign = value;
-                UpdateHasInvariantNumberSigns();
+                InitializeInvariantAndNegativeSignFlags();
             }
         }
 
@@ -521,7 +497,7 @@ namespace System.Globalization
             set
             {
                 VerifyWritable();
-                VerifyDecimalSeparator(value, nameof(value));
+                ArgumentException.ThrowIfNullOrEmpty(value);
                 _numberDecimalSeparator = value;
             }
         }
@@ -532,7 +508,7 @@ namespace System.Globalization
             set
             {
                 VerifyWritable();
-                VerifyGroupSeparator(value, nameof(value));
+                ArgumentNullException.ThrowIfNull(value);
                 _numberGroupSeparator = value;
             }
         }
@@ -560,10 +536,7 @@ namespace System.Globalization
             get => _positiveInfinitySymbol;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _positiveInfinitySymbol = value;
@@ -575,14 +548,11 @@ namespace System.Globalization
             get => _positiveSign;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _positiveSign = value;
-                UpdateHasInvariantNumberSigns();
+                InitializeInvariantAndNegativeSignFlags();
             }
         }
 
@@ -610,7 +580,7 @@ namespace System.Globalization
             set
             {
                 VerifyWritable();
-                VerifyDecimalSeparator(value, nameof(value));
+                ArgumentException.ThrowIfNullOrEmpty(value);
                 _percentDecimalSeparator = value;
             }
         }
@@ -621,7 +591,7 @@ namespace System.Globalization
             set
             {
                 VerifyWritable();
-                VerifyGroupSeparator(value, nameof(value));
+                ArgumentNullException.ThrowIfNull(value);
                 _percentGroupSeparator = value;
             }
         }
@@ -631,11 +601,7 @@ namespace System.Globalization
             get => _percentSymbol;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
-
+                ArgumentNullException.ThrowIfNull(value);
                 VerifyWritable();
                 _percentSymbol = value;
             }
@@ -646,10 +612,7 @@ namespace System.Globalization
             get => _perMilleSymbol;
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _perMilleSymbol = value;
@@ -685,10 +648,7 @@ namespace System.Globalization
 
         public static NumberFormatInfo ReadOnly(NumberFormatInfo nfi)
         {
-            if (nfi == null)
-            {
-                throw new ArgumentNullException(nameof(nfi));
-            }
+            ArgumentNullException.ThrowIfNull(nfi);
 
             if (nfi.IsReadOnly)
             {
@@ -713,9 +673,9 @@ namespace System.Globalization
             if ((style & (InvalidNumberStyles | NumberStyles.AllowHexSpecifier)) != 0
                 && (style & ~NumberStyles.HexNumber) != 0)
             {
-                throwInvalid(style);
+                ThrowInvalid(style);
 
-                void throwInvalid(NumberStyles value)
+                static void ThrowInvalid(NumberStyles value)
                 {
                     if ((value & InvalidNumberStyles) != 0)
                     {
@@ -732,9 +692,9 @@ namespace System.Globalization
             // Check for undefined flags or hex number
             if ((style & (InvalidNumberStyles | NumberStyles.AllowHexSpecifier)) != 0)
             {
-                throwInvalid(style);
+                ThrowInvalid(style);
 
-                void throwInvalid(NumberStyles value)
+                static void ThrowInvalid(NumberStyles value)
                 {
                     if ((value & InvalidNumberStyles) != 0)
                     {

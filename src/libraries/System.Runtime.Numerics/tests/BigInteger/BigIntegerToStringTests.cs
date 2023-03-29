@@ -88,6 +88,8 @@ namespace System.Numerics.Tests
             string test;
             string format;
 
+            long intMaxPlus1 = ((long)int.MaxValue + 1);
+            string intMaxPlus1String = intMaxPlus1.ToString();
             // Currency
             RunStandardFormatToStringTests_Helper(s_random, "C", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, CultureInfo.CurrentCulture.NumberFormat.CurrencyDecimalDigits, CurrencyFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "c0", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 0, CurrencyFormatter);
@@ -96,6 +98,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "C5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, CurrencyFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "c33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, CurrencyFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "C99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, CurrencyFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "C100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, CurrencyFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "C" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, CurrencyFormatter, true);
 
             // Decimal
             RunStandardFormatToStringTests_Helper(s_random, "D", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 0, DecimalFormatter);
@@ -106,6 +110,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "D5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "d33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "D99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, DecimalFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "D100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, DecimalFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "D" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, DecimalFormatter, true);
             RunStandardFormatToStringTests_Helper(s_random, "D\0", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 0, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "D4\0", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 4, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "D4\0Z", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 4, DecimalFormatter);
@@ -118,6 +124,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "E5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, ExponentialFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "e33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, -33, ExponentialFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "E99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, ExponentialFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "E100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, ExponentialFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "E" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, ExponentialFormatter, true);
 
             // Test exponent of 4 digits
             test = GetDigitSequence(2000, 2000, s_random);
@@ -131,6 +139,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "f5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, FixedFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "F33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, FixedFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "f99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, FixedFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "f100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, FixedFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "f" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, FixedFormatter, true);
 
             // General
             RunStandardFormatToStringTests_Helper(s_random, "g", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 0, DecimalFormatter);
@@ -140,6 +150,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "g5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "G33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "g99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, DecimalFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "g100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, DecimalFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "g" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, DecimalFormatter, true);
 
             // Number
             RunStandardFormatToStringTests_Helper(s_random, "n", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, CultureInfo.CurrentCulture.NumberFormat.NumberDecimalDigits, NumberFormatter);
@@ -149,6 +161,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "n5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, NumberFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "N33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, NumberFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "n99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, NumberFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "n100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, NumberFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "n" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, NumberFormatter, true);
 
             // Percent
             RunStandardFormatToStringTests_Helper(s_random, "p", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, CultureInfo.CurrentCulture.NumberFormat.PercentDecimalDigits, PercentFormatter);
@@ -158,6 +172,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "p5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, PercentFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "P33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, PercentFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "p99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, PercentFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "p100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, PercentFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "p" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, PercentFormatter, true);
 
             // Hex
             RunStandardFormatToStringTests_Helper(s_random, "X", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 0, HexFormatter);
@@ -167,6 +183,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "x5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, -5, HexFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "X33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, HexFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "x99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, -99, HexFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "x100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, -100, HexFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "x" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, -101, HexFormatter, true);
 
             // RoundTrip
             RunStandardFormatToStringTests_Helper(s_random, "R", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 0, DecimalFormatter);
@@ -176,6 +194,8 @@ namespace System.Numerics.Tests
             RunStandardFormatToStringTests_Helper(s_random, "r5", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 5, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "R33", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 33, DecimalFormatter);
             RunStandardFormatToStringTests_Helper(s_random, "r99", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 99, DecimalFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "r100", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 100, DecimalFormatter);
+            RunStandardFormatToStringTests_Helper(s_random, "r" + intMaxPlus1String, CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 101, DecimalFormatter, true);
 
             // Other - invalid format characters
             for (int i = 0; i < s_samples; i++)
@@ -187,12 +207,14 @@ namespace System.Numerics.Tests
         }
 
         [Fact]
-        [SkipOnCoreClr("Long running tests: https://github.com/dotnet/runtime/issues/11980", TestPlatforms.Linux, RuntimeConfiguration.Checked)]
+        [SkipOnCoreClr("Long running tests: https://github.com/dotnet/runtime/issues/11980", TestPlatforms.Linux, ~RuntimeConfiguration.Release)]
         public static void RunRegionSpecificStandardFormatToStringTests()
         {
             CultureInfo[] cultures = new CultureInfo[] { new CultureInfo("en-US"), new CultureInfo("en-GB"), new CultureInfo("fr-CA"),
                                                             new CultureInfo("ar-SA"), new CultureInfo("de-DE"), new CultureInfo("he-IL"),
                                                             new CultureInfo("ru-RU"), new CultureInfo("zh-CN") };
+            long intMaxPlus1 = ((long)int.MaxValue + 1);
+            string intMaxPlus1String = intMaxPlus1.ToString();
             foreach (CultureInfo culture in cultures)
             {
                 // Set CurrentCulture to simulate different locales
@@ -206,6 +228,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "C5", culture.NumberFormat.NegativeSign, 5, CurrencyFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "c33", culture.NumberFormat.NegativeSign, 33, CurrencyFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "C99", culture.NumberFormat.NegativeSign, 99, CurrencyFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "C100", culture.NumberFormat.NegativeSign, 100, CurrencyFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "C" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, CurrencyFormatter, true);
 
                     // Decimal
                     RunStandardFormatToStringTests_Helper(s_random, "D", culture.NumberFormat.NegativeSign, 0, DecimalFormatter);
@@ -215,6 +239,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "D5", culture.NumberFormat.NegativeSign, 5, DecimalFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "d33", culture.NumberFormat.NegativeSign, 33, DecimalFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "D99", culture.NumberFormat.NegativeSign, 99, DecimalFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "D100", culture.NumberFormat.NegativeSign, 100, DecimalFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "D" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, DecimalFormatter, true);
 
                     // Exponential (note: negative precision means lower case e)
                     RunStandardFormatToStringTests_Helper(s_random, "E", culture.NumberFormat.NegativeSign, 6, ExponentialFormatter);
@@ -224,6 +250,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "E5", culture.NumberFormat.NegativeSign, 5, ExponentialFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "e33", culture.NumberFormat.NegativeSign, -33, ExponentialFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "E99", culture.NumberFormat.NegativeSign, 99, ExponentialFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "E100", culture.NumberFormat.NegativeSign, 100, ExponentialFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "E" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, ExponentialFormatter, true);
 
                     // Fixed-Point
                     RunStandardFormatToStringTests_Helper(s_random, "f", culture.NumberFormat.NegativeSign, culture.NumberFormat.NumberDecimalDigits, FixedFormatter);
@@ -233,6 +261,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "f5", culture.NumberFormat.NegativeSign, 5, FixedFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "F33", culture.NumberFormat.NegativeSign, 33, FixedFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "f99", culture.NumberFormat.NegativeSign, 99, FixedFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "f100", culture.NumberFormat.NegativeSign, 100, FixedFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "f" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, FixedFormatter, true);
 
                     // General
                     RunStandardFormatToStringTests_Helper(s_random, "g", culture.NumberFormat.NegativeSign, 0, DecimalFormatter);
@@ -242,6 +272,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "g5", culture.NumberFormat.NegativeSign, 5, DecimalFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "G33", culture.NumberFormat.NegativeSign, 33, DecimalFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "g99", culture.NumberFormat.NegativeSign, 99, DecimalFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "g100", culture.NumberFormat.NegativeSign, 100, DecimalFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "g" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, DecimalFormatter, true);
 
                     // Number
                     RunStandardFormatToStringTests_Helper(s_random, "n", culture.NumberFormat.NegativeSign, culture.NumberFormat.NumberDecimalDigits, NumberFormatter);
@@ -251,6 +283,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "n5", culture.NumberFormat.NegativeSign, 5, NumberFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "N33", culture.NumberFormat.NegativeSign, 33, NumberFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "n99", culture.NumberFormat.NegativeSign, 99, NumberFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "n100", culture.NumberFormat.NegativeSign, 100, NumberFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "n" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, NumberFormatter, true);
 
                     // Percent
                     RunStandardFormatToStringTests_Helper(s_random, "p", culture.NumberFormat.NegativeSign, culture.NumberFormat.PercentDecimalDigits, PercentFormatter);
@@ -260,6 +294,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "p5", culture.NumberFormat.NegativeSign, 5, PercentFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "P33", culture.NumberFormat.NegativeSign, 33, PercentFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "p99", culture.NumberFormat.NegativeSign, 99, PercentFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "p100", culture.NumberFormat.NegativeSign, 100, PercentFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "p" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, PercentFormatter, true);
 
                     // Hex
                     RunStandardFormatToStringTests_Helper(s_random, "X", culture.NumberFormat.NegativeSign, 0, HexFormatter);
@@ -269,6 +305,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "x5", culture.NumberFormat.NegativeSign, -5, HexFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "X33", culture.NumberFormat.NegativeSign, 33, HexFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "x99", culture.NumberFormat.NegativeSign, -99, HexFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "x100", culture.NumberFormat.NegativeSign, -100, HexFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "x" + intMaxPlus1String, culture.NumberFormat.NegativeSign, -101, HexFormatter, true);
 
                     // RoundTrip
                     RunStandardFormatToStringTests_Helper(s_random, "R", culture.NumberFormat.NegativeSign, 0, DecimalFormatter);
@@ -278,6 +316,8 @@ namespace System.Numerics.Tests
                     RunStandardFormatToStringTests_Helper(s_random, "r5", culture.NumberFormat.NegativeSign, 5, DecimalFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "R33", culture.NumberFormat.NegativeSign, 33, DecimalFormatter);
                     RunStandardFormatToStringTests_Helper(s_random, "r99", culture.NumberFormat.NegativeSign, 99, DecimalFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "r100", culture.NumberFormat.NegativeSign, 100, DecimalFormatter);
+                    RunStandardFormatToStringTests_Helper(s_random, "r" + intMaxPlus1String, culture.NumberFormat.NegativeSign, 101, DecimalFormatter, true);
                 }
             }
         }
@@ -399,6 +439,82 @@ namespace System.Numerics.Tests
             RunCustomFormatToStringTests(s_random, "#\u2030000000", CultureInfo.CurrentCulture.NumberFormat.NegativeSign, 6, PerMilleSymbolFormatter);
         }
 
+        public static IEnumerable<object[]> RunFormatScientificNotationToBigIntegerAndViceVersaData()
+        {
+            yield return new object[] { "1E+1000", "1E+1000" };
+            yield return new object[] { "1E+1001", "1E+1001" };
+            yield return new object[] { "1E+10001", "1E+10001" };
+            yield return new object[] { "1E+100001", "1E+100001" };
+            yield return new object[] { "1E+99999", "1E+99999" };
+        }
+
+        [Theory]
+        [MemberData(nameof(RunFormatScientificNotationToBigIntegerAndViceVersaData))]
+        public static void RunFormatScientificNotationToBigIntegerAndViceVersa(string testingValue, string expectedResult)
+        {
+            BigInteger parsedValue;
+            string actualResult;
+
+            parsedValue = BigInteger.Parse(testingValue, NumberStyles.AllowExponent);
+            actualResult = parsedValue.ToString("E0");
+
+            Assert.Equal(expectedResult, actualResult);
+        }
+
+        public static IEnumerable<object[]> RunFormatScientificNotationToBigIntegerThrowsExceptionData()
+        {
+            yield return new object[] { "1E+1000000000" };
+            yield return new object[] { "1E+2147483647" };
+            yield return new object[] { "1E+21474836492" };
+        }
+
+        [Theory]
+        [MemberData(nameof(RunFormatScientificNotationToBigIntegerThrowsExceptionData))]
+        public static void RunFormatScientificNotationToBigIntegerThrowsException(string testingValue)
+        {
+            Assert.Throws<OverflowException>(() => BigInteger.Parse(testingValue, NumberStyles.AllowExponent));
+        }
+        
+        [Fact]
+        public static void ToString_InvalidFormat_ThrowsFormatException()
+        {
+            BigInteger b = new BigInteger(123456789000m);
+
+            // Format precision limit is 999_999_999 (9 digits). Anything larger should throw.
+            // Check ParseFormatSpecifier in FormatProvider.Number.cs with `E` format
+            Assert.Throws<FormatException>(() => b.ToString("E" + int.MaxValue.ToString()));
+            long intMaxPlus1 = (long)int.MaxValue + 1;
+            string intMaxPlus1String = intMaxPlus1.ToString();
+            Assert.Throws<FormatException>(() => b.ToString("E" + intMaxPlus1String));
+            Assert.Throws<FormatException>(() => b.ToString("E4772185890"));
+            Assert.Throws<FormatException>(() => b.ToString("E1000000000"));
+            Assert.Throws<FormatException>(() => b.ToString("E000001000000000"));
+
+            // Check ParseFormatSpecifier in BigNumber.cs with `G` format
+            Assert.Throws<FormatException>(() => b.ToString("G" + int.MaxValue.ToString()));
+            Assert.Throws<FormatException>(() => b.ToString("G" + intMaxPlus1String));
+            Assert.Throws<FormatException>(() => b.ToString("G4772185890"));
+            Assert.Throws<FormatException>(() => b.ToString("G1000000000"));
+            Assert.Throws<FormatException>(() => b.ToString("G000001000000000"));
+        }
+
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.Is64BitProcess))] // Requires a lot of memory
+        [OuterLoop("Takes a long time, allocates a lot of memory")]
+        public static void ToString_ValidLargeFormat()
+        {
+            BigInteger b = new BigInteger(123456789000m);
+
+            // Format precision limit is 999_999_999 (9 digits). Anything larger should throw.
+
+            // Check ParseFormatSpecifier in FormatProvider.Number.cs with `E` format
+            b.ToString("E999999999"); // Should not throw
+            b.ToString("E00000999999999"); // Should not throw
+
+            // Check ParseFormatSpecifier in BigNumber.cs with `G` format
+            b.ToString("G999999999"); // Should not throw
+            b.ToString("G00000999999999"); // Should not throw
+        }
+
         private static void RunSimpleProviderToStringTests(Random random, string format, NumberFormatInfo provider, int precision, StringFormatter formatter)
         {
             string test;
@@ -443,7 +559,7 @@ namespace System.Numerics.Tests
             VerifyToString(Int64.MaxValue.ToString("d", provider), format, provider, false, formatter(Int64.MaxValue.ToString("d", provider), precision, provider));
         }
 
-        private static void RunStandardFormatToStringTests_Helper(Random random, string format, string negativeSign, int precision, StringFormatter formatter)
+        private static void RunStandardFormatToStringTests_Helper(Random random, string format, string negativeSign, int precision, StringFormatter formatter, bool expectError = false)
         {
             string test;
 
@@ -451,42 +567,42 @@ namespace System.Numerics.Tests
             for (int i = 0; i < s_samples; i++)
             {
                 test = GetDigitSequence(100, 1000, random);
-                VerifyToString(test, format, formatter(test, precision, CultureInfo.CurrentCulture.NumberFormat));
+                VerifyToString(test, format, formatter(test, precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
             }
 
             // Scenario 2: Small BigInteger - positive
             for (int i = 0; i < s_samples; i++)
             {
                 test = GetDigitSequence(1, 20, random);
-                VerifyToString(test, format, formatter(test, precision, CultureInfo.CurrentCulture.NumberFormat));
+                VerifyToString(test, format, formatter(test, precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
             }
 
             // Scenario 3: Large BigInteger - negative
             for (int i = 0; i < s_samples; i++)
             {
                 test = GetDigitSequence(100, 1000, random);
-                VerifyToString(negativeSign + test, format, formatter(negativeSign + test, precision, CultureInfo.CurrentCulture.NumberFormat));
+                VerifyToString(negativeSign + test, format, formatter(negativeSign + test, precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
             }
 
             // Scenario 4: Small BigInteger - negative
             for (int i = 0; i < s_samples; i++)
             {
                 test = GetDigitSequence(1, 20, random);
-                VerifyToString(negativeSign + test, format, formatter(negativeSign + test, precision, CultureInfo.CurrentCulture.NumberFormat));
+                VerifyToString(negativeSign + test, format, formatter(negativeSign + test, precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
             }
 
             // Scenario 5: Constant values
-            VerifyToString(negativeSign + "1", format, formatter(negativeSign + "1", precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(negativeSign + "0", format, formatter("0", precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString("0", format, formatter("0", precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Int16.MinValue.ToString(), format, formatter(Int16.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Int32.MinValue.ToString(), format, formatter(Int32.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Int64.MinValue.ToString(), format, formatter(Int64.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Decimal.MinValue.ToString(), format, formatter(Decimal.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Int16.MaxValue.ToString(), format, formatter(Int16.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Int32.MaxValue.ToString(), format, formatter(Int32.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Int64.MaxValue.ToString(), format, formatter(Int64.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
-            VerifyToString(Decimal.MaxValue.ToString(), format, formatter(Decimal.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat));
+            VerifyToString(negativeSign + "1", format, formatter(negativeSign + "1", precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(negativeSign + "0", format, formatter("0", precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString("0", format, formatter("0", precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Int16.MinValue.ToString(), format, formatter(Int16.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Int32.MinValue.ToString(), format, formatter(Int32.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Int64.MinValue.ToString(), format, formatter(Int64.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Decimal.MinValue.ToString(), format, formatter(Decimal.MinValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Int16.MaxValue.ToString(), format, formatter(Int16.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Int32.MaxValue.ToString(), format, formatter(Int32.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Int64.MaxValue.ToString(), format, formatter(Int64.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
+            VerifyToString(Decimal.MaxValue.ToString(), format, formatter(Decimal.MaxValue.ToString(), precision, CultureInfo.CurrentCulture.NumberFormat), expectError);
         }
 
         private static void RunCustomFormatToStringTests(Random random, string format, string negativeSign, int precision, StringFormatter formatter)
@@ -673,7 +789,7 @@ namespace System.Numerics.Tests
             temp = new char[precision + 2];
             for (int j = 0; j < temp.Length; j++)
             {
-                if ((j < 100) && (j < temp2.Length))
+                if ((j < temp2.Length))
                 {
                     temp[j] = temp2[j];
                 }
@@ -1399,9 +1515,9 @@ namespace System.Numerics.Tests
             VerifyToString(test, format: null, provider: null, expectError: false, expectedResult: expectedResult);
         }
 
-        private static void VerifyToString(string test, string format, string expectedResult)
+        private static void VerifyToString(string test, string format, string expectedResult, bool expectError = false)
         {
-            VerifyToString(test, format: format, provider: null, expectError: false, expectedResult: expectedResult);
+            VerifyToString(test, format: format, provider: null, expectError, expectedResult: expectedResult);
         }
 
         private static void VerifyToString(string test, string format, IFormatProvider provider, bool expectError, string expectedResult)
@@ -1556,7 +1672,7 @@ namespace System.Numerics.Tests
             List<char> out2 = new List<char>();
             for (int i = 0; i < output.Length; i++)
             {
-                if ((output[i] >= '0') & (output[i] <= '9'))
+                if (char.IsAsciiDigit(output[i]))
                 {
                     out2.Add(output[i]);
                 }
@@ -1636,11 +1752,11 @@ namespace System.Numerics.Tests
             {
                 if (upper)
                 {
-                    output = output + chars[start].ToString("X");
+                    output = $"{output}{chars[start]:X}";
                 }
                 else
                 {
-                    output = output + chars[start].ToString("x");
+                    output = $"{output}{chars[start]:x}";
                 }
             }
 
@@ -1689,7 +1805,7 @@ namespace System.Numerics.Tests
             return ret;
         }
 
-        private static string GenerateGroups(int[] sizes, string seperator, Random random)
+        private static string GenerateGroups(int[] sizes, string separator, Random random)
         {
             List<int> total_sizes = new List<int>();
             int total;
@@ -1740,14 +1856,14 @@ namespace System.Numerics.Tests
                 num_digits -= group_size;
                 if (num_digits > 0)
                 {
-                    digits += seperator;
+                    digits += separator;
                 }
             }
 
             return digits;
         }
 
-        private static string GroupFormatDigits(string input, string seperator, int[] sizes, string point, int places)
+        private static string GroupFormatDigits(string input, string separator, int[] sizes, string point, int places)
         {
             string output = string.Empty;
             int currentspot = input.Length - 1;
@@ -1773,7 +1889,7 @@ namespace System.Numerics.Tests
                     }
                     else
                     {
-                        output = seperator + ZeroString(size) + output;
+                        output = separator + ZeroString(size) + output;
                         currentspot -= size;
                     }
                     if (currentsize < sizes.Length - 1)
@@ -1800,7 +1916,7 @@ namespace System.Numerics.Tests
                 }
                 else
                 {
-                    output = seperator + input.Substring(currentspot - size + 1, size) + output;
+                    output = separator + input.Substring(currentspot - size + 1, size) + output;
                     currentspot -= size;
                 }
                 if (currentsize < sizes.Length - 1)

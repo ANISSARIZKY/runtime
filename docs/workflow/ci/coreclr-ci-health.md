@@ -42,7 +42,7 @@ a "Shared" comment it signifies that our tests are built on OSX in ~15 minutes i
 
 *Special Jobs*
 
-`Formatting Linux x64` and `Formatting Windows x64` are special jobs which run clang-tidy of `src/coreclr/src/jit/*`. If there is a failure, there is a patch file that is created that can be applied to fix the source formatting.
+`Formatting Linux x64` and `Formatting Windows x64` are special jobs which run clang-tidy of `src/coreclr/jit/*`. If there is a failure, there is a patch file that is created that can be applied to fix the source formatting.
 
 | OS      | Architecture | Build Type | Product Build | Build Tests | Run coreclr Tests | Test Count | R2R   |
 | --      | ------------ | ---------- | ------------- | ----------- | ----------------- | ---------- | ----- |
@@ -111,7 +111,7 @@ The **Failure Trend** graph attempts to show what is failing in bar graph and gi
 
 The **Failed Runs** graph is the most interesting for finding specific issues. As of writing the `Top 10 failing tasks` are:
 
-*Note* that any one of these buckets can include random one off infrastructure failures or systimatic Azure Dev Ops failures. For example the build bucket can include issues like:
+*Note* that any one of these buckets can include random one off infrastructure failures or systematic Azure Dev Ops failures. For example the build bucket can include issues like:
 
 >  fips.c(143): OpenSSL internal error
 

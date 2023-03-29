@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 #pragma warning disable 618 // obsolete types
 
 namespace System.Collections
@@ -47,10 +46,7 @@ namespace System.Collections
 
         public int GetHashCode(object obj)
         {
-            if (obj == null)
-            {
-                throw new ArgumentNullException(nameof(obj));
-            }
+            ArgumentNullException.ThrowIfNull(obj);
 
             return _hcp != null ?
                 _hcp.GetHashCode(obj) :

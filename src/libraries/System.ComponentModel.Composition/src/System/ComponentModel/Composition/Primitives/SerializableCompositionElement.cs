@@ -10,7 +10,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace System.ComponentModel.Composition.Primitives
 {
     [Serializable]
-    internal class SerializableCompositionElement : ICompositionElement
+    internal sealed class SerializableCompositionElement : ICompositionElement
     {
         private readonly string _displayName;
         private readonly ICompositionElement? _origin;
@@ -27,7 +27,7 @@ namespace System.ComponentModel.Composition.Primitives
 
         public ICompositionElement? Origin => _origin;
 
-        [return: NotNullIfNotNull("element")]
+        [return: NotNullIfNotNull(nameof(element))]
         public static ICompositionElement? FromICompositionElement(ICompositionElement? element)
         {
             if (element == null)

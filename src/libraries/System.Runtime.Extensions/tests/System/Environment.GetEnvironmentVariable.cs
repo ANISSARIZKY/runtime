@@ -102,9 +102,8 @@ namespace System.Tests
         [Fact]
         public void CanGetAllVariablesIndividually()
         {
-            Random r = new Random();
-            string envVar1 = "TestVariable_CanGetVariablesIndividually_" + r.Next().ToString();
-            string envVar2 = "TestVariable_CanGetVariablesIndividually_" + r.Next().ToString();
+            string envVar1 = "TestVariable_CanGetVariablesIndividually_" + Random.Shared.Next().ToString();
+            string envVar2 = "TestVariable_CanGetVariablesIndividually_" + Random.Shared.Next().ToString();
 
             try
             {
@@ -218,11 +217,12 @@ namespace System.Tests
         [MemberData(nameof(EnvironmentTests.EnvironmentVariableTargets), MemberType = typeof(EnvironmentTests))]
         public void EnumerateEnvironmentVariables(EnvironmentVariableTarget target)
         {
-            bool lookForSetValue = (target == EnvironmentVariableTarget.Process) || PlatformDetection.IsWindowsAndElevated;
+            bool lookForSetValue = (target == EnvironmentVariableTarget.Process)
+                || (PlatformDetection.IsWindows && PlatformDetection.IsPrivilegedProcess);
 
-            // [ActiveIssue("https://github.com/dotnet/runtime/issues/30566")]
-            if (PlatformDetection.IsWindowsNanoServer && target == EnvironmentVariableTarget.User)
+            if (target == EnvironmentVariableTarget.User && PlatformDetection.IsWindowsNanoServer)
             {
+                // Windows Nano Server does not have full per-user registry hives
                 lookForSetValue = false;
             }
 

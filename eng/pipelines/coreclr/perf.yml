@@ -2,172 +2,52 @@ trigger:
   batch: true
   branches:
     include:
-    - master
+    - main
     - release/*
   paths:
     include:
     - '*'
     - src/libraries/System.Private.CoreLib/*
     exclude:
+    - '**.md'
+    - .devcontainer/*
     - .github/*
     - docs/*
-    - CODE-OF-CONDUCT.md
-    - CONTRIBUTING.md
     - LICENSE.TXT
     - PATENTS.TXT
-    - README.md
-    - SECURITY.md
     - THIRD-PARTY-NOTICES.TXT
-  
-pr: none
 
-jobs:
+variables:
+  - template: /eng/pipelines/common/variables.yml
+
 #
-# Checkout repository
+# For the 'schedule' case, only wasm/jsc perf jobs are run.
+# And the rest are build jobs - wasm, mono, coreclr, and libraries.
 #
-- template: /eng/pipelines/common/checkout-job.yml
+# Since, we are not running *any* perf jobs, none of these builds are needed,
+# thus the whole scheduled run can be disabled.
+#
+#schedules:
+#- cron: "30 2 * * *"
+  #displayName: Every night at 2:30AM
+  #branches:
+    #include:
+    #- main
+  #always: true
 
-# build coreclr and libraries
-- template: /eng/pipelines/common/platform-matrix.yml
+extends:
+  template:  /eng/pipelines/common/templates/pipeline-with-resources.yml
   parameters:
-    jobTemplate: /eng/pipelines/common/build-coreclr-and-libraries-job.yml
-    buildConfig: release
-    platforms:
-    - Linux_x64
-    - windows_x64
-    - windows_x86
-    jobParameters:
-      testGroup: perf
+    stages:
+    - stage: Build
+      jobs:
 
-# build mono on wasm
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/common/global-build-job.yml
-    buildConfig: release
-    runtimeFlavor: mono
-    platforms:
-    - Browser_wasm
-    jobParameters:
-      buildArgs: -s mono+libs+host+packs -c $(_BuildConfig)
-      nameSuffix: wasm
-      isOfficialBuild: ${{ variables.isOfficialBuild }}
-      extraStepsTemplate: /eng/pipelines/common/upload-artifact-step.yml
-      extraStepsParameters:
-        rootFolder: '$(Build.SourcesDirectory)/artifacts/'
-        includeRootFolder: true
-        displayName: Browser Wasm Artifacts
-        artifactName: BrowserWasm
-        archiveType: zip
-        archiveExtension: .zip
+      - template: /eng/pipelines/coreclr/perf-wasm-jobs.yml
+        parameters:
+          collectHelixLogsScript: ${{ variables._wasmCollectHelixLogsScript }}
+          ${{ and(ne(variables['System.TeamProject'], 'public'), in(variables['Build.Reason'], 'Schedule')) }}:
+            runProfile: 'non-v8'
+          ${{ if and(ne(variables['System.TeamProject'], 'public'), notin(variables['Build.Reason'], 'Schedule')) }}:
+            runProfile: 'v8'
 
-# build mono
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/mono/templates/build-job.yml
-    runtimeFlavor: mono
-    buildConfig: release
-    platforms:
-    - Linux_x64
-
-# run mono microbenchmarks perf job
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/coreclr/templates/perf-job.yml
-    buildConfig: release
-    runtimeFlavor: mono
-    platforms:
-    - Linux_x64
-    jobParameters:
-      testGroup: perf
-      liveLibrariesBuildConfig: Release
-      runtimeType: mono
-      projectFile: microbenchmarks.proj
-      runKind: micro_mono
-      runJobTemplate: /eng/pipelines/coreclr/templates/run-performance-job.yml
-
-# run mono interpreter perf job
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/coreclr/templates/perf-job.yml
-    buildConfig: release
-    runtimeFlavor: mono
-    platforms:
-    - Linux_x64
-    jobParameters:
-      testGroup: perf
-      liveLibrariesBuildConfig: Release
-      runtimeType: mono
-      codeGenType: 'Interpreter'
-      projectFile: microbenchmarks.proj
-      runKind: micro_mono
-      runJobTemplate: /eng/pipelines/coreclr/templates/run-performance-job.yml
-
-# run mono wasm microbenchmarks perf job
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/coreclr/templates/perf-job.yml # NOTE: should we move this file out of coreclr tempelates because it contains mono jobs?
-    buildConfig: release
-    runtimeFlavor: wasm
-    platforms:
-    - Linux_x64
-    jobParameters:
-      testGroup: perf
-      liveLibrariesBuildConfig: Release
-      runtimeType: wasm
-      codeGenType: 'wasm'
-      projectFile: microbenchmarks.proj
-      runKind: micro
-      runJobTemplate: /eng/pipelines/coreclr/templates/run-performance-job.yml
-
-
-# run coreclr microbenchmarks perf job
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/coreclr/templates/perf-job.yml
-    buildConfig: release
-    runtimeFlavor: coreclr
-    platforms:
-    - Linux_x64
-    - windows_x64
-    - windows_x86
-    jobParameters:
-      testGroup: perf
-      liveLibrariesBuildConfig: Release
-      projectFile: microbenchmarks.proj
-      runKind: micro
-      runJobTemplate: /eng/pipelines/coreclr/templates/run-performance-job.yml
-
-# run coreclr crossgen perf job
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/coreclr/templates/perf-job.yml
-    buildConfig: release
-    runtimeFlavor: coreclr
-    platforms:
-    - Linux_x64
-    - windows_x64
-    - windows_x86
-    jobParameters:
-      testGroup: perf
-      liveLibrariesBuildConfig: Release
-      projectFile: crossgen_perf.proj
-      runKind: crossgen_scenarios
-      runJobTemplate: /eng/pipelines/coreclr/templates/run-scenarios-job.yml
-
-# run mono wasm blazor perf job
-- template: /eng/pipelines/common/platform-matrix.yml
-  parameters:
-    jobTemplate: /eng/pipelines/coreclr/templates/perf-job.yml
-    buildConfig: release
-    runtimeFlavor: wasm
-    platforms:
-    - Linux_x64
-    jobParameters:
-      testGroup: perf
-      liveLibrariesBuildConfig: Release
-      runtimeType: wasm
-      projectFile: blazor_perf.proj
-      runKind: blazor_scenarios
-      runJobTemplate: /eng/pipelines/coreclr/templates/run-scenarios-job.yml
-      additionalSetupParameters: '--latestdotnet'
-
+      - template: /eng/pipelines/coreclr/perf-non-wasm-jobs.yml

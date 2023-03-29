@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 
 namespace System.Linq
@@ -14,12 +15,16 @@ namespace System.Linq
 
         internal EnumerableQuery() { }
 
+        [RequiresUnreferencedCode(Queryable.InMemoryQueryableExtensionMethodsRequiresUnreferencedCode)]
+        [RequiresDynamicCode(Queryable.InMemoryQueryableExtensionMethodsRequiresDynamicCode)]
         internal static IQueryable Create(Type elementType, IEnumerable sequence)
         {
             Type seqType = typeof(EnumerableQuery<>).MakeGenericType(elementType);
             return (IQueryable)Activator.CreateInstance(seqType, sequence)!;
         }
 
+        [RequiresUnreferencedCode(Queryable.InMemoryQueryableExtensionMethodsRequiresUnreferencedCode)]
+        [RequiresDynamicCode(Queryable.InMemoryQueryableExtensionMethodsRequiresDynamicCode)]
         internal static IQueryable Create(Type elementType, Expression expression)
         {
             Type seqType = typeof(EnumerableQuery<>).MakeGenericType(elementType);
@@ -27,6 +32,8 @@ namespace System.Linq
         }
     }
 
+    [RequiresDynamicCode(Queryable.InMemoryQueryableExtensionMethodsRequiresDynamicCode)]
+    [RequiresUnreferencedCode(Queryable.InMemoryQueryableExtensionMethodsRequiresUnreferencedCode)]
     public class EnumerableQuery<T> : EnumerableQuery, IOrderedQueryable<T>, IQueryProvider
     {
         private readonly Expression _expression;
@@ -55,8 +62,8 @@ namespace System.Linq
 
         IQueryable IQueryProvider.CreateQuery(Expression expression)
         {
-            if (expression == null)
-                throw Error.ArgumentNull(nameof(expression));
+            ArgumentNullException.ThrowIfNull(expression);
+
             Type? iqType = TypeHelper.FindGenericType(typeof(IQueryable<>), expression.Type);
             if (iqType == null)
                 throw Error.ArgumentNotValid(nameof(expression));
@@ -65,8 +72,8 @@ namespace System.Linq
 
         IQueryable<TElement> IQueryProvider.CreateQuery<TElement>(Expression expression)
         {
-            if (expression == null)
-                throw Error.ArgumentNull(nameof(expression));
+            ArgumentNullException.ThrowIfNull(expression);
+
             if (!typeof(IQueryable<TElement>).IsAssignableFrom(expression.Type))
             {
                 throw Error.ArgumentNotValid(nameof(expression));
@@ -76,15 +83,15 @@ namespace System.Linq
 
         object? IQueryProvider.Execute(Expression expression)
         {
-            if (expression == null)
-                throw Error.ArgumentNull(nameof(expression));
+            ArgumentNullException.ThrowIfNull(expression);
+
             return EnumerableExecutor.Create(expression).ExecuteBoxed();
         }
 
         TElement IQueryProvider.Execute<TElement>(Expression expression)
         {
-            if (expression == null)
-                throw Error.ArgumentNull(nameof(expression));
+            ArgumentNullException.ThrowIfNull(expression);
+
             if (!typeof(TElement).IsAssignableFrom(expression.Type))
                 throw Error.ArgumentNotValid(nameof(expression));
             return new EnumerableExecutor<TElement>(expression).Execute();

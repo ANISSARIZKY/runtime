@@ -18,9 +18,9 @@ namespace System.IO.Pipes
     /// </summary>
     public sealed partial class NamedPipeClientStream : PipeStream
     {
-        private bool TryConnect(int timeout, CancellationToken cancellationToken)
+        private bool TryConnect(int _ /* timeout */)
         {
-            // timeout and cancellationToken aren't used as Connect will be very fast,
+            // timeout isn't used as Connect will be very fast,
             // either succeeding immediately if the server is listening or failing
             // immediately if it isn't.  The only delay will be between the time the server
             // has called Bind and Listen, with the latter immediately following the former.
@@ -83,7 +83,7 @@ namespace System.IO.Pipes
             {
                 CheckPipePropertyOperations();
                 if (!CanRead) throw new NotSupportedException(SR.NotSupported_UnreadableStream);
-                return InternalHandle?.NamedPipeSocket?.ReceiveBufferSize ?? 0;
+                return InternalHandle?.PipeSocket.ReceiveBufferSize ?? 0;
             }
         }
 
@@ -93,7 +93,7 @@ namespace System.IO.Pipes
             {
                 CheckPipePropertyOperations();
                 if (!CanWrite) throw new NotSupportedException(SR.NotSupported_UnwritableStream);
-                return InternalHandle?.NamedPipeSocket?.SendBufferSize ?? 0;
+                return InternalHandle?.PipeSocket.SendBufferSize ?? 0;
             }
         }
 

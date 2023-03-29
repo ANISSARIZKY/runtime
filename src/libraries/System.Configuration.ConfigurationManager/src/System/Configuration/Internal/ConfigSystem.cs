@@ -4,9 +4,9 @@
 namespace System.Configuration.Internal
 {
     // The runtime config system
-    internal class ConfigSystem : IConfigSystem
+    internal sealed class ConfigSystem : IConfigSystem
     {
-        private IInternalConfigHost _configHost;
+        private ImplicitMachineConfigHost _configHost;
         private IInternalConfigRoot _configRoot;
 
         void IConfigSystem.Init(Type typeConfigHost, params object[] hostInitParams)

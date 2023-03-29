@@ -215,10 +215,10 @@ namespace System.Reflection.Metadata.Ecma335
         }
 
         /// <summary>
-        /// Returns the current number of entires in the specified table.
+        /// Returns the current number of entries in the specified table.
         /// </summary>
         /// <param name="table">Table index.</param>
-        /// <returns>The number of entires in the table.</returns>
+        /// <returns>The number of entries in the table.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="table"/> is not a valid table index.</exception>
         public int GetRowCount(TableIndex table)
         {
@@ -286,7 +286,7 @@ namespace System.Reflection.Metadata.Ecma335
         }
 
         /// <summary>
-        /// Returns the current number of entires in each table.
+        /// Returns the current number of entries in each table.
         /// </summary>
         /// <returns>
         /// An array of size <see cref="MetadataTokens.TableCount"/> with each item filled with the current row count of the corresponding table.
@@ -392,7 +392,7 @@ namespace System.Reflection.Metadata.Ecma335
             AssemblyFlags flags,
             AssemblyHashAlgorithm hashAlgorithm)
         {
-            if (version == null)
+            if (version is null)
             {
                 Throw.ArgumentNull(nameof(version));
             }
@@ -423,7 +423,7 @@ namespace System.Reflection.Metadata.Ecma335
             AssemblyFlags flags,
             BlobHandle hashValue)
         {
-            if (version == null)
+            if (version is null)
             {
                 Throw.ArgumentNull(nameof(version));
             }
@@ -493,7 +493,7 @@ namespace System.Reflection.Metadata.Ecma335
         /// Note that if this directive applies to a value type, then the size shall be less than 1 MB.
         /// </param>
         /// <remarks>
-        /// Entires must be added in the same order as the corresponding type definitions.
+        /// Entries must be added in the same order as the corresponding type definitions.
         /// </remarks>
         public void AddTypeLayout(
             TypeDefinitionHandle type,
@@ -897,7 +897,7 @@ namespace System.Reflection.Metadata.Ecma335
         /// <param name="field">Field definition.</param>
         /// <param name="offset">The byte offset of the field within the declaring type instance.</param>
         /// <remarks>
-        /// Entires must be added in the same order as the corresponding field definitions.
+        /// Entries must be added in the same order as the corresponding field definitions.
         /// </remarks>
         public void AddFieldLayout(
             FieldDefinitionHandle field,
@@ -946,7 +946,7 @@ namespace System.Reflection.Metadata.Ecma335
         /// by adding the offset to the virtual address of the block start.
         /// </param>
         /// <remarks>
-        /// Entires must be added in the same order as the corresponding field definitions.
+        /// Entries must be added in the same order as the corresponding field definitions.
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is negative.</exception>
         public void AddFieldRelativeVirtualAddress(FieldDefinitionHandle field, int offset)
@@ -1217,7 +1217,7 @@ namespace System.Reflection.Metadata.Ecma335
         /// <param name="language">
         /// GUID of the language.
         /// </param>
-        /// See https://github.com/dotnet/runtime/blob/master/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md
+        /// See https://github.com/dotnet/runtime/blob/main/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md
         public DocumentHandle AddDocument(BlobHandle name, GuidHandle hashAlgorithm, BlobHandle hash, GuidHandle language)
         {
             _documentTable.Add(new DocumentRow
@@ -1239,7 +1239,7 @@ namespace System.Reflection.Metadata.Ecma335
         /// </param>
         /// <param name="sequencePoints">
         /// Sequence Points blob, or nil if the method doesn't have sequence points.
-        /// See https://github.com/dotnet/runtime/blob/master/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md#sequence-points-blob.
+        /// See https://github.com/dotnet/runtime/blob/main/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md#sequence-points-blob.
         /// </param>
         public MethodDebugInformationHandle AddMethodDebugInformation(DocumentHandle document, BlobHandle sequencePoints)
         {
@@ -1315,7 +1315,7 @@ namespace System.Reflection.Metadata.Ecma335
         /// </summary>
         /// <param name="name">Name of the variable.</param>
         /// <param name="signature">
-        /// LocalConstantSig blob, see https://github.com/dotnet/runtime/blob/master/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md#localconstantsig-blob.
+        /// LocalConstantSig blob, see https://github.com/dotnet/runtime/blob/main/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md#localconstantsig-blob.
         /// </param>
         public LocalConstantHandle AddLocalConstant(StringHandle name, BlobHandle signature)
         {
@@ -1333,7 +1333,7 @@ namespace System.Reflection.Metadata.Ecma335
         /// </summary>
         /// <param name="parentScope">Parent scope handle.</param>
         /// <param name="imports">
-        /// Imports blob, see https://github.com/dotnet/runtime/blob/master/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md#imports-blob.
+        /// Imports blob, see https://github.com/dotnet/runtime/blob/main/src/libraries/System.Reflection.Metadata/specs/PortablePdb-Metadata.md#imports-blob.
         /// </param>
         public ImportScopeHandle AddImportScope(ImportScopeHandle parentScope, BlobHandle imports)
         {
@@ -1434,7 +1434,7 @@ namespace System.Reflection.Metadata.Ecma335
             // GenericParam             Owner, Number                       No**
             // GenericParamConstraint   Owner                               No**
             // ImplMap                  MemberForwarded                     No*
-            // InterfaceImpl            Class, Interface                    No**
+            // InterfaceImpl            Class                               No**
             // MethodImpl               Class                               No*
             // MethodSemantics          Association                         Yes
             // NestedClass              NestedClass                         No*
@@ -1551,27 +1551,12 @@ namespace System.Reflection.Metadata.Ecma335
 
         private void ValidateInterfaceImplTable()
         {
-            if (_interfaceImplTable.Count == 0)
+            for (int i = 1; i < _interfaceImplTable.Count; i++)
             {
-                return;
-            }
-
-            InterfaceImplRow current, previous = _interfaceImplTable[0];
-            for (int i = 1; i < _interfaceImplTable.Count; i++, previous = current)
-            {
-                current = _interfaceImplTable[i];
-
-                if (current.Class > previous.Class)
+                if (_interfaceImplTable[i - 1].Class > _interfaceImplTable[i].Class)
                 {
-                    continue;
+                    Throw.InvalidOperation_TableNotSorted(TableIndex.InterfaceImpl);
                 }
-
-                if (previous.Class == current.Class && current.Interface > previous.Interface)
-                {
-                    continue;
-                }
-
-                Throw.InvalidOperation_TableNotSorted(TableIndex.InterfaceImpl);
             }
         }
 
@@ -1887,7 +1872,7 @@ namespace System.Reflection.Metadata.Ecma335
             Debug.Assert(metadataSizes.MetadataTableStreamSize == endPosition - startPosition);
         }
 
-        private void SerializeTablesHeader(BlobBuilder writer, MetadataSizes metadataSizes)
+        private static void SerializeTablesHeader(BlobBuilder writer, MetadataSizes metadataSizes)
         {
             int startPosition = writer.Count;
 

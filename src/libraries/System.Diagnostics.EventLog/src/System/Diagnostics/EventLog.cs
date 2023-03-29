@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -23,6 +24,7 @@ namespace System.Diagnostics
     {
         private const string EventLogKey = "SYSTEM\\CurrentControlSet\\Services\\EventLog";
         internal const string DllName = "EventLogMessages.dll";
+        internal const string AltDllName = "System.Diagnostics.EventLog.Messages.dll";
         private const string eventLogMutexName = "netfxeventlog.1.0";
         private const int DefaultMaxSize = 512 * 1024;
 
@@ -235,7 +237,7 @@ namespace System.Diagnostics
             CreateEventSource(new EventSourceCreationData(source, logName, "."));
         }
 
-        [Obsolete("This method has been deprecated.  Please use System.Diagnostics.EventLog.CreateEventSource(EventSourceCreationData sourceData) instead.  https://go.microsoft.com/fwlink/?linkid=14202")]
+        [Obsolete("EventLog.CreateEventSource has been deprecated. Use System.Diagnostics.EventLog.CreateEventSource(EventSourceCreationData sourceData) instead.")]
         public static void CreateEventSource(string source, string logName, string machineName)
         {
             CreateEventSource(new EventSourceCreationData(source, logName, machineName));
@@ -243,8 +245,7 @@ namespace System.Diagnostics
 
         public static void CreateEventSource(EventSourceCreationData sourceData)
         {
-            if (sourceData == null)
-                throw new ArgumentNullException(nameof(sourceData));
+            ArgumentNullException.ThrowIfNull(sourceData);
 
             string logName = sourceData.LogName;
             string source = sourceData.Source;
@@ -319,7 +320,7 @@ namespace System.Diagnostics
                         }
 
                         logKey = eventKey.CreateSubKey(logName);
-                        SetSpecialLogRegValues(logKey, logName);
+                        SetSpecialLogRegValues(logKey);
                         // A source with the same name as the log has to be created
                         // by default. It is the behavior expected by EventLog API.
                         sourceLogKey = logKey.CreateSubKey(logName);
@@ -330,7 +331,7 @@ namespace System.Diagnostics
                     {
                         if (!createLogKey)
                         {
-                            SetSpecialLogRegValues(logKey, logName);
+                            SetSpecialLogRegValues(logKey);
                         }
 
                         sourceKey = logKey.CreateSubKey(source);
@@ -690,9 +691,27 @@ namespace System.Diagnostics
             return null;
         }
 
+        [UnconditionalSuppressMessage("SingleFile", "IL3000: Avoid accessing Assembly file path when publishing as a single file",
+            Justification = "The code handles if the path is null by calling AppContext.BaseDirectory")]
         internal static string GetDllPath(string machineName)
         {
-            return Path.Combine(NetFrameworkUtils.GetLatestBuildDllDirectory(machineName), DllName);
+            string dllPath = Path.Combine(NetFrameworkUtils.GetLatestBuildDllDirectory(machineName), DllName);
+
+            if (machineName == "." && !File.Exists(dllPath))
+            {
+                // use this assembly directory
+                string assmLocation = typeof(EventLog).Assembly.Location;
+                if (!string.IsNullOrEmpty(assmLocation))
+                {
+                    dllPath = Path.Combine(Path.GetDirectoryName(assmLocation), AltDllName);
+                }
+                else
+                {
+                    dllPath = Path.Combine(AppContext.BaseDirectory, AltDllName);
+                }
+            }
+
+            return dllPath;
         }
 
         public static bool SourceExists(string source)
@@ -749,7 +768,7 @@ namespace System.Diagnostics
             _underlyingEventLog.RegisterDisplayName(resourceFile, resourceId);
         }
 
-        private static void SetSpecialLogRegValues(RegistryKey logKey, string logName)
+        private static void SetSpecialLogRegValues(RegistryKey logKey)
         {
             // Set all the default values for this log.  AutoBackupLogfiles only makes sense in
             // Win2000 SP4, WinXP SP1, and Win2003, but it should alright elsewhere.
@@ -829,7 +848,7 @@ namespace System.Diagnostics
 
                         if (sb.Length > 0)
                         {
-                            int num = -1;
+                            int num;
                             if (int.TryParse(sb.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out num))
                             {
                                 largestNumber = Math.Max(largestNumber, num);
@@ -1034,8 +1053,7 @@ namespace System.Diagnostics
         // The EventLog.set_Source used to do some normalization and throw some exceptions.  We mimic that behavior here.
         private static string CheckAndNormalizeSourceName(string source)
         {
-            if (source == null)
-                source = string.Empty;
+            source ??= string.Empty;
 
             // this 254 limit is the max length of a registry key.
             if (source.Length + EventLogKey.Length > 254)

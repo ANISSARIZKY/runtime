@@ -12,7 +12,6 @@ namespace Tests.Integration
     public class ConstructorInjectionTests
     {
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void SimpleConstructorInjection()
         {
             var container = ContainerFactory.Create();
@@ -53,7 +52,7 @@ namespace Tests.Integration
             var container = GetContainerWithCatalog();
             var a = container.GetExportedValue<AWithOptionalParameter>();
 
-            // A should verify that it receieved optional arugments properly
+            // A should verify that it receieved optional arguments properly
             Assert.NotNull(a);
         }
 
@@ -177,7 +176,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void ImportMany_ConstructorParameter_OnNonAssiganbleType_ShouldThrowCompositionException()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(InvalidImportManyCI));

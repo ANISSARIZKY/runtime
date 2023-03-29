@@ -6,8 +6,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 
-using Internal.Runtime.CompilerServices;
-
 namespace System
 {
     /// <summary>
@@ -15,7 +13,7 @@ namespace System
     /// </summary>
     public static class BitConverter
     {
-        // This field indicates the "endianess" of the architecture.
+        // This field indicates the "endianness" of the architecture.
         // The value is set to true if the architecture is
         // little endian; false if it is big endian.
 #if BIGENDIAN
@@ -346,6 +344,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A character representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than the length of a <see cref="char"/>.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static char ToChar(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(char))
@@ -367,9 +366,9 @@ namespace System
             if (value == null)
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.value);
             if (unchecked((uint)startIndex) >= unchecked((uint)value.Length))
-                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_Index);
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_IndexMustBeLess);
             if (startIndex > value.Length - sizeof(short))
-                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ArrayPlusOffTooSmall, ExceptionArgument.value);
+                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ByteArrayTooSmallForValue, ExceptionArgument.value);
 
             return Unsafe.ReadUnaligned<short>(ref value[startIndex]);
         }
@@ -380,6 +379,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A 16-bit signed integer representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 2.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static short ToInt16(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(short))
@@ -404,9 +404,9 @@ namespace System
             if (value == null)
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.value);
             if (unchecked((uint)startIndex) >= unchecked((uint)value.Length))
-                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_Index);
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_IndexMustBeLess);
             if (startIndex > value.Length - sizeof(int))
-                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ArrayPlusOffTooSmall, ExceptionArgument.value);
+                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ByteArrayTooSmallForValue, ExceptionArgument.value);
 
             return Unsafe.ReadUnaligned<int>(ref value[startIndex]);
         }
@@ -417,6 +417,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A 32-bit signed integer representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 4.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ToInt32(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(int))
@@ -441,9 +442,9 @@ namespace System
             if (value == null)
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.value);
             if (unchecked((uint)startIndex) >= unchecked((uint)value.Length))
-                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_Index);
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_IndexMustBeLess);
             if (startIndex > value.Length - sizeof(long))
-                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ArrayPlusOffTooSmall, ExceptionArgument.value);
+                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ByteArrayTooSmallForValue, ExceptionArgument.value);
 
             return Unsafe.ReadUnaligned<long>(ref value[startIndex]);
         }
@@ -454,6 +455,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A 64-bit signed integer representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 8.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long ToInt64(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(long))
@@ -480,6 +482,7 @@ namespace System
         /// <returns>A 16-bit unsigned integer representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 2.</exception>
         [CLSCompliant(false)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ushort ToUInt16(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(ushort))
@@ -509,6 +512,7 @@ namespace System
         /// <returns>A 32-bit unsigned integer representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 4.</exception>
         [CLSCompliant(false)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static uint ToUInt32(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(uint))
@@ -538,6 +542,7 @@ namespace System
         /// <returns>A 64-bit unsigned integer representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 8.</exception>
         [CLSCompliant(false)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong ToUInt64(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(ulong))
@@ -562,6 +567,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A half-precision floating-point value representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 2.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe Half ToHalf(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(Half))
@@ -589,6 +595,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A single-precision floating-point value representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 4.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float ToSingle(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(float))
@@ -616,6 +623,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A double-precision floating-point value representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 8.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double ToDouble(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(double))
@@ -648,42 +656,37 @@ namespace System
             if (value == null)
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.value);
             if (startIndex < 0 || startIndex >= value.Length && startIndex > 0)
-                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_Index);
-            if (length < 0)
-                throw new ArgumentOutOfRangeException(nameof(length), SR.ArgumentOutOfRange_GenericPositive);
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_IndexMustBeLess);
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
             if (startIndex > value.Length - length)
-                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ArrayPlusOffTooSmall, ExceptionArgument.value);
+                ThrowHelper.ThrowArgumentException(ExceptionResource.Arg_ByteArrayTooSmallForValue, ExceptionArgument.value);
 
             if (length == 0)
             {
                 return string.Empty;
             }
 
-            if (length > (int.MaxValue / 3))
+            // (int.MaxValue / 3) == 715,827,882 Bytes == 699 MB
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, int.MaxValue / 3);
+
+            string result = string.FastAllocateString(length * 3 - 1);
+
+            var dst = new Span<char>(ref result.GetRawStringData(), result.Length);
+            var src = new ReadOnlySpan<byte>(value, startIndex, length);
+            int i = 0;
+            int j = 0;
+            byte b = src[i++];
+            dst[j++] = HexConverter.ToCharUpper(b >> 4);
+            dst[j++] = HexConverter.ToCharUpper(b);
+            while (i < src.Length)
             {
-                // (int.MaxValue / 3) == 715,827,882 Bytes == 699 MB
-                throw new ArgumentOutOfRangeException(nameof(length), SR.Format(SR.ArgumentOutOfRange_LengthTooLarge, int.MaxValue / 3));
-            }
-
-            return string.Create(length * 3 - 1, (value, startIndex, length), static (dst, state) =>
-            {
-                var src = new ReadOnlySpan<byte>(state.value, state.startIndex, state.length);
-
-                int i = 0;
-                int j = 0;
-
-                byte b = src[i++];
+                b = src[i++];
+                dst[j++] = '-';
                 dst[j++] = HexConverter.ToCharUpper(b >> 4);
                 dst[j++] = HexConverter.ToCharUpper(b);
+            }
 
-                while (i < src.Length)
-                {
-                    b = src[i++];
-                    dst[j++] = '-';
-                    dst[j++] = HexConverter.ToCharUpper(b >> 4);
-                    dst[j++] = HexConverter.ToCharUpper(b);
-                }
-            });
+            return result;
         }
 
         /// <summary>
@@ -733,9 +736,9 @@ namespace System
             if (value == null)
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.value);
             if (startIndex < 0)
-                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_Index);
-            if (startIndex > value.Length - 1)
-                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_Index); // differs from other overloads, which throw base ArgumentException
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_IndexMustBeLess);
+            if (startIndex >= value.Length)
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.startIndex, ExceptionResource.ArgumentOutOfRange_IndexMustBeLess); // differs from other overloads, which throw base ArgumentException
 
             return value[startIndex] != 0;
         }
@@ -746,6 +749,7 @@ namespace System
         /// <param name="value">A read-only span containing the bytes to convert.</param>
         /// <returns>A Boolean representing the converted bytes.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="value"/> is less than 1.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool ToBoolean(ReadOnlySpan<byte> value)
         {
             if (value.Length < sizeof(byte))
@@ -758,72 +762,32 @@ namespace System
         /// </summary>
         /// <param name="value">The number to convert.</param>
         /// <returns>A 64-bit signed integer whose bits are identical to <paramref name="value"/>.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe long DoubleToInt64Bits(double value)
-        {
-            // Workaround for https://github.com/dotnet/runtime/issues/11413
-            if (Sse2.X64.IsSupported)
-            {
-                Vector128<long> vec = Vector128.CreateScalarUnsafe(value).AsInt64();
-                return Sse2.X64.ConvertToInt64(vec);
-            }
-
-            return *((long*)&value);
-        }
+        [Intrinsic]
+        public static unsafe long DoubleToInt64Bits(double value) => Unsafe.BitCast<double, long>(value);
 
         /// <summary>
         /// Converts the specified 64-bit signed integer to a double-precision floating point number.
         /// </summary>
         /// <param name="value">The number to convert.</param>
         /// <returns>A double-precision floating point number whose bits are identical to <paramref name="value"/>.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe double Int64BitsToDouble(long value)
-        {
-            // Workaround for https://github.com/dotnet/runtime/issues/11413
-            if (Sse2.X64.IsSupported)
-            {
-                Vector128<double> vec = Vector128.CreateScalarUnsafe(value).AsDouble();
-                return vec.ToScalar();
-            }
-
-            return *((double*)&value);
-        }
+        [Intrinsic]
+        public static unsafe double Int64BitsToDouble(long value) => Unsafe.BitCast<long, double>(value);
 
         /// <summary>
         /// Converts the specified single-precision floating point number to a 32-bit signed integer.
         /// </summary>
         /// <param name="value">The number to convert.</param>
         /// <returns>A 32-bit signed integer whose bits are identical to <paramref name="value"/>.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int SingleToInt32Bits(float value)
-        {
-            // Workaround for https://github.com/dotnet/runtime/issues/11413
-            if (Sse2.IsSupported)
-            {
-                Vector128<int> vec = Vector128.CreateScalarUnsafe(value).AsInt32();
-                return Sse2.ConvertToInt32(vec);
-            }
-
-            return *((int*)&value);
-        }
+        [Intrinsic]
+        public static unsafe int SingleToInt32Bits(float value) => Unsafe.BitCast<float, int>(value);
 
         /// <summary>
         /// Converts the specified 32-bit signed integer to a single-precision floating point number.
         /// </summary>
         /// <param name="value">The number to convert.</param>
         /// <returns>A single-precision floating point number whose bits are identical to <paramref name="value"/>.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe float Int32BitsToSingle(int value)
-        {
-            // Workaround for https://github.com/dotnet/runtime/issues/11413
-            if (Sse2.IsSupported)
-            {
-                Vector128<float> vec = Vector128.CreateScalarUnsafe(value).AsSingle();
-                return vec.ToScalar();
-            }
-
-            return *((float*)&value);
-        }
+        [Intrinsic]
+        public static unsafe float Int32BitsToSingle(int value) => Unsafe.BitCast<int, float>(value);
 
         /// <summary>
         /// Converts the specified half-precision floating point number to a 16-bit signed integer.
@@ -831,10 +795,7 @@ namespace System
         /// <param name="value">The number to convert.</param>
         /// <returns>A 16-bit signed integer whose bits are identical to <paramref name="value"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe short HalfToInt16Bits(Half value)
-        {
-            return *((short*)&value);
-        }
+        public static unsafe short HalfToInt16Bits(Half value) => (short)value._value;
 
         /// <summary>
         /// Converts the specified 16-bit signed integer to a half-precision floating point number.
@@ -842,9 +803,60 @@ namespace System
         /// <param name="value">The number to convert.</param>
         /// <returns>A half-precision floating point number whose bits are identical to <paramref name="value"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe Half Int16BitsToHalf(short value)
-        {
-            return *(Half*)&value;
-        }
+        public static unsafe Half Int16BitsToHalf(short value) => new Half((ushort)(value));
+
+        /// <summary>
+        /// Converts the specified double-precision floating point number to a 64-bit unsigned integer.
+        /// </summary>
+        /// <param name="value">The number to convert.</param>
+        /// <returns>A 64-bit unsigned integer whose bits are identical to <paramref name="value"/>.</returns>
+        [CLSCompliant(false)]
+        [Intrinsic]
+        public static unsafe ulong DoubleToUInt64Bits(double value) => Unsafe.BitCast<double, ulong>(value);
+
+        /// <summary>
+        /// Converts the specified 64-bit unsigned integer to a double-precision floating point number.
+        /// </summary>
+        /// <param name="value">The number to convert.</param>
+        /// <returns>A double-precision floating point number whose bits are identical to <paramref name="value"/>.</returns>
+        [CLSCompliant(false)]
+        [Intrinsic]
+        public static unsafe double UInt64BitsToDouble(ulong value) => Unsafe.BitCast<ulong, double>(value);
+
+        /// <summary>
+        /// Converts the specified single-precision floating point number to a 32-bit unsigned integer.
+        /// </summary>
+        /// <param name="value">The number to convert.</param>
+        /// <returns>A 32-bit unsigned integer whose bits are identical to <paramref name="value"/>.</returns>
+        [CLSCompliant(false)]
+        [Intrinsic]
+        public static unsafe uint SingleToUInt32Bits(float value) => Unsafe.BitCast<float, uint>(value);
+
+        /// <summary>
+        /// Converts the specified 32-bit unsigned integer to a single-precision floating point number.
+        /// </summary>
+        /// <param name="value">The number to convert.</param>
+        /// <returns>A single-precision floating point number whose bits are identical to <paramref name="value"/>.</returns>
+        [CLSCompliant(false)]
+        [Intrinsic]
+        public static unsafe float UInt32BitsToSingle(uint value) => Unsafe.BitCast<uint, float>(value);
+
+        /// <summary>
+        /// Converts the specified half-precision floating point number to a 16-bit unsigned integer.
+        /// </summary>
+        /// <param name="value">The number to convert.</param>
+        /// <returns>A 16-bit unsigned integer whose bits are identical to <paramref name="value"/>.</returns>
+        [CLSCompliant(false)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe ushort HalfToUInt16Bits(Half value) => value._value;
+
+        /// <summary>
+        /// Converts the specified 16-bit unsigned integer to a half-precision floating point number.
+        /// </summary>
+        /// <param name="value">The number to convert.</param>
+        /// <returns>A half-precision floating point number whose bits are identical to <paramref name="value"/>.</returns>
+        [CLSCompliant(false)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe Half UInt16BitsToHalf(ushort value) => new Half(value);
     }
 }

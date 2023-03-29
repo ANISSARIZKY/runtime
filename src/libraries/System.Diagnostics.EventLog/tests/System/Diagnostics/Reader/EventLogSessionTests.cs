@@ -93,7 +93,7 @@ namespace System.Diagnostics.Tests
                     using (EventLog eventLog = new EventLog())
                     {
                         eventLog.Source = source;
-                        eventLog.WriteEntry("Writing to event log.");
+                        Helpers.Retry(() => eventLog.WriteEntry("Writing to event log."));
                         Assert.NotEqual(0, Helpers.Retry((() => eventLog.Entries.Count)));
                         session.ClearLog(logName: log);
                         Assert.Equal(0,  Helpers.Retry((() => eventLog.Entries.Count)));
@@ -103,6 +103,18 @@ namespace System.Diagnostics.Tests
                 {
                     EventLog.DeleteEventSource(source);
                 }
+                session.CancelCurrentOperations();
+            }
+        }
+
+        [ConditionalFact(typeof(Helpers), nameof(Helpers.SupportsEventLogs))]
+        [SkipOnTargetFramework(TargetFrameworkMonikers.NetFramework)]
+        public void EventLogExceptionShouldHaveHResultSet()
+        {
+            using (var session = new EventLogSession())
+            {
+                EventLogNotFoundException exception = Assert.Throws<EventLogNotFoundException>(() => session.ExportLog(LogName, PathType.FilePath, LogName, GetTestFilePath()));
+                Assert.Equal(unchecked((int)0x80070002), exception.HResult);
                 session.CancelCurrentOperations();
             }
         }

@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 #pragma warning disable SA1028 // ignore whitespace warnings for generated code
@@ -53,7 +53,7 @@ namespace System.Security.Cryptography.Asn1
             {
                 AsnValueReader reader = new AsnValueReader(encoded.Span, ruleSet);
 
-                DecodeCore(ref reader, expectedTag, encoded, out RSAPrivateKeyAsn decoded);
+                DecodeCore(ref reader, expectedTag, out RSAPrivateKeyAsn decoded);
                 reader.ThrowIfNotEmpty();
                 return decoded;
             }
@@ -63,16 +63,16 @@ namespace System.Security.Cryptography.Asn1
             }
         }
 
-        internal static void Decode(ref AsnValueReader reader, ReadOnlyMemory<byte> rebind, out RSAPrivateKeyAsn decoded)
+        internal static void Decode(ref AsnValueReader reader, out RSAPrivateKeyAsn decoded)
         {
-            Decode(ref reader, Asn1Tag.Sequence, rebind, out decoded);
+            Decode(ref reader, Asn1Tag.Sequence, out decoded);
         }
 
-        internal static void Decode(ref AsnValueReader reader, Asn1Tag expectedTag, ReadOnlyMemory<byte> rebind, out RSAPrivateKeyAsn decoded)
+        internal static void Decode(ref AsnValueReader reader, Asn1Tag expectedTag, out RSAPrivateKeyAsn decoded)
         {
             try
             {
-                DecodeCore(ref reader, expectedTag, rebind, out decoded);
+                DecodeCore(ref reader, expectedTag, out decoded);
             }
             catch (AsnContentException e)
             {
@@ -80,7 +80,7 @@ namespace System.Security.Cryptography.Asn1
             }
         }
 
-        private static void DecodeCore(ref AsnValueReader reader, Asn1Tag expectedTag, ReadOnlyMemory<byte> rebind, out RSAPrivateKeyAsn decoded)
+        private static void DecodeCore(ref AsnValueReader reader, Asn1Tag expectedTag, out RSAPrivateKeyAsn decoded)
         {
             decoded = default;
             AsnValueReader sequenceReader = reader.ReadSequence(expectedTag);

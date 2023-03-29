@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Threading;
 
 namespace System.Net.Security
@@ -12,8 +11,8 @@ namespace System.Net.Security
     //
     internal static class SSPIHandleCache
     {
-        private const int c_MaxCacheSize = 0x1F;  // must a (power of 2) - 1
-        private static readonly SafeCredentialReference[] s_cacheSlots = new SafeCredentialReference[c_MaxCacheSize + 1];
+        private const int MaxCacheSize = 0x1F;  // must a (power of 2) - 1
+        private static readonly SafeCredentialReference?[] s_cacheSlots = new SafeCredentialReference[MaxCacheSize + 1];
         private static int s_current = -1;
 
         internal static void CacheCredential(SafeFreeCredentials newHandle)
@@ -26,10 +25,9 @@ namespace System.Net.Security
                     return;
                 }
 
-                int index = Interlocked.Increment(ref s_current) & c_MaxCacheSize;
-                newRef = Interlocked.Exchange<SafeCredentialReference>(ref s_cacheSlots[index], newRef);
+                int index = Interlocked.Increment(ref s_current) & MaxCacheSize;
 
-                newRef?.Dispose();
+                Interlocked.Exchange(ref s_cacheSlots[index], newRef)?.Dispose();
             }
             catch (Exception e)
             {

@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks.Sources;
-using Internal.Runtime.CompilerServices;
 
 namespace System.Threading.Tasks
 {
@@ -56,8 +55,8 @@ namespace System.Threading.Tasks
     [StructLayout(LayoutKind.Auto)]
     public readonly struct ValueTask : IEquatable<ValueTask>
     {
-        /// <summary>A task canceled using `new CancellationToken(true)`.</summary>
-        private static readonly Task s_canceledTask = Task.FromCanceled(new CancellationToken(canceled: true));
+        /// <summary>A task canceled using `new CancellationToken(true)`. Lazily created only when first needed.</summary>
+        private static volatile Task? s_canceledTask;
 
         /// <summary>null if representing a successful synchronous completion, otherwise a <see cref="Task"/> or a <see cref="IValueTaskSource"/>.</summary>
         internal readonly object? _obj;
@@ -148,7 +147,7 @@ namespace System.Threading.Tasks
         public override int GetHashCode() => _obj?.GetHashCode() ?? 0;
 
         /// <summary>Returns a value indicating whether this value is equal to a specified <see cref="object"/>.</summary>
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj is ValueTask &&
             Equals((ValueTask)obj);
 
@@ -216,7 +215,8 @@ namespace System.Threading.Tasks
                             return task;
                         }
 
-                        return s_canceledTask;
+                        // Benign race condition to initialize cached task, as identity doesn't matter.
+                        return s_canceledTask ??= Task.FromCanceled(new CancellationToken(canceled: true));
                     }
                     else
                     {
@@ -239,8 +239,16 @@ namespace System.Threading.Tasks
                     // This could only happen if the IValueTaskSource passed the wrong state
                     // or if this callback were invoked multiple times such that the state
                     // was previously nulled out.
-                    ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.state);
+                    ThrowUnexpectedStateForKnownCallback(state);
                     return;
+
+                    static void ThrowUnexpectedStateForKnownCallback(object? state) =>
+                        throw new ArgumentOutOfRangeException(
+                            nameof(state),
+                            state is ValueTaskSourceAsTask vsts ?
+                                $"{nameof(ValueTaskSourceAsTask)}.{nameof(_source)} : {vsts._source}" :
+                                $"{nameof(state)} : {state}",
+                            SR.Argument_UnexpectedStateForKnownCallback);
                 }
 
                 vtst._source = null;
@@ -398,6 +406,18 @@ namespace System.Threading.Tasks
             }
         }
 
+        /// <summary>
+        /// Transfers the <see cref="ValueTask{TResult}"/> to a <see cref="ValueTask"/> instance.
+        ///
+        /// The <see cref="ValueTask{TResult}"/> should not be used after calling this method.
+        /// </summary>
+        internal static ValueTask DangerousCreateFromTypedValueTask<TResult>(ValueTask<TResult> valueTask)
+        {
+            Debug.Assert(valueTask._obj is null or Task or IValueTaskSource, "If the ValueTask<>'s backing object is an IValueTaskSource<TResult>, it must also be IValueTaskSource.");
+
+            return new ValueTask(valueTask._obj, valueTask._token, valueTask._continueOnCapturedContext);
+        }
+
         /// <summary>Gets an awaiter for this <see cref="ValueTask"/>.</summary>
         public ValueTaskAwaiter GetAwaiter() => new ValueTaskAwaiter(in this);
 
@@ -441,7 +461,7 @@ namespace System.Threading.Tasks
     public readonly struct ValueTask<TResult> : IEquatable<ValueTask<TResult>>
     {
         /// <summary>A task canceled using `new CancellationToken(true)`. Lazily created only when first needed.</summary>
-        private static Task<TResult>? s_canceledTask;
+        private static volatile Task<TResult>? s_canceledTask;
         /// <summary>null if <see cref="_result"/> has the result, otherwise a <see cref="Task{TResult}"/> or a <see cref="IValueTaskSource{TResult}"/>.</summary>
         internal readonly object? _obj;
         /// <summary>The result to be used if the operation completed successfully synchronously.</summary>
@@ -524,7 +544,7 @@ namespace System.Threading.Tasks
             0;
 
         /// <summary>Returns a value indicating whether this value is equal to a specified <see cref="object"/>.</summary>
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj is ValueTask<TResult> &&
             Equals((ValueTask<TResult>)obj);
 
@@ -602,13 +622,8 @@ namespace System.Threading.Tasks
                             return task;
                         }
 
-                        Task<TResult>? canceledTask = s_canceledTask;
-                        if (canceledTask == null)
-                        {
-                            // Benign race condition to initialize cached task, as identity doesn't matter.
-                            s_canceledTask = canceledTask = Task.FromCanceled<TResult>(new CancellationToken(true));
-                        }
-                        return canceledTask;
+                        // Benign race condition to initialize cached task, as identity doesn't matter.
+                        return s_canceledTask ??= Task.FromCanceled<TResult>(new CancellationToken(true));
                     }
                     else
                     {
@@ -631,8 +646,16 @@ namespace System.Threading.Tasks
                     // This could only happen if the IValueTaskSource<TResult> passed the wrong state
                     // or if this callback were invoked multiple times such that the state
                     // was previously nulled out.
-                    ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.state);
+                    ThrowUnexpectedStateForKnownCallback(state);
                     return;
+
+                    static void ThrowUnexpectedStateForKnownCallback(object? state) =>
+                        throw new ArgumentOutOfRangeException(
+                            nameof(state),
+                            state is ValueTaskSourceAsTask vsts ?
+                                $"{nameof(ValueTaskSourceAsTask)}.{nameof(_source)} : {vsts._source}" :
+                                $"{nameof(state)} : {state}",
+                            SR.Argument_UnexpectedStateForKnownCallback);
                 }
 
                 vtst._source = null;

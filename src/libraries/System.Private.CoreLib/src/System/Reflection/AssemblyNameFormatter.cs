@@ -1,7 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.IO;
+using System.Diagnostics;
 using System.Text;
 using System.Globalization;
 using System.Collections.Generic;
@@ -10,41 +10,39 @@ namespace System.Reflection
 {
     internal static class AssemblyNameFormatter
     {
-        public static string ComputeDisplayName(string? name, Version? version, string? cultureName, byte[]? pkt, AssemblyNameFlags flags, AssemblyContentType contentType)
+        public static string ComputeDisplayName(string name, Version? version, string? cultureName, byte[]? pkt, AssemblyNameFlags flags = 0, AssemblyContentType contentType = 0)
         {
             const int PUBLIC_KEY_TOKEN_LEN = 8;
+            Debug.Assert(name.Length != 0);
 
-            if (name == string.Empty)
-                throw new FileLoadException();
-
-            StringBuilder sb = new StringBuilder();
-            if (name != null)
-            {
-                sb.AppendQuoted(name);
-            }
+            var vsb = new ValueStringBuilder(stackalloc char[256]);
+            vsb.AppendQuoted(name);
 
             if (version != null)
             {
-                Version canonicalizedVersion = version.CanonicalizeVersion();
-                if (canonicalizedVersion.Major != ushort.MaxValue)
+                ushort major = (ushort)version.Major;
+                if (major != ushort.MaxValue)
                 {
-                    sb.Append(", Version=");
-                    sb.Append(canonicalizedVersion.Major);
+                    vsb.Append(", Version=");
+                    vsb.AppendSpanFormattable(major);
 
-                    if (canonicalizedVersion.Minor != ushort.MaxValue)
+                    ushort minor = (ushort)version.Minor;
+                    if (minor != ushort.MaxValue)
                     {
-                        sb.Append('.');
-                        sb.Append(canonicalizedVersion.Minor);
+                        vsb.Append('.');
+                        vsb.AppendSpanFormattable(minor);
 
-                        if (canonicalizedVersion.Build != ushort.MaxValue)
+                        ushort build = (ushort)version.Build;
+                        if (build != ushort.MaxValue)
                         {
-                            sb.Append('.');
-                            sb.Append(canonicalizedVersion.Build);
+                            vsb.Append('.');
+                            vsb.AppendSpanFormattable(build);
 
-                            if (canonicalizedVersion.Revision != ushort.MaxValue)
+                            ushort revision = (ushort)version.Revision;
+                            if (revision != ushort.MaxValue)
                             {
-                                sb.Append('.');
-                                sb.Append(canonicalizedVersion.Revision);
+                                vsb.Append('.');
+                                vsb.AppendSpanFormattable(revision);
                             }
                         }
                     }
@@ -55,8 +53,8 @@ namespace System.Reflection
             {
                 if (cultureName.Length == 0)
                     cultureName = "neutral";
-                sb.Append(", Culture=");
-                sb.AppendQuoted(cultureName);
+                vsb.Append(", Culture=");
+                vsb.AppendQuoted(cultureName);
             }
 
             if (pkt != null)
@@ -64,27 +62,29 @@ namespace System.Reflection
                 if (pkt.Length > PUBLIC_KEY_TOKEN_LEN)
                     throw new ArgumentException();
 
-                sb.Append(", PublicKeyToken=");
+                vsb.Append(", PublicKeyToken=");
                 if (pkt.Length == 0)
-                    sb.Append("null");
+                {
+                    vsb.Append("null");
+                }
                 else
                 {
-                    sb.Append(HexConverter.ToString(pkt, HexConverter.Casing.Lower));
+                    HexConverter.EncodeToUtf16(pkt, vsb.AppendSpan(pkt.Length * 2), HexConverter.Casing.Lower);
                 }
             }
 
             if (0 != (flags & AssemblyNameFlags.Retargetable))
-                sb.Append(", Retargetable=Yes");
+                vsb.Append(", Retargetable=Yes");
 
             if (contentType == AssemblyContentType.WindowsRuntime)
-                sb.Append(", ContentType=WindowsRuntime");
+                vsb.Append(", ContentType=WindowsRuntime");
 
             // NOTE: By design (desktop compat) AssemblyName.FullName and ToString() do not include ProcessorArchitecture.
 
-            return sb.ToString();
+            return vsb.ToString();
         }
 
-        private static void AppendQuoted(this StringBuilder sb, string s)
+        private static void AppendQuoted(this ref ValueStringBuilder vsb, string s)
         {
             bool needsQuoting = false;
             const char quoteChar = '\"';
@@ -95,56 +95,35 @@ namespace System.Reflection
                 needsQuoting = true;
 
             if (needsQuoting)
-                sb.Append(quoteChar);
+                vsb.Append(quoteChar);
 
             for (int i = 0; i < s.Length; i++)
             {
-                bool addedEscape = false;
-                foreach (KeyValuePair<char, string> kv in EscapeSequences)
+                switch (s[i])
                 {
-                    string escapeReplacement = kv.Value;
-                    if (!(s[i] == escapeReplacement[0]))
+                    case '\\':
+                    case ',':
+                    case '=':
+                    case '\'':
+                    case '"':
+                        vsb.Append('\\');
+                        break;
+                    case '\t':
+                        vsb.Append("\\t");
                         continue;
-                    if ((s.Length - i) < escapeReplacement.Length)
+                    case '\r':
+                        vsb.Append("\\r");
                         continue;
-                    if (s.AsSpan(i, escapeReplacement.Length).SequenceEqual(escapeReplacement))
-                    {
-                        sb.Append('\\');
-                        sb.Append(kv.Key);
-                        addedEscape = true;
-                    }
+                    case '\n':
+                        vsb.Append("\\n");
+                        continue;
                 }
 
-                if (!addedEscape)
-                    sb.Append(s[i]);
+                vsb.Append(s[i]);
             }
 
             if (needsQuoting)
-                sb.Append(quoteChar);
+                vsb.Append(quoteChar);
         }
-
-        private static Version CanonicalizeVersion(this Version version)
-        {
-            ushort major = (ushort)version.Major;
-            ushort minor = (ushort)version.Minor;
-            ushort build = (ushort)version.Build;
-            ushort revision = (ushort)version.Revision;
-
-            if (major == version.Major && minor == version.Minor && build == version.Build && revision == version.Revision)
-                return version;
-
-            return new Version(major, minor, build, revision);
-        }
-
-        public static KeyValuePair<char, string>[] EscapeSequences =
-        {
-            new KeyValuePair<char, string>('\\', "\\"),
-            new KeyValuePair<char, string>(',', ","),
-            new KeyValuePair<char, string>('=', "="),
-            new KeyValuePair<char, string>('\'', "'"),
-            new KeyValuePair<char, string>('\"', "\""),
-            new KeyValuePair<char, string>('n', Environment.NewLineConst),
-            new KeyValuePair<char, string>('t', "\t"),
-        };
     }
 }

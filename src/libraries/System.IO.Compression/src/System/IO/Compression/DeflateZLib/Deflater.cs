@@ -53,22 +53,31 @@ namespace System.IO.Compression
                     memLevel = ZLibNative.Deflate_NoCompressionMemLevel;
                     break;
 
+                case CompressionLevel.SmallestSize:
+                    zlibCompressionLevel = ZLibNative.CompressionLevel.BestCompression;
+                    memLevel = ZLibNative.Deflate_DefaultMemLevel;
+                    break;
+
                 default:
                     throw new ArgumentOutOfRangeException(nameof(compressionLevel));
             }
 
             ZLibNative.CompressionStrategy strategy = ZLibNative.CompressionStrategy.DefaultStrategy;
 
+            ZLibNative.ZLibStreamHandle? zlibStream = null;
             ZErrorCode errC;
             try
             {
-                errC = ZLibNative.CreateZLibStreamForDeflate(out _zlibStream, zlibCompressionLevel,
+                errC = ZLibNative.CreateZLibStreamForDeflate(out zlibStream, zlibCompressionLevel,
                                                              windowBits, memLevel, strategy);
             }
             catch (Exception cause)
             {
+                zlibStream?.Dispose();
                 throw new ZLibException(SR.ZLibErrorDLLLoadError, cause);
             }
+
+            _zlibStream = zlibStream;
 
             switch (errC)
             {

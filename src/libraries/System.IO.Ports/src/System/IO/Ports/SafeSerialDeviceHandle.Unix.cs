@@ -12,7 +12,7 @@ namespace System.IO.Ports
 {
     internal sealed class SafeSerialDeviceHandle : SafeHandleMinusOneIsInvalid
     {
-        private SafeSerialDeviceHandle() : base(ownsHandle: true)
+        public SafeSerialDeviceHandle() : base(ownsHandle: true)
         {
         }
 
@@ -23,6 +23,8 @@ namespace System.IO.Ports
 
             if (handle.IsInvalid)
             {
+                handle.Dispose();
+
                 // exception type is matching Windows
                 throw new UnauthorizedAccessException(
                     SR.Format(SR.UnauthorizedAccess_IODenied_Port, portName),

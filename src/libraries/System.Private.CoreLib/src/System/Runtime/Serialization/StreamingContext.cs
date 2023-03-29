@@ -1,6 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
+
+#pragma warning disable CA1066 // Implement IEquatable when overriding Object.Equals
+
 namespace System.Runtime.Serialization
 {
     public readonly struct StreamingContext
@@ -18,7 +22,7 @@ namespace System.Runtime.Serialization
             _additionalContext = additional;
         }
 
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             if (!(obj is StreamingContext))
             {

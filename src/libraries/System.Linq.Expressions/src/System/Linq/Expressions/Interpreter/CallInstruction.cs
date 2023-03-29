@@ -16,13 +16,13 @@ namespace System.Linq.Expressions.Interpreter
         /// </summary>
         public abstract int ArgumentCount { get; }
 
+        private static bool CanCreateArbitraryDelegates => true;
+
         #region Construction
 
         public override string InstructionName => "Call";
 
-#if FEATURE_DLG_INVOKE
         private static readonly CacheDict<MethodInfo, CallInstruction> s_cache = new CacheDict<MethodInfo, CallInstruction>(256);
-#endif
 
         public static CallInstruction Create(MethodInfo info)
         {
@@ -47,9 +47,9 @@ namespace System.Linq.Expressions.Interpreter
                 return GetArrayAccessor(info, argumentCount);
             }
 
-#if !FEATURE_DLG_INVOKE
-            return new MethodInfoCallInstruction(info, argumentCount);
-#else
+            if (!CanCreateArbitraryDelegates)
+                return new MethodInfoCallInstruction(info, argumentCount);
+
             if (!info.IsStatic && info.DeclaringType!.IsValueType)
             {
                 return new MethodInfoCallInstruction(info, argumentCount);
@@ -72,12 +72,9 @@ namespace System.Linq.Expressions.Interpreter
 
             // see if we've created one w/ a delegate
             CallInstruction? res;
-            if (ShouldCache(info))
+            if (s_cache.TryGetValue(info, out res))
             {
-                if (s_cache.TryGetValue(info, out res))
-                {
-                    return res;
-                }
+                return res;
             }
 
             // create it
@@ -112,14 +109,10 @@ namespace System.Linq.Expressions.Interpreter
                 res = new MethodInfoCallInstruction(info, argumentCount);
             }
 
-            // cache it for future users if it's a reasonable method to cache
-            if (ShouldCache(info))
-            {
-                s_cache[info] = res;
-            }
+            // cache it for future users
+            s_cache[info] = res;
 
             return res;
-#endif
         }
 
         private static CallInstruction GetArrayAccessor(MethodInfo info, int argumentCount)
@@ -132,19 +125,19 @@ namespace System.Linq.Expressions.Interpreter
             {
                 case 1:
                     alternativeMethod = isGetter ?
-                        arrayType.GetMethod("GetValue", new[] { typeof(int) }) :
+                        typeof(Array).GetMethod("GetValue", new[] { typeof(int) }) :
                         typeof(CallInstruction).GetMethod(nameof(ArrayItemSetter1));
                     break;
 
                 case 2:
                     alternativeMethod = isGetter ?
-                        arrayType.GetMethod("GetValue", new[] { typeof(int), typeof(int) }) :
+                        typeof(Array).GetMethod("GetValue", new[] { typeof(int), typeof(int) }) :
                         typeof(CallInstruction).GetMethod(nameof(ArrayItemSetter2));
                     break;
 
                 case 3:
                     alternativeMethod = isGetter ?
-                        arrayType.GetMethod("GetValue", new[] { typeof(int), typeof(int), typeof(int) }) :
+                        typeof(Array).GetMethod("GetValue", new[] { typeof(int), typeof(int), typeof(int) }) :
                         typeof(CallInstruction).GetMethod(nameof(ArrayItemSetter3));
                     break;
             }
@@ -171,12 +164,6 @@ namespace System.Linq.Expressions.Interpreter
         {
             array.SetValue(value, index0, index1, index2);
         }
-#if FEATURE_DLG_INVOKE
-        private static bool ShouldCache(MethodInfo info)
-        {
-            return true;
-        }
-#endif
 
 #if FEATURE_FAST_CREATE
         /// <summary>
@@ -215,7 +202,6 @@ namespace System.Linq.Expressions.Interpreter
         }
 #endif
 
-#if FEATURE_DLG_INVOKE
         /// <summary>
         /// Uses reflection to create new instance of the appropriate ReflectedCaller
         /// </summary>
@@ -243,7 +229,6 @@ namespace System.Linq.Expressions.Interpreter
                 throw ContractUtils.Unreachable;
             }
         }
-#endif
 
         #endregion
 
@@ -387,7 +372,7 @@ namespace System.Linq.Expressions.Interpreter
         public override string ToString() => "Call(" + _target + ")";
     }
 
-    internal class ByRefMethodInfoCallInstruction : MethodInfoCallInstruction
+    internal sealed class ByRefMethodInfoCallInstruction : MethodInfoCallInstruction
     {
         private readonly ByRefUpdater[] _byrefArgs;
 

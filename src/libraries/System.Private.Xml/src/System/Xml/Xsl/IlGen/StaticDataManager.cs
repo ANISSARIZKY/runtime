@@ -4,6 +4,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Xml.Xsl.Qil;
 using System.Xml.Xsl.Runtime;
@@ -14,7 +15,7 @@ namespace System.Xml.Xsl.IlGen
     /// This internal class maintains a list of unique values.  Each unique value is assigned a unique ID, which can
     /// be used to quickly access the value, since it corresponds to the value's position in the list.
     /// </summary>
-    internal class UniqueList<T> where T : notnull
+    internal sealed class UniqueList<T> where T : notnull
     {
         private readonly Dictionary<T, int> _lookup = new Dictionary<T, int>();
         private readonly List<T> _list = new List<T>();
@@ -24,18 +25,12 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public int Add(T value)
         {
-            int id;
-
-            if (!_lookup.ContainsKey(value))
+            if (!_lookup.TryGetValue(value, out int id))
             {
                 // The value does not yet exist, so add it to the list
                 id = _list.Count;
                 _lookup.Add(value, id);
                 _list.Add(value);
-            }
-            else
-            {
-                id = _lookup[value];
             }
 
             return id;
@@ -58,7 +53,7 @@ namespace System.Xml.Xsl.IlGen
     ///   3. All Xml types that will be used at run-time
     ///   4. All global variables and parameters
     /// </summary>
-    internal class StaticDataManager
+    internal sealed class StaticDataManager
     {
         private UniqueList<string>? _uniqueNames;
         private UniqueList<Int32Pair>? _uniqueFilters;
@@ -74,8 +69,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public int DeclareName(string name)
         {
-            if (_uniqueNames == null)
-                _uniqueNames = new UniqueList<string>();
+            _uniqueNames ??= new UniqueList<string>();
 
             return _uniqueNames.Add(name);
         }
@@ -85,7 +79,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public string[]? Names
         {
-            get { return (_uniqueNames != null) ? _uniqueNames.ToArray() : null; }
+            get { return _uniqueNames?.ToArray(); }
         }
 
         /// <summary>
@@ -94,8 +88,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public int DeclareNameFilter(string locName, string nsUri)
         {
-            if (_uniqueFilters == null)
-                _uniqueFilters = new UniqueList<Int32Pair>();
+            _uniqueFilters ??= new UniqueList<Int32Pair>();
 
             return _uniqueFilters.Add(new Int32Pair(DeclareName(locName), DeclareName(nsUri)));
         }
@@ -106,7 +99,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public Int32Pair[]? NameFilters
         {
-            get { return (_uniqueFilters != null) ? _uniqueFilters.ToArray() : null; }
+            get { return _uniqueFilters?.ToArray(); }
         }
 
         /// <summary>
@@ -130,8 +123,7 @@ namespace System.Xml.Xsl.IlGen
             }
 
             // Add mappings to list and return index
-            if (_prefixMappingsList == null)
-                _prefixMappingsList = new List<StringPair[]>();
+            _prefixMappingsList ??= new List<StringPair[]>();
 
             _prefixMappingsList.Add(prefixMappings);
             return _prefixMappingsList.Count - 1;
@@ -142,7 +134,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public StringPair[][]? PrefixMappingsList
         {
-            get { return (_prefixMappingsList != null) ? _prefixMappingsList.ToArray() : null; }
+            get { return _prefixMappingsList?.ToArray(); }
         }
 
         /// <summary>
@@ -152,8 +144,7 @@ namespace System.Xml.Xsl.IlGen
         {
             int idx;
 
-            if (_globalNames == null)
-                _globalNames = new List<string>();
+            _globalNames ??= new List<string>();
 
             idx = _globalNames.Count;
             _globalNames.Add(name);
@@ -165,17 +156,16 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public string[]? GlobalNames
         {
-            get { return (_globalNames != null) ? _globalNames.ToArray() : null; }
+            get { return _globalNames?.ToArray(); }
         }
 
         /// <summary>
         /// Add early bound information to a list that is used by this query.  Return the index of
         /// the early bound information in the list.
         /// </summary>
-        public int DeclareEarlyBound(string namespaceUri, Type ebType)
+        public int DeclareEarlyBound(string namespaceUri, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type ebType)
         {
-            if (_earlyInfo == null)
-                _earlyInfo = new UniqueList<EarlyBoundInfo>();
+            _earlyInfo ??= new UniqueList<EarlyBoundInfo>();
 
             return _earlyInfo.Add(new EarlyBoundInfo(namespaceUri, ebType));
         }
@@ -183,16 +173,7 @@ namespace System.Xml.Xsl.IlGen
         /// <summary>
         /// Return an array of all early bound information that is used by the query (null if none is used).
         /// </summary>
-        public EarlyBoundInfo[]? EarlyBound
-        {
-            get
-            {
-                if (_earlyInfo != null)
-                    return _earlyInfo.ToArray();
-
-                return null;
-            }
-        }
+        public EarlyBoundInfo[]? EarlyBound => _earlyInfo?.ToArray();
 
         /// <summary>
         /// Add "type" to the list of unique types that are used by this query.  Return the index of
@@ -200,8 +181,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public int DeclareXmlType(XmlQueryType type)
         {
-            if (_uniqueXmlTypes == null)
-                _uniqueXmlTypes = new UniqueList<XmlQueryType>();
+            _uniqueXmlTypes ??= new UniqueList<XmlQueryType>();
 
             XmlQueryTypeFactory.CheckSerializability(type);
             return _uniqueXmlTypes.Add(type);
@@ -212,7 +192,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public XmlQueryType[]? XmlTypes
         {
-            get { return (_uniqueXmlTypes != null) ? _uniqueXmlTypes.ToArray() : null; }
+            get { return _uniqueXmlTypes?.ToArray(); }
         }
 
         /// <summary>
@@ -221,8 +201,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public int DeclareCollation(string collation)
         {
-            if (_uniqueCollations == null)
-                _uniqueCollations = new UniqueList<XmlCollation>();
+            _uniqueCollations ??= new UniqueList<XmlCollation>();
 
             return _uniqueCollations.Add(XmlCollation.Create(collation));
         }
@@ -232,7 +211,7 @@ namespace System.Xml.Xsl.IlGen
         /// </summary>
         public XmlCollation[]? Collations
         {
-            get { return (_uniqueCollations != null) ? _uniqueCollations.ToArray() : null; }
+            get { return _uniqueCollations?.ToArray(); }
         }
     }
 }

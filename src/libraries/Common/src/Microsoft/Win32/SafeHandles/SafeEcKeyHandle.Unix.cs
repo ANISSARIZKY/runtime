@@ -10,7 +10,7 @@ namespace Microsoft.Win32.SafeHandles
 {
     internal sealed class SafeEcKeyHandle : SafeHandle
     {
-        private SafeEcKeyHandle() :
+        public SafeEcKeyHandle() :
             base(IntPtr.Zero, ownsHandle: true)
         {
         }
@@ -37,11 +37,15 @@ namespace Microsoft.Win32.SafeHandles
 
             if (!Interop.Crypto.EcKeyUpRef(handle))
             {
-                throw Interop.Crypto.CreateOpenSslCryptographicException();
+                Exception e = Interop.Crypto.CreateOpenSslCryptographicException();
+                safeHandle.Dispose();
+                throw e;
             }
 
             safeHandle.SetHandle(handle);
             return safeHandle;
         }
+
+        internal SafeEcKeyHandle DuplicateHandle() => DuplicateHandle(DangerousGetHandle());
     }
 }

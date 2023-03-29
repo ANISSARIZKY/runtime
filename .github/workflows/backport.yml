@@ -2,25 +2,35 @@ name: Backport PR to branch
 on:
   issue_comment:
     types: [created]
+  schedule:
+    # once a day at 13:00 UTC to cleanup old runs
+    - cron: '0 13 * * *'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
 
 jobs:
   backport:
-    if: github.event.issue.pull_request != '' && contains(github.event.comment.body, '/backport to')
-    runs-on: ubuntu-20.04
-    steps:
-    - name: Checkout repo
-      uses: actions/checkout@v2
-    - name: Run backport
-      uses: ./eng/actions/backport
-      with:
-        auth_token: ${{ secrets.GITHUB_TOKEN }}
-        pr_description_template: |
-          Backport of #%source_pr_number% to %target_branch%
+    if: ${{ contains(github.event.comment.body, '/backport to') || github.event_name == 'schedule' }}
+    uses: dotnet/arcade/.github/workflows/backport-base.yml@main
+    with:
+      pr_description_template: |
+        Backport of #%source_pr_number% to %target_branch%
 
-          /cc %cc_users%
+        /cc %cc_users%
 
-          ## Customer Impact
+        ## Customer Impact
 
-          ## Testing
+        ## Testing
 
-          ## Risk
+        ## Risk
+
+        **IMPORTANT**: If this backport is for a servicing release, please verify that:
+
+        - The PR target branch is `release/X.0-staging`, not `release/X.0`.
+
+        - If the change touches code that ships in a NuGet package, you have added the necessary [package authoring](https://github.com/dotnet/runtime/blob/main/docs/project/library-servicing.md) and gotten it explicitly reviewed.
+

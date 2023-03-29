@@ -8,6 +8,7 @@ namespace Microsoft.Win32.SafeHandles
 {
     public sealed partial class SafePipeHandle : Microsoft.Win32.SafeHandles.SafeHandleZeroOrMinusOneIsInvalid
     {
+        public SafePipeHandle() : base (default(bool)) { }
         public SafePipeHandle(System.IntPtr preexistingHandle, bool ownsHandle) : base (default(bool)) { }
         public override bool IsInvalid { get { throw null; } }
         protected override bool ReleaseHandle() { throw null; }
@@ -53,9 +54,11 @@ namespace System.IO.Pipes
         protected internal override void CheckPipePropertyOperations() { }
         public void Connect() { }
         public void Connect(int timeout) { }
+        public void Connect(System.TimeSpan timeout) { }
         public System.Threading.Tasks.Task ConnectAsync() { throw null; }
         public System.Threading.Tasks.Task ConnectAsync(int timeout) { throw null; }
         public System.Threading.Tasks.Task ConnectAsync(int timeout, System.Threading.CancellationToken cancellationToken) { throw null; }
+        public System.Threading.Tasks.Task ConnectAsync(System.TimeSpan timeout, System.Threading.CancellationToken cancellationToken) { throw null; }
         public System.Threading.Tasks.Task ConnectAsync(System.Threading.CancellationToken cancellationToken) { throw null; }
         ~NamedPipeClientStream() { }
     }

@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Xml;
@@ -9,6 +8,7 @@ using System.Xml.Schema;
 using System.Reflection;
 using System.Globalization;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.Xml.Xsl.Runtime
 {
@@ -16,22 +16,26 @@ namespace System.Xml.Xsl.Runtime
     /// Table of bound extension functions.  Once an extension function is bound and entered into the table, future bindings
     /// will be very fast.  This table is not thread-safe.
     /// </summary>
-    internal class XmlExtensionFunctionTable
+    internal sealed class XmlExtensionFunctionTable
     {
         private readonly Dictionary<XmlExtensionFunction, XmlExtensionFunction> _table;
-        private XmlExtensionFunction _funcCached;
+        private XmlExtensionFunction? _funcCached;
 
         public XmlExtensionFunctionTable()
         {
             _table = new Dictionary<XmlExtensionFunction, XmlExtensionFunction>();
         }
 
-        public XmlExtensionFunction Bind(string name, string namespaceUri, int numArgs, Type objectType, BindingFlags flags)
+        public XmlExtensionFunction Bind(
+            string name,
+            string namespaceUri,
+            int numArgs,
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.NonPublicMethods)] Type objectType,
+            BindingFlags flags)
         {
-            XmlExtensionFunction func;
+            XmlExtensionFunction? func;
 
-            if (_funcCached == null)
-                _funcCached = new XmlExtensionFunction();
+            _funcCached ??= new XmlExtensionFunction();
 
             // If the extension function already exists in the table, then binding has already been performed
             _funcCached.Init(name, namespaceUri, numArgs, objectType, flags);
@@ -52,20 +56,21 @@ namespace System.Xml.Xsl.Runtime
     /// <summary>
     /// This internal class contains methods that allow binding to extension functions and invoking them.
     /// </summary>
-    internal class XmlExtensionFunction
+    internal sealed class XmlExtensionFunction
     {
-        private string _namespaceUri;                // Extension object identifier
-        private string _name;                        // Name of this method
+        private string? _namespaceUri;                // Extension object identifier
+        private string? _name;                        // Name of this method
         private int _numArgs;                        // Argument count
-        private Type _objectType;                    // Type of the object which will be searched for matching methods
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.NonPublicMethods)]
+        private Type? _objectType;                    // Type of the object which will be searched for matching methods
         private BindingFlags _flags;                 // Modifiers that were used to search for a matching signature
         private int _hashCode;                       // Pre-computed hashcode
 
-        private MethodInfo _meth;                    // MethodInfo for extension function
-        private Type[] _argClrTypes;                 // Type array for extension function arguments
-        private Type _retClrType;                    // Type for extension function return value
-        private XmlQueryType[] _argXmlTypes;         // XmlQueryType array for extension function arguments
-        private XmlQueryType _retXmlType;            // XmlQueryType for extension function return value
+        private MethodInfo? _meth;                    // MethodInfo for extension function
+        private Type[]? _argClrTypes;                 // Type array for extension function arguments
+        private Type? _retClrType;                    // Type for extension function return value
+        private XmlQueryType[]? _argXmlTypes;         // XmlQueryType array for extension function arguments
+        private XmlQueryType? _retXmlType;            // XmlQueryType for extension function return value
 
         /// <summary>
         /// Constructor.
@@ -87,7 +92,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Constructor.
         /// </summary>
-        public XmlExtensionFunction(string name, string namespaceUri, int numArgs, Type objectType, BindingFlags flags)
+        public XmlExtensionFunction(string name, string namespaceUri, int numArgs, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods | DynamicallyAccessedMemberTypes.PublicMethods)] Type objectType, BindingFlags flags)
         {
             Init(name, namespaceUri, numArgs, objectType, flags);
         }
@@ -95,7 +100,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Initialize, but do not bind.
         /// </summary>
-        public void Init(string name, string namespaceUri, int numArgs, Type objectType, BindingFlags flags)
+        public void Init(string name, string namespaceUri, int numArgs, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods | DynamicallyAccessedMemberTypes.PublicMethods)] Type objectType, BindingFlags flags)
         {
             _name = name;
             _namespaceUri = namespaceUri;
@@ -115,7 +120,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Once Bind has been successfully called, Method will be non-null.
         /// </summary>
-        public MethodInfo Method
+        public MethodInfo? Method
         {
             get { return _meth; }
         }
@@ -126,14 +131,14 @@ namespace System.Xml.Xsl.Runtime
         /// </summary>
         public Type GetClrArgumentType(int index)
         {
-            return _argClrTypes[index];
+            return _argClrTypes![index];
         }
 
         /// <summary>
         /// Once Bind has been successfully called, the Clr type of the return value can be accessed.
         /// Note that this may be different than Method.GetParameterInfo().ReturnType.
         /// </summary>
-        public Type ClrReturnType
+        public Type? ClrReturnType
         {
             get { return _retClrType; }
         }
@@ -143,13 +148,13 @@ namespace System.Xml.Xsl.Runtime
         /// </summary>
         public XmlQueryType GetXmlArgumentType(int index)
         {
-            return _argXmlTypes[index];
+            return _argXmlTypes![index];
         }
 
         /// <summary>
         /// Once Bind has been successfully called, the inferred Xml type of the return value can be accessed.
         /// </summary>
-        public XmlQueryType XmlReturnType
+        public XmlQueryType? XmlReturnType
         {
             get { return _retXmlType; }
         }
@@ -159,7 +164,7 @@ namespace System.Xml.Xsl.Runtime
         /// </summary>
         public bool CanBind()
         {
-            MethodInfo[] methods = _objectType.GetMethods(_flags);
+            MethodInfo[] methods = _objectType!.GetMethods(_flags);
             bool ignoreCase = (_flags & BindingFlags.IgnoreCase) != 0;
             StringComparison comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -182,8 +187,8 @@ namespace System.Xml.Xsl.Runtime
         /// </summary>
         public void Bind()
         {
-            MethodInfo[] methods = _objectType.GetMethods(_flags);
-            MethodInfo methMatch = null;
+            MethodInfo[] methods = _objectType!.GetMethods(_flags);
+            MethodInfo? methMatch = null;
             bool ignoreCase = (_flags & BindingFlags.IgnoreCase) != 0;
             StringComparison comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -250,7 +255,7 @@ namespace System.Xml.Xsl.Runtime
                 //    Xslt functions allow Rtf.
                 // 2. Script arguments should allow node-sets which are not statically known
                 //    to be Dod to be passed, so relax static typing in this case.
-                if (_namespaceUri.Length == 0)
+                if (_namespaceUri!.Length == 0)
                 {
                     if ((object)_argXmlTypes[i] == (object)XmlQueryTypeFactory.NodeNotRtf)
                         _argXmlTypes[i] = XmlQueryTypeFactory.Node;
@@ -271,10 +276,10 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Convert the incoming arguments to an array of CLR objects, and then invoke the external function on the "extObj" object instance.
         /// </summary>
-        public object Invoke(object extObj, object[] args)
+        public object? Invoke(object extObj, object?[] args)
         {
             Debug.Assert(_meth != null, "Must call Bind() before calling Invoke.");
-            Debug.Assert(args.Length == _argClrTypes.Length, "Mismatched number of actual and formal arguments.");
+            Debug.Assert(args.Length == _argClrTypes!.Length, "Mismatched number of actual and formal arguments.");
 
             try
             {
@@ -297,9 +302,9 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Return true if this XmlExtensionFunction has the same values as another XmlExtensionFunction.
         /// </summary>
-        public override bool Equals(object other)
+        public override bool Equals([NotNullWhen(true)] object? other)
         {
-            XmlExtensionFunction that = other as XmlExtensionFunction;
+            XmlExtensionFunction? that = other as XmlExtensionFunction;
             Debug.Assert(that != null);
 
             // Compare name, argument count, object type, and binding flags
@@ -333,7 +338,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Infer an Xml type from a Clr type using Xslt inference rules
         /// </summary>
-        private XmlQueryType InferXmlType(Type clrType)
+        private static XmlQueryType InferXmlType(Type clrType)
         {
             return XsltConvert.InferXsltType(clrType);
         }

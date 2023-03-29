@@ -98,8 +98,7 @@ mono_arch_create_specific_trampoline (gpointer arg1, MonoTrampolineType tramp_ty
 gpointer
 mono_arch_get_unbox_trampoline (MonoMethod *m, gpointer addr)
 {
-	MonoDomain *domain = mono_domain_get ();
-	MonoMemoryManager *mem_manager = m_method_get_mem_manager (domain, m);
+	MonoMemoryManager *mem_manager = m_method_get_mem_manager (m);
 	guint8 *buf = mono_mem_manager_code_reserve (mem_manager, 64), *code = buf;
 
 	// Pass the argument in a0.
@@ -113,8 +112,7 @@ mono_arch_get_unbox_trampoline (MonoMethod *m, gpointer addr)
 }
 
 gpointer
-mono_arch_build_imt_trampoline (MonoVTable *vtable, MonoDomain *domain,
-                                MonoIMTCheckItem **imt_entries, int count,
+mono_arch_build_imt_trampoline (MonoVTable *vtable, MonoIMTCheckItem **imt_entries, int count,
                                 gpointer fail_tramp)
 {
 	NOT_IMPLEMENTED;
@@ -124,7 +122,6 @@ mono_arch_build_imt_trampoline (MonoVTable *vtable, MonoDomain *domain,
 gpointer
 mono_arch_get_static_rgctx_trampoline (MonoMemoryManager *mem_manager, gpointer arg, gpointer addr)
 {
-	MonoDomain *domain = mono_domain_get ();
 	guint8 *buf = mono_mem_manager_code_reserve (mem_manager, 64), *code = buf;
 
 	// Pass the argument in the RGCTX register.
@@ -162,7 +159,6 @@ mono_arch_create_rgctx_lazy_fetch_trampoline (guint32 slot, MonoTrampInfo **info
 	}
 
 	guint8 *buf = mono_global_codeman_reserve (128 * depth), *code = buf;
-	guint8 **null_jumps = g_malloc0 (sizeof (guint8 *) * (depth + 2));
 
 	if (!is_mrgctx) {
 	} else
@@ -250,8 +246,7 @@ mono_arch_get_unbox_trampoline (MonoMethod *m, gpointer addr)
 }
 
 gpointer
-mono_arch_build_imt_trampoline (MonoVTable *vtable, MonoDomain *domain,
-                                MonoIMTCheckItem **imt_entries, int count,
+mono_arch_build_imt_trampoline (MonoVTable *vtable, MonoIMTCheckItem **imt_entries, int count,
                                 gpointer fail_tramp)
 {
 	g_assert_not_reached ();

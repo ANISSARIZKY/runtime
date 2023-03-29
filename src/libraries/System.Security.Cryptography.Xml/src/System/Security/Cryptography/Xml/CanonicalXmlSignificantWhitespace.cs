@@ -7,11 +7,11 @@ using System.Text;
 namespace System.Security.Cryptography.Xml
 {
     // the class that provides node subset state and canonicalization function to XmlSignificantWhitespace
-    internal class CanonicalXmlSignificantWhitespace : XmlSignificantWhitespace, ICanonicalizableNode
+    internal sealed class CanonicalXmlSignificantWhitespace : XmlSignificantWhitespace, ICanonicalizableNode
     {
         private bool _isInNodeSet;
 
-        public CanonicalXmlSignificantWhitespace(string strData, XmlDocument doc, bool defaultNodeSetInclusionState)
+        public CanonicalXmlSignificantWhitespace(string? strData, XmlDocument doc, bool defaultNodeSetInclusionState)
             : base(strData, doc)
         {
             _isInNodeSet = defaultNodeSetInclusionState;
@@ -33,8 +33,7 @@ namespace System.Security.Cryptography.Xml
         {
             if (IsInNodeSet && docPos == DocPosition.InRootElement)
             {
-                UTF8Encoding utf8 = new UTF8Encoding(false);
-                byte[] rgbData = utf8.GetBytes(Utils.EscapeWhitespaceData(Value));
+                byte[] rgbData = Encoding.UTF8.GetBytes(Utils.EscapeWhitespaceData(Value));
                 hash.TransformBlock(rgbData, 0, rgbData.Length, rgbData, 0);
             }
         }

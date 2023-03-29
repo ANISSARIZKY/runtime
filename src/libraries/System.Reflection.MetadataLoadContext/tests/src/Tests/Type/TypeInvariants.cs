@@ -383,6 +383,13 @@ namespace System.Reflection.Tests
             const BindingFlags bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
             foreach (MemberInfo mem in type.GetMember("*", MemberTypes.All, bf))
             {
+                // Workaround: Do not try to test Array.Initialize, since one of its locals is a function pointer.
+                // Delete this workaround when https://github.com/dotnet/runtime/issues/69273 is addressed.
+                if (mem.DeclaringType == mem.DeclaringType.Assembly.GetType("System.Array") && mem.Name == "Initialize")
+                {
+                    continue;
+                }
+
                 string s = mem.ToString();
                 Assert.Equal(type, mem.ReflectedType);
                 Type declaringType = mem.DeclaringType;
@@ -395,7 +402,7 @@ namespace System.Reflection.Tests
                 {
                     ICustomAttributeProvider icp = mem;
                     Assert.Throws<InvalidOperationException>(() => icp.IsDefined(null, inherit: false));
-                    Assert.Throws<InvalidOperationException>(() => icp.GetCustomAttributes(null, inherit: false)); ;
+                    Assert.Throws<InvalidOperationException>(() => icp.GetCustomAttributes(null, inherit: false));
                     Assert.Throws<InvalidOperationException>(() => icp.GetCustomAttributes(inherit: false));
 
                     if (mem is MethodBase mb)
@@ -603,7 +610,7 @@ namespace System.Reflection.Tests
             Assert.True(position >= 0);
             GenericParameterAttributes attributes = type.GenericParameterAttributes;
 
-            Assert.Equal<Type>(Array.Empty<Type>(), type.GetGenericArguments());
+            Assert.Equal<Type>(Type.EmptyTypes, type.GetGenericArguments());
 
             Assert.False(type.IsByRefLike());
 

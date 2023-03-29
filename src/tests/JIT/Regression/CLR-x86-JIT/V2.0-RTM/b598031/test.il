@@ -9,9 +9,9 @@
   .ver 4:0:0:0
 }
 .assembly test {}
-.module test.exe
+.assembly extern xunit.core {}
 
-.class private auto ansi beforefieldinit Program
+.class public auto ansi beforefieldinit Program
        extends [mscorlib]System.Object
 {
   .method private hidebysig static void  ThrowException(int32 errorCode) cil managed
@@ -52,9 +52,12 @@
     IL_004a:  throw
   } // end of method Program::ThrowException
 
-  .method private hidebysig static int32 
-          Main(string[] args) cil managed
+  .method public hidebysig static int32 
+          Main() cil managed
   {
+    .custom instance void [xunit.core]Xunit.FactAttribute::.ctor() = (
+        01 00 00 00
+    )
     .entrypoint
     // Code size       46 (0x2e)
     .maxstack  1

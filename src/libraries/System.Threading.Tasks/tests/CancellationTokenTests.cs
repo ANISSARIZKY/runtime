@@ -805,7 +805,7 @@ namespace System.Threading.Tasks.Tests
         }
 
         /// <summary>
-        /// ensure that calling ctr.Dipose() from within a cancellation callback will not deadlock.
+        /// ensure that calling ctr.Dispose() from within a cancellation callback will not deadlock.
         /// </summary>
         /// <returns></returns>
         [Fact]
@@ -861,7 +861,7 @@ namespace System.Threading.Tasks.Tests
                 }
                 else
                 {
-                    Assert.True(false, string.Format("Bug901737_ODEWhenDisposingLinkedCTS:  - Exception Occurred (not an ODE!!): " + ex));
+                    Assert.True(false, string.Format("Bug901737_ODEWhenDisposingLinkedCTS:  - Exception Occurred (not an ODE!): " + ex));
                 }
             }
         }
@@ -1049,6 +1049,7 @@ namespace System.Threading.Tasks.Tests
 
             cts.Dispose();
         }
+
         [Fact]
         public static void CancellationTokenSourceWithTimer_Negative()
         {
@@ -1074,6 +1075,80 @@ namespace System.Threading.Tasks.Tests
             cts.Dispose();
             Assert.Throws<ObjectDisposedException>(() => { cts.CancelAfter(1); });
             Assert.Throws<ObjectDisposedException>(() => { cts.CancelAfter(reasonableTimeSpan); });
+        }
+
+        [Fact]
+        public static void CancellationTokenSourceWithTimer_SupportsInfinite()
+        {
+            var cts = new CancellationTokenSource(TimeSpan.FromDays(1));
+            Assert.False(cts.IsCancellationRequested);
+
+            cts.CancelAfter(Timeout.InfiniteTimeSpan);
+            Assert.False(cts.IsCancellationRequested);
+
+            Assert.True(cts.TryReset());
+
+            cts.CancelAfter(TimeSpan.FromDays(1));
+            Assert.False(cts.IsCancellationRequested);
+
+            cts.CancelAfter(Timeout.Infinite);
+            Assert.False(cts.IsCancellationRequested);
+
+            Assert.True(cts.TryReset());
+
+            cts = new CancellationTokenSource(Timeout.InfiniteTimeSpan);
+            Assert.False(cts.IsCancellationRequested);
+
+            cts = new CancellationTokenSource(Timeout.Infinite);
+            Assert.False(cts.IsCancellationRequested);
+        }
+
+        [Fact]
+        public static void CancellationTokenSource_TryReset_ReturnsFalseIfAlreadyCanceled()
+        {
+            var cts = new CancellationTokenSource();
+            cts.Cancel();
+            Assert.False(cts.TryReset());
+            Assert.True(cts.IsCancellationRequested);
+        }
+
+        [Fact]
+        public static void CancellationTokenSource_TryReset_ReturnsTrueIfNotCanceledAndNoTimer()
+        {
+            var cts = new CancellationTokenSource();
+            Assert.True(cts.TryReset());
+            Assert.True(cts.TryReset());
+        }
+
+        [Fact]
+        public static void CancellationTokenSource_TryReset_ReturnsTrueIfNotCanceledAndTimerHasntFired()
+        {
+            var cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromDays(1));
+            Assert.True(cts.TryReset());
+        }
+
+        [Fact]
+        public static void CancellationTokenSource_TryReset_UnregistersAll()
+        {
+            bool registration1Invoked = false;
+            bool registration2Invoked = false;
+
+            var cts = new CancellationTokenSource();
+            CancellationTokenRegistration ctr1 = cts.Token.Register(() => registration1Invoked = true);
+            Assert.True(cts.TryReset());
+            CancellationTokenRegistration ctr2 = cts.Token.Register(() => registration2Invoked = true);
+
+            cts.Cancel();
+
+            Assert.False(registration1Invoked);
+            Assert.True(registration2Invoked);
+
+            Assert.False(ctr1.Unregister());
+            Assert.False(ctr2.Unregister());
+
+            Assert.Equal(cts.Token, ctr1.Token);
+            Assert.Equal(cts.Token, ctr2.Token);
         }
 
         [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
@@ -1469,7 +1544,7 @@ namespace System.Threading.Tasks.Tests
         }
 
         [OuterLoop("Runs for several seconds")]
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
         public static void Unregister_ConcurrentUse_ThreadSafe()
         {
             CancellationTokenRegistration reg = default;
@@ -1686,6 +1761,64 @@ namespace System.Threading.Tasks.Tests
             }
         }
 
+        [Fact]
+        public static void CancellationTokenSource_CancelAsync_NoRegistrations_CallbackCompletesImmediately()
+        {
+            var cts = new CancellationTokenSource();
+            Assert.True(cts.CancelAsync().IsCompletedSuccessfully);
+            Assert.True(cts.IsCancellationRequested);
+
+            cts = new CancellationTokenSource();
+            cts.Token.Register(() => { }).Dispose();
+            Assert.True(cts.CancelAsync().IsCompletedSuccessfully);
+            Assert.True(cts.IsCancellationRequested);
+        }
+
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
+        public static async Task CancellationTokenSource_CancelAsync_CallbacksInvokedAsynchronously()
+        {
+            var cts = new CancellationTokenSource();
+
+            var mres = new ManualResetEventSlim();
+            cts.Token.Register(mres.Wait);
+
+            Task t = cts.CancelAsync();
+            Assert.False(t.IsCompleted);
+            Assert.True(cts.IsCancellationRequested);
+
+            Assert.True(cts.CancelAsync().IsCompletedSuccessfully); // secondary call completes immediately
+
+            mres.Set();
+            await t;
+        }
+
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
+        public static void CancellationTokenSource_CancelAsync_AllCallbacksInvoked()
+        {
+            const int Iters = 1000;
+
+            int sum = 0;
+            int callingThreadId = Environment.CurrentManagedThreadId;
+
+            var cts = new CancellationTokenSource();
+            for (int i = 1; i <= Iters; i++)
+            {
+                cts.Token.Register(s =>
+                {
+                    Assert.NotEqual(callingThreadId, Environment.CurrentManagedThreadId);
+                    sum += (int)s;
+                }, i);
+            }
+
+            Task t = cts.CancelAsync();
+            Assert.True(cts.IsCancellationRequested);
+
+            ((IAsyncResult)t).AsyncWaitHandle.WaitOne(); // synchronously block without inlining to ensure this thread isn't reused
+            t.Wait(); // propagate any exceptions
+
+            Assert.Equal(Iters * (Iters + 1) / 2, sum);
+        }
+
         #region Helper Classes and Methods
 
         private class TestingSynchronizationContext : SynchronizationContext
@@ -1730,7 +1863,7 @@ namespace System.Threading.Tasks.Tests
                 t.Wait();
 
                 if (marshalledException != null)
-                    throw new AggregateException("DUMMY: ThreadCrossingSynchronizationContext.Send captured and propogated an exception",
+                    throw new AggregateException("DUMMY: ThreadCrossingSynchronizationContext.Send captured and propagated an exception",
                         marshalledException);
             }
         }

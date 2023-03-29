@@ -27,22 +27,13 @@ namespace System.Net.Sockets
 
         public SendPacketsElement(string filepath, long offset, int count, bool endOfPacket)
         {
-            // We will validate if the file exists on send.
-            if (filepath == null)
-            {
-                throw new ArgumentNullException(nameof(filepath));
-            }
-            // The native API will validate the file length on send.
-            if (offset < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(offset));
-            }
-            if (count < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(count));
-            }
+            ArgumentNullException.ThrowIfNull(filepath);
 
-            Initialize(filepath, null, null, offset, count, endOfPacket);
+            // The native API will validate the file length on send.
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+            Initialize(filepath, null, null, null, offset, count, endOfPacket);
         }
 
         // Constructors for fileStream elements.
@@ -56,26 +47,17 @@ namespace System.Net.Sockets
 
         public SendPacketsElement(FileStream fileStream, long offset, int count, bool endOfPacket)
         {
-            // We will validate if the fileStream exists on send.
-            if (fileStream == null)
-            {
-                throw new ArgumentNullException(nameof(fileStream));
-            }
+            ArgumentNullException.ThrowIfNull(fileStream);
+
             if (!fileStream.IsAsync)
             {
                 throw new ArgumentException(SR.net_sockets_sendpackelement_FileStreamMustBeAsync, nameof(fileStream));
             }
             // The native API will validate the file length on send.
-            if (offset < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(offset));
-            }
-            if (count < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(count));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
 
-            Initialize(null, fileStream, null, offset, count, endOfPacket);
+            Initialize(null, fileStream, null, null, offset, count, endOfPacket);
         }
 
         // Constructors for buffer elements.
@@ -89,27 +71,29 @@ namespace System.Net.Sockets
 
         public SendPacketsElement(byte[] buffer, int offset, int count, bool endOfPacket)
         {
-            if (buffer == null)
-            {
-                throw new ArgumentNullException(nameof(buffer));
-            }
-            if ((uint)offset > (uint)buffer.Length)
-            {
-                throw new ArgumentOutOfRangeException(nameof(offset));
-            }
-            if ((uint)count > (uint)(buffer.Length - offset))
-            {
-                throw new ArgumentOutOfRangeException(nameof(count));
-            }
+            ArgumentNullException.ThrowIfNull(buffer);
 
-            Initialize(null, null, buffer, offset, count, endOfPacket);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan((uint)offset, (uint)buffer.Length, nameof(offset));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan((uint)count, (uint)(buffer.Length - offset), nameof(count));
+
+            Initialize(null, null, buffer, buffer.AsMemory(offset, count), offset, count, endOfPacket);
         }
 
-        private void Initialize(string? filePath, FileStream? fileStream, byte[]? buffer, long offset, int count, bool endOfPacket)
+        public SendPacketsElement(ReadOnlyMemory<byte> buffer) :
+            this(buffer, endOfPacket: false)
+        { }
+
+        public SendPacketsElement(ReadOnlyMemory<byte> buffer, bool endOfPacket)
+        {
+            Initialize(null, null, null, buffer, 0, buffer.Length, endOfPacket);
+        }
+
+        private void Initialize(string? filePath, FileStream? fileStream, byte[]? buffer, ReadOnlyMemory<byte>? memoryBuffer, long offset, int count, bool endOfPacket)
         {
             FilePath = filePath;
             FileStream = fileStream;
             Buffer = buffer;
+            MemoryBuffer = memoryBuffer;
             OffsetLong = offset;
             Count = count;
             EndOfPacket = endOfPacket;
@@ -122,6 +106,8 @@ namespace System.Net.Sockets
         public byte[]? Buffer { get; private set; }
 
         public int Count { get; private set; }
+
+        public ReadOnlyMemory<byte>? MemoryBuffer { get; private set; }
 
         public int Offset => checked((int)OffsetLong);
 

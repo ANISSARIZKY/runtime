@@ -6,9 +6,9 @@ using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 
 namespace Microsoft.Extensions.FileSystemGlobbing.Internal
 {
-    internal class InMemoryFileInfo : FileInfoBase
+    internal sealed class InMemoryFileInfo : FileInfoBase
     {
-        private InMemoryDirectoryInfo _parent;
+        private readonly InMemoryDirectoryInfo _parent;
 
         public InMemoryFileInfo(string file, InMemoryDirectoryInfo parent)
         {
@@ -21,12 +21,6 @@ namespace Microsoft.Extensions.FileSystemGlobbing.Internal
 
         public override string Name { get; }
 
-        public override DirectoryInfoBase ParentDirectory
-        {
-            get
-            {
-                return _parent;
-            }
-        }
+        public override DirectoryInfoBase ParentDirectory => _parent;
     }
 }

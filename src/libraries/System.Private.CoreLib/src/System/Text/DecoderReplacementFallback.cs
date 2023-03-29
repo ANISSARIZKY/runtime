@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.Text
 {
@@ -19,18 +20,17 @@ namespace System.Text
 
         public DecoderReplacementFallback(string replacement)
         {
-            if (replacement == null)
-                throw new ArgumentNullException(nameof(replacement));
+            ArgumentNullException.ThrowIfNull(replacement);
 
             // Make sure it doesn't have bad surrogate pairs
             bool bFoundHigh = false;
-            for (int i = 0; i < replacement.Length; i++)
+            foreach (char c in replacement)
             {
                 // Found a surrogate?
-                if (char.IsSurrogate(replacement, i))
+                if (char.IsSurrogate(c))
                 {
                     // High or Low?
-                    if (char.IsHighSurrogate(replacement, i))
+                    if (char.IsHighSurrogate(c))
                     {
                         // if already had a high one, stop
                         if (bFoundHigh)
@@ -56,7 +56,7 @@ namespace System.Text
                     break;
             }
             if (bFoundHigh)
-                throw new ArgumentException(SR.Format(SR.Argument_InvalidCharSequenceNoIndex, nameof(replacement)));
+                throw new ArgumentException(SR.Argument_InvalidCharSequenceNoIndex, nameof(replacement));
 
             _strDefault = replacement;
         }
@@ -69,7 +69,7 @@ namespace System.Text
         // Maximum number of characters that this instance of this fallback could return
         public override int MaxCharCount => _strDefault.Length;
 
-        public override bool Equals(object? value) =>
+        public override bool Equals([NotNullWhen(true)] object? value) =>
             value is DecoderReplacementFallback that &&
             _strDefault == that._strDefault;
 
@@ -93,7 +93,7 @@ namespace System.Text
         public override bool Fallback(byte[] bytesUnknown, int index)
         {
             // We expect no previous fallback in our buffer
-            // We can't call recursively but others might (note, we don't test on last char!!!)
+            // We can't call recursively but others might (note, we don't test on last char!)
             if (_fallbackCount >= 1)
             {
                 ThrowLastBytesRecursive(bytesUnknown);

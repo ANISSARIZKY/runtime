@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,14 +39,14 @@ namespace System.Net.Http
         private readonly Timer? _cleaningTimer;
         /// <summary>Heart beat timer currently used for Http2 ping only.</summary>
         private readonly Timer? _heartBeatTimer;
-        /// <summary>The maximum number of connections allowed per pool. <see cref="int.MaxValue"/> indicates unlimited.</summary>
-        private readonly int _maxConnectionsPerServer;
-        // Temporary
+
         private readonly HttpConnectionSettings _settings;
         private readonly IWebProxy? _proxy;
         private readonly ICredentials? _proxyCredentials;
 
+#if !ILLUMOS && !SOLARIS
         private NetworkChangeCleanup? _networkChangeCleanup;
+#endif
 
         /// <summary>
         /// Keeps track of whether or not the cleanup timer is running. It helps us avoid the expensive
@@ -59,7 +60,6 @@ namespace System.Net.Http
         public HttpConnectionPoolManager(HttpConnectionSettings settings)
         {
             _settings = settings;
-            _maxConnectionsPerServer = settings._maxConnectionsPerServer;
             _pools = new ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>();
 
             // As an optimization, we can sometimes avoid the overheads associated with
@@ -91,16 +91,8 @@ namespace System.Net.Http
                     _cleanPoolTimeout = timerPeriod.TotalSeconds >= MinScavengeSeconds ? timerPeriod : TimeSpan.FromSeconds(MinScavengeSeconds);
                 }
 
-                bool restoreFlow = false;
-                try
+                using (ExecutionContext.SuppressFlow()) // Don't capture the current ExecutionContext and its AsyncLocals onto the timer causing them to live forever
                 {
-                    // Don't capture the current ExecutionContext and its AsyncLocals onto the timer causing them to live forever
-                    if (!ExecutionContext.IsFlowSuppressed())
-                    {
-                        ExecutionContext.SuppressFlow();
-                        restoreFlow = true;
-                    }
-
                     // Create the timer.  Ensure the Timer has a weak reference to this manager; otherwise, it
                     // can introduce a cycle that keeps the HttpConnectionPoolManager rooted by the Timer
                     // implementation until the handler is Disposed (or indefinitely if it's not).
@@ -131,14 +123,6 @@ namespace System.Net.Http
                         }, thisRef, heartBeatInterval, heartBeatInterval);
                     }
                 }
-                finally
-                {
-                    // Restore the current ExecutionContext
-                    if (restoreFlow)
-                    {
-                        ExecutionContext.RestoreFlow();
-                    }
-                }
             }
 
             // Figure out proxy stuff.
@@ -152,6 +136,7 @@ namespace System.Net.Http
             }
         }
 
+#if !ILLUMOS && !SOLARIS
         /// <summary>
         /// Starts monitoring for network changes. Upon a change, <see cref="HttpConnectionPool.OnNetworkChanged"/> will be
         /// called for every <see cref="HttpConnectionPool"/> in the <see cref="HttpConnectionPoolManager"/>.
@@ -165,17 +150,20 @@ namespace System.Net.Http
 
             // Monitor network changes to invalidate Alt-Svc headers.
             // A weak reference is used to avoid NetworkChange.NetworkAddressChanged keeping a non-disposed connection pool alive.
-            var poolsRef = new WeakReference<ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>>(_pools);
-            NetworkAddressChangedEventHandler networkChangedDelegate = delegate
-            {
-                if (poolsRef.TryGetTarget(out ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>? pools))
+            NetworkAddressChangedEventHandler networkChangedDelegate;
+            { // scope to avoid closure if _networkChangeCleanup != null
+                var poolsRef = new WeakReference<ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>>(_pools);
+                networkChangedDelegate = delegate
                 {
-                    foreach (HttpConnectionPool pool in pools.Values)
+                    if (poolsRef.TryGetTarget(out ConcurrentDictionary<HttpConnectionKey, HttpConnectionPool>? pools))
                     {
-                        pool.OnNetworkChanged();
+                        foreach (HttpConnectionPool pool in pools.Values)
+                        {
+                            pool.OnNetworkChanged();
+                        }
                     }
-                }
-            };
+                };
+            }
 
             var cleanup = new NetworkChangeCleanup(networkChangedDelegate);
 
@@ -186,14 +174,7 @@ namespace System.Net.Http
                 return;
             }
 
-            if (!ExecutionContext.IsFlowSuppressed())
-            {
-                using (ExecutionContext.SuppressFlow())
-                {
-                    NetworkChange.NetworkAddressChanged += networkChangedDelegate;
-                }
-            }
-            else
+            using (ExecutionContext.SuppressFlow())
             {
                 NetworkChange.NetworkAddressChanged += networkChangedDelegate;
             }
@@ -218,6 +199,7 @@ namespace System.Net.Http
                 GC.SuppressFinalize(this);
             }
         }
+#endif
 
         public HttpConnectionSettings Settings => _settings;
         public ICredentials? ProxyCredentials => _proxyCredentials;
@@ -281,8 +263,20 @@ namespace System.Net.Http
 
             if (proxyUri != null)
             {
-                Debug.Assert(HttpUtilities.IsSupportedNonSecureScheme(proxyUri.Scheme));
-                if (sslHostName == null)
+                Debug.Assert(HttpUtilities.IsSupportedProxyScheme(proxyUri.Scheme));
+                if (HttpUtilities.IsSocksScheme(proxyUri.Scheme))
+                {
+                    // Socks proxy
+                    if (sslHostName != null)
+                    {
+                        return new HttpConnectionKey(HttpConnectionKind.SslSocksTunnel, uri.IdnHost, uri.Port, sslHostName, proxyUri, identity);
+                    }
+                    else
+                    {
+                        return new HttpConnectionKey(HttpConnectionKind.SocksTunnel, uri.IdnHost, uri.Port, null, proxyUri, identity);
+                    }
+                }
+                else if (sslHostName == null)
                 {
                     if (HttpUtilities.IsNonSecureWebSocketScheme(uri.Scheme))
                     {
@@ -320,7 +314,7 @@ namespace System.Net.Http
             HttpConnectionPool? pool;
             while (!_pools.TryGetValue(key, out pool))
             {
-                pool = new HttpConnectionPool(this, key.Kind, key.Host, key.Port, key.SslHostName, key.ProxyUri, _maxConnectionsPerServer);
+                pool = new HttpConnectionPool(this, key.Kind, key.Host, key.Port, key.SslHostName, key.ProxyUri);
 
                 if (_cleaningTimer == null)
                 {
@@ -393,7 +387,7 @@ namespace System.Net.Http
                 if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, $"Exception from {_proxy.GetType().Name}.GetProxy({request.RequestUri}): {ex}");
             }
 
-            if (proxyUri != null && proxyUri.Scheme != UriScheme.Http)
+            if (proxyUri != null && !HttpUtilities.IsSupportedProxyScheme(proxyUri.Scheme))
             {
                 throw new NotSupportedException(SR.net_http_invalid_proxy_scheme);
             }
@@ -441,23 +435,17 @@ namespace System.Net.Http
                 pool.Value.Dispose();
             }
 
+#if !ILLUMOS && !SOLARIS
             _networkChangeCleanup?.Dispose();
+#endif
         }
 
         /// <summary>Sets <see cref="_cleaningTimer"/> and <see cref="_timerIsRunning"/> based on the specified timeout.</summary>
         private void SetCleaningTimer(TimeSpan timeout)
         {
-            try
+            if (_cleaningTimer!.Change(timeout, Timeout.InfiniteTimeSpan))
             {
-                _cleaningTimer!.Change(timeout, timeout);
                 _timerIsRunning = timeout != Timeout.InfiniteTimeSpan;
-            }
-            catch (ObjectDisposedException)
-            {
-                // In a rare race condition where the timer callback was queued
-                // or executed and then the pool manager was disposed, the timer
-                // would be disposed and then calling Change on it could result
-                // in an ObjectDisposedException.  We simply eat that.
             }
         }
 
@@ -475,17 +463,14 @@ namespace System.Net.Http
             {
                 if (entry.Value.CleanCacheAndDisposeIfUnused())
                 {
-                    _pools.TryRemove(entry.Key, out HttpConnectionPool _);
+                    _pools.TryRemove(entry.Key, out _);
                 }
             }
 
-            // Stop running the timer if we don't have any pools to clean up.
+            // Restart the timer if we have any pools to clean up.
             lock (SyncObj)
             {
-                if (_pools.IsEmpty)
-                {
-                    SetCleaningTimer(Timeout.InfiniteTimeSpan);
-                }
+                SetCleaningTimer(!_pools.IsEmpty ? _cleanPoolTimeout : Timeout.InfiniteTimeSpan);
             }
 
             // NOTE: There is a possible race condition with regards to a pool getting cleaned up at the same
@@ -537,7 +522,7 @@ namespace System.Net.Http
                     HashCode.Combine(Kind, Host, Port, ProxyUri, Identity) :
                     HashCode.Combine(Kind, Host, Port, SslHostName, ProxyUri, Identity));
 
-            public override bool Equals(object? obj) =>
+            public override bool Equals([NotNullWhen(true)] object? obj) =>
                 obj is HttpConnectionKey hck &&
                 Equals(hck);
 

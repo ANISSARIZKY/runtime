@@ -1,15 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#if ES_BUILD_STANDALONE
-using System;
-#endif
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Versioning;
 
-#if ES_BUILD_STANDALONE
-namespace Microsoft.Diagnostics.Tracing
-#else
 namespace System.Diagnostics.Tracing
-#endif
 {
     /// <summary>
     /// IncrementingPollingCounter is a variant of EventCounter for variables that are ever-increasing.
@@ -19,6 +14,11 @@ namespace System.Diagnostics.Tracing
     /// Unlike IncrementingEventCounter, this takes in a polling callback that it can call to update
     /// its own metric periodically.
     /// </summary>
+#if !ES_BUILD_STANDALONE
+#if !FEATURE_WASM_PERFTRACING
+    [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
+#endif
+#endif
     public partial class IncrementingPollingCounter : DiagnosticCounter
     {
         /// <summary>
@@ -31,8 +31,7 @@ namespace System.Diagnostics.Tracing
         /// <param name="totalValueProvider">The delegate to invoke to get the total value for this counter.</param>
         public IncrementingPollingCounter(string name, EventSource eventSource, Func<double> totalValueProvider) : base(name, eventSource)
         {
-            if (totalValueProvider == null)
-                throw new ArgumentNullException(nameof(totalValueProvider));
+            ArgumentNullException.ThrowIfNull(totalValueProvider);
 
             _totalValueProvider = totalValueProvider;
             Publish();
@@ -64,6 +63,9 @@ namespace System.Diagnostics.Tracing
             }
         }
 
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+            Justification = "The DynamicDependency will preserve the properties of IncrementingCounterPayload")]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(IncrementingCounterPayload))]
         internal override void WritePayload(float intervalSec, int pollingIntervalMillisec)
         {
             UpdateMetric();
@@ -88,7 +90,7 @@ namespace System.Diagnostics.Tracing
     /// This is the payload that is sent in the with EventSource.Write
     /// </summary>
     [EventData]
-    internal class IncrementingPollingCounterPayloadType
+    internal sealed class IncrementingPollingCounterPayloadType
     {
         public IncrementingPollingCounterPayloadType(IncrementingCounterPayload payload) { Payload = payload; }
         public IncrementingCounterPayload Payload { get; set; }

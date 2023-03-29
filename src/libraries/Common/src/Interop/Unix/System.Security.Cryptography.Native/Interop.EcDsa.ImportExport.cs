@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -12,8 +11,8 @@ internal static partial class Interop
 {
     internal static partial class Crypto
     {
-        [DllImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_EcKeyCreateByKeyParameters", CharSet = CharSet.Ansi)]
-        private static extern int EcKeyCreateByKeyParameters(
+        [LibraryImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_EcKeyCreateByKeyParameters", StringMarshalling = StringMarshalling.Utf8)]
+        private static partial int EcKeyCreateByKeyParameters(
             out SafeEcKeyHandle key,
             string oid,
             byte[]? qx, int qxLength,
@@ -38,8 +37,8 @@ internal static partial class Interop
             return key;
         }
 
-        [DllImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_EcKeyCreateByExplicitParameters")]
-        internal static extern SafeEcKeyHandle EcKeyCreateByExplicitParameters(
+        [LibraryImport(Libraries.CryptoNative, EntryPoint = "CryptoNative_EcKeyCreateByExplicitParameters")]
+        internal static partial SafeEcKeyHandle EcKeyCreateByExplicitParameters(
             ECCurve.ECCurveType curveType,
             byte[]? qx, int qxLength,
             byte[]? qy, int qyLength,
@@ -85,9 +84,9 @@ internal static partial class Interop
 
             if (key == null || key.IsInvalid)
             {
-                if (key != null)
-                    key.Dispose();
-                throw Interop.Crypto.CreateOpenSslCryptographicException();
+                Exception e = Interop.Crypto.CreateOpenSslCryptographicException();
+                key?.Dispose();
+                throw e;
             }
 
             // EcKeyCreateByExplicitParameters may have polluted the error queue, but key was good in the end.
@@ -98,10 +97,10 @@ internal static partial class Interop
         }
 
 
-        [DllImport(Libraries.CryptoNative)]
-        private static extern int CryptoNative_GetECKeyParameters(
+        [LibraryImport(Libraries.CryptoNative)]
+        private static partial int CryptoNative_GetECKeyParameters(
             SafeEcKeyHandle key,
-            bool includePrivate,
+            [MarshalAs(UnmanagedType.Bool)] bool includePrivate,
             out SafeBignumHandle qx_bn, out int x_cb,
             out SafeBignumHandle qy_bn, out int y_cb,
             out IntPtr d_bn_not_owned, out int d_cb);
@@ -126,36 +125,38 @@ internal static partial class Interop
                     out qy_bn, out qy_cb,
                     out d_bn_not_owned, out d_cb);
 
-                if (rc == -1)
-                {
-                    throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
-                }
-                else if (rc != 1)
-                {
-                    throw Interop.Crypto.CreateOpenSslCryptographicException();
-                }
-
                 using (qx_bn)
                 using (qy_bn)
-                using (d_bn = new SafeBignumHandle(d_bn_not_owned, false))
                 {
-                    // Match Windows semantics where qx, qy, and d have same length
-                    int keySizeBits = EcKeyGetSize(key);
-                    int expectedSize = (keySizeBits + 7) / 8;
-                    int cbKey = GetMax(qx_cb, qy_cb, d_cb);
-
-                    Debug.Assert(
-                        cbKey <= expectedSize,
-                        $"Expected output size was {expectedSize}, which a parameter exceeded. qx={qx_cb}, qy={qy_cb}, d={d_cb}");
-
-                    cbKey = GetMax(cbKey, expectedSize);
-
-                    parameters.Q = new ECPoint
+                    if (rc == -1)
                     {
-                        X = Crypto.ExtractBignum(qx_bn, cbKey),
-                        Y = Crypto.ExtractBignum(qy_bn, cbKey)
-                    };
-                    parameters.D = d_cb == 0 ? null : Crypto.ExtractBignum(d_bn, cbKey);
+                        throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
+                    }
+                    else if (rc != 1)
+                    {
+                        throw Interop.Crypto.CreateOpenSslCryptographicException();
+                    }
+
+                    using (d_bn = new SafeBignumHandle(d_bn_not_owned, false))
+                    {
+                        // Match Windows semantics where qx, qy, and d have same length
+                        int keySizeBits = EcKeyGetSize(key);
+                        int expectedSize = (keySizeBits + 7) / 8;
+                        int cbKey = GetMax(qx_cb, qy_cb, d_cb);
+
+                        Debug.Assert(
+                            cbKey <= expectedSize,
+                            $"Expected output size was {expectedSize}, which a parameter exceeded. qx={qx_cb}, qy={qy_cb}, d={d_cb}");
+
+                        cbKey = GetMax(cbKey, expectedSize);
+
+                        parameters.Q = new ECPoint
+                        {
+                            X = Crypto.ExtractBignum(qx_bn, cbKey),
+                            Y = Crypto.ExtractBignum(qy_bn, cbKey)
+                        };
+                        parameters.D = d_cb == 0 ? null : Crypto.ExtractBignum(d_bn, cbKey);
+                    }
                 }
             }
             finally
@@ -167,10 +168,10 @@ internal static partial class Interop
             return parameters;
         }
 
-        [DllImport(Libraries.CryptoNative)]
-        private static extern int CryptoNative_GetECCurveParameters(
+        [LibraryImport(Libraries.CryptoNative)]
+        private static partial int CryptoNative_GetECCurveParameters(
             SafeEcKeyHandle key,
-            bool includePrivate,
+            [MarshalAs(UnmanagedType.Bool)] bool includePrivate,
             out ECCurve.ECCurveType curveType,
             out SafeBignumHandle qx, out int x_cb,
             out SafeBignumHandle qy, out int y_cb,
@@ -213,15 +214,6 @@ internal static partial class Interop
                     out cofactor_bn, out cofactor_cb,
                     out seed_bn, out seed_cb);
 
-                if (rc == -1)
-                {
-                    throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
-                }
-                else if (rc != 1)
-                {
-                    throw Interop.Crypto.CreateOpenSslCryptographicException();
-                }
-
                 using (qx_bn)
                 using (qy_bn)
                 using (p_bn)
@@ -232,62 +224,73 @@ internal static partial class Interop
                 using (order_bn)
                 using (cofactor_bn)
                 using (seed_bn)
-                using (var d_h = new SafeBignumHandle(d_bn_not_owned, false))
                 {
-                    int cbFieldLength;
-                    int pFieldLength;
-                    if (curveType == ECCurve.ECCurveType.Characteristic2)
+                    if (rc == -1)
                     {
-                        // Match Windows semantics where a,b,gx,gy,qx,qy have same length
-                        // Treat length of m separately as it is not tied to other fields for Char2 (Char2 not supported by Windows)
-                        cbFieldLength = GetMax(new[] { a_cb, b_cb, gx_cb, gy_cb, qx_cb, qy_cb });
-                        pFieldLength = p_cb;
+                        throw new CryptographicException(SR.Cryptography_CSP_NoPrivateKey);
                     }
-                    else
+                    else if (rc != 1)
                     {
-                        // Match Windows semantics where p,a,b,gx,gy,qx,qy have same length
-                        cbFieldLength = GetMax(new[] { p_cb, a_cb, b_cb, gx_cb, gy_cb, qx_cb, qy_cb });
-                        pFieldLength = cbFieldLength;
+                        throw Interop.Crypto.CreateOpenSslCryptographicException();
                     }
 
-                    // Match Windows semantics where order and d have same length
-                    int cbSubgroupOrder = GetMax(order_cb, d_cb);
-
-                    // Copy values to ECParameters
-                    ECParameters parameters = default;
-                    parameters.Q = new ECPoint
+                    using (var d_h = new SafeBignumHandle(d_bn_not_owned, false))
                     {
-                        X = Crypto.ExtractBignum(qx_bn, cbFieldLength),
-                        Y = Crypto.ExtractBignum(qy_bn, cbFieldLength)
-                    };
-                    parameters.D = d_cb == 0 ? null : Crypto.ExtractBignum(d_h, cbSubgroupOrder);
+                        int cbFieldLength;
+                        int pFieldLength;
+                        if (curveType == ECCurve.ECCurveType.Characteristic2)
+                        {
+                            // Match Windows semantics where a,b,gx,gy,qx,qy have same length
+                            // Treat length of m separately as it is not tied to other fields for Char2 (Char2 not supported by Windows)
+                            cbFieldLength = GetMax(new[] { a_cb, b_cb, gx_cb, gy_cb, qx_cb, qy_cb });
+                            pFieldLength = p_cb;
+                        }
+                        else
+                        {
+                            // Match Windows semantics where p,a,b,gx,gy,qx,qy have same length
+                            cbFieldLength = GetMax(new[] { p_cb, a_cb, b_cb, gx_cb, gy_cb, qx_cb, qy_cb });
+                            pFieldLength = cbFieldLength;
+                        }
 
-                    var curve = parameters.Curve;
-                    curve.CurveType = curveType;
-                    curve.A = Crypto.ExtractBignum(a_bn, cbFieldLength)!;
-                    curve.B = Crypto.ExtractBignum(b_bn, cbFieldLength)!;
-                    curve.G = new ECPoint
-                    {
-                        X = Crypto.ExtractBignum(gx_bn, cbFieldLength),
-                        Y = Crypto.ExtractBignum(gy_bn, cbFieldLength)
-                    };
-                    curve.Order = Crypto.ExtractBignum(order_bn, cbSubgroupOrder)!;
+                        // Match Windows semantics where order and d have same length
+                        int cbSubgroupOrder = GetMax(order_cb, d_cb);
 
-                    if (curveType == ECCurve.ECCurveType.Characteristic2)
-                    {
-                        curve.Polynomial = Crypto.ExtractBignum(p_bn, pFieldLength)!;
+                        // Copy values to ECParameters
+                        ECParameters parameters = default;
+                        parameters.Q = new ECPoint
+                        {
+                            X = Crypto.ExtractBignum(qx_bn, cbFieldLength),
+                            Y = Crypto.ExtractBignum(qy_bn, cbFieldLength)
+                        };
+                        parameters.D = d_cb == 0 ? null : Crypto.ExtractBignum(d_h, cbSubgroupOrder);
+
+                        var curve = parameters.Curve;
+                        curve.CurveType = curveType;
+                        curve.A = Crypto.ExtractBignum(a_bn, cbFieldLength)!;
+                        curve.B = Crypto.ExtractBignum(b_bn, cbFieldLength)!;
+                        curve.G = new ECPoint
+                        {
+                            X = Crypto.ExtractBignum(gx_bn, cbFieldLength),
+                            Y = Crypto.ExtractBignum(gy_bn, cbFieldLength)
+                        };
+                        curve.Order = Crypto.ExtractBignum(order_bn, cbSubgroupOrder)!;
+
+                        if (curveType == ECCurve.ECCurveType.Characteristic2)
+                        {
+                            curve.Polynomial = Crypto.ExtractBignum(p_bn, pFieldLength)!;
+                        }
+                        else
+                        {
+                            curve.Prime = Crypto.ExtractBignum(p_bn, pFieldLength)!;
+                        }
+
+                        // Optional parameters
+                        curve.Cofactor = cofactor_cb == 0 ? null : Crypto.ExtractBignum(cofactor_bn, cofactor_cb);
+                        curve.Seed = seed_cb == 0 ? null : Crypto.ExtractBignum(seed_bn, seed_cb);
+
+                        parameters.Curve = curve;
+                        return parameters;
                     }
-                    else
-                    {
-                        curve.Prime = Crypto.ExtractBignum(p_bn, pFieldLength)!;
-                    }
-
-                    // Optional parameters
-                    curve.Cofactor = cofactor_cb == 0 ? null : Crypto.ExtractBignum(cofactor_bn, cofactor_cb);
-                    curve.Seed = seed_cb == 0 ? null : Crypto.ExtractBignum(seed_bn, seed_cb);
-
-                    parameters.Curve = curve;
-                    return parameters;
                 }
             }
             finally
@@ -295,41 +298,6 @@ internal static partial class Interop
                 if (refAdded)
                     key.DangerousRelease();
             }
-        }
-
-        /// <summary>
-        /// Return the maximum value in the array; assumes non-negative values.
-        /// </summary>
-        private static int GetMax(int[] values)
-        {
-            int max = 0;
-
-            foreach (var i in values)
-            {
-                Debug.Assert(i >= 0);
-                if (i > max)
-                    max = i;
-            }
-
-            return max;
-        }
-
-        /// <summary>
-        /// Return the maximum value in the array; assumes non-negative values.
-        /// </summary>
-        private static int GetMax(int value1, int value2)
-        {
-            Debug.Assert(value1 >= 0);
-            Debug.Assert(value2 >= 0);
-            return (value1 > value2 ? value1 : value2);
-        }
-
-        /// <summary>
-        /// Return the maximum value in the array; assumes non-negative values.
-        /// </summary>
-        private static int GetMax(int value1, int value2, int value3)
-        {
-            return GetMax(GetMax(value1, value2), value3);
         }
     }
 }

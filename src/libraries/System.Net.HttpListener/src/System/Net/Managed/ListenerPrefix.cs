@@ -30,11 +30,13 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace System.Net
 {
     internal sealed class ListenerPrefix
     {
-        private string _original;
+        private readonly string _original;
         private string? _host;
         private ushort _port;
         private string? _path;
@@ -79,7 +81,7 @@ namespace System.Net
         }
 
         // Equals and GetHashCode are required to detect duplicates in HttpListenerPrefixCollection.
-        public override bool Equals(object? o)
+        public override bool Equals([NotNullWhen(true)] object? o)
         {
             ListenerPrefix? other = o as ListenerPrefix;
             if (other == null)

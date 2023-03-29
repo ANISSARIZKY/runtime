@@ -15,8 +15,7 @@ namespace System.Collections.Generic
 
         public static Comparer<T> Create(Comparison<T> comparison)
         {
-            if (comparison == null)
-                throw new ArgumentNullException(nameof(comparison));
+            ArgumentNullException.ThrowIfNull(comparison);
 
             return new ComparisonComparer<T>(comparison);
         }
@@ -53,8 +52,9 @@ namespace System.Collections.Generic
     [Serializable]
     [TypeForwardedFrom("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
     // Needs to be public to support binary serialization compatibility
-    public sealed partial class GenericComparer<T> : Comparer<T> where T : IComparable<T>
+    public sealed partial class GenericComparer<T> : Comparer<T> where T : IComparable<T>?
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override int Compare(T? x, T? y)
         {
             if (x != null)
@@ -67,7 +67,7 @@ namespace System.Collections.Generic
         }
 
         // Equals method for the comparer itself.
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj != null && GetType() == obj.GetType();
 
         public override int GetHashCode() =>
@@ -77,13 +77,24 @@ namespace System.Collections.Generic
     [Serializable]
     [TypeForwardedFrom("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
     // Needs to be public to support binary serialization compatibility
-    public sealed partial class NullableComparer<T> : Comparer<T?> where T : struct, IComparable<T>
+    public sealed class NullableComparer<T> : Comparer<T?>, ISerializable where T : struct
     {
+        public NullableComparer() { }
+        private NullableComparer(SerializationInfo info, StreamingContext context) { }
+        public void GetObjectData(SerializationInfo info, StreamingContext context)
+        {
+            if (!typeof(T).IsAssignableTo(typeof(IComparable<T>)))
+            {
+                // We used to use NullableComparer only for types implementing IComparable<T>
+                info.SetType(typeof(ObjectComparer<T?>));
+            }
+        }
+
         public override int Compare(T? x, T? y)
         {
             if (x.HasValue)
             {
-                if (y.HasValue) return x.value.CompareTo(y.value);
+                if (y.HasValue) return Comparer<T>.Default.Compare(x.value, y.value);
                 return 1;
             }
             if (y.HasValue) return -1;
@@ -91,7 +102,7 @@ namespace System.Collections.Generic
         }
 
         // Equals method for the comparer itself.
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj != null && GetType() == obj.GetType();
 
         public override int GetHashCode() =>
@@ -109,7 +120,7 @@ namespace System.Collections.Generic
         }
 
         // Equals method for the comparer itself.
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj != null && GetType() == obj.GetType();
 
         public override int GetHashCode() =>
@@ -119,7 +130,7 @@ namespace System.Collections.Generic
     [Serializable]
     internal sealed partial class EnumComparer<T> : Comparer<T>, ISerializable where T : struct, Enum
     {
-        internal EnumComparer() { }
+        public EnumComparer() { }
 
         // Used by the serialization engine.
         private EnumComparer(SerializationInfo info, StreamingContext context) { }
@@ -127,7 +138,7 @@ namespace System.Collections.Generic
         // public override int Compare(T x, T y) is runtime-specific
 
         // Equals method for the comparer itself.
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj != null && GetType() == obj.GetType();
 
         public override int GetHashCode() =>

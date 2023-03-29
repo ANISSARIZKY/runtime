@@ -14,13 +14,14 @@ namespace System.Net.Security.Tests
     {
         protected override bool UsableAfterCanceledReads => false;
         protected override bool BlocksOnZeroByteReads => true;
+        protected override bool ZeroByteReadPerformsZeroByteReadOnUnderlyingStream => true;
         protected override Type UnsupportedConcurrentExceptionType => typeof(NotSupportedException);
 
         protected virtual SslProtocols GetSslProtocols() => SslProtocols.None;
 
         protected override async Task<StreamPair> CreateWrappedConnectedStreamsAsync(StreamPair wrapped, bool leaveOpen = false)
         {
-            X509Certificate2? cert = Test.Common.Configuration.Certificates.GetServerCertificate();
+            using X509Certificate2 cert = Test.Common.Configuration.Certificates.GetServerCertificate();
             var ssl1 = new SslStream(wrapped.Stream1, leaveOpen, delegate { return true; });
             var ssl2 = new SslStream(wrapped.Stream2, leaveOpen, delegate { return true; });
 
@@ -29,6 +30,20 @@ namespace System.Net.Security.Tests
                 ssl1.AuthenticateAsClientAsync(cert.GetNameInfo(X509NameType.SimpleName, false), null, GetSslProtocols(), false),
                 ssl2.AuthenticateAsServerAsync(cert, false, GetSslProtocols(), false)
             }.WhenAllOrAnyFailed().ConfigureAwait(false);
+
+            if (GetSslProtocols() == SslProtocols.Tls13)
+            {
+                // TLS 1.3 can generate some extra messages and we may get reset if test sends unidirectional traffic
+                // and extra packet stays in socket buffer.
+
+                // This ping-ping should flush leftovers from the handshake.
+                // We use sync method to preserve socket in default blocking state
+                // (as we don't go back once Async is used at least once)
+                ssl1.Write(new byte[1]);
+                ssl2.Write(new byte[1]);
+                Assert.Equal(1, ssl2.Read(new byte[1]));
+                Assert.Equal(1, ssl1.Read(new byte[1]));
+            }
 
             return new StreamPair(ssl1, ssl2);
         }
@@ -51,7 +66,9 @@ namespace System.Net.Security.Tests
     [ConditionalClass(typeof(PlatformDetection), nameof(PlatformDetection.SupportsTls11))]
     public sealed class SslStreamTls11NetworkConformanceTests : SslStreamDefaultNetworkConformanceTests
     {
+#pragma warning disable SYSLIB0039 // TLS 1.0 and 1.1 are obsolete
         protected override SslProtocols GetSslProtocols() => SslProtocols.Tls11;
+#pragma warning restore SYSLIB0039
     }
 
     [ConditionalClass(typeof(PlatformDetection), nameof(PlatformDetection.SupportsTls12))]

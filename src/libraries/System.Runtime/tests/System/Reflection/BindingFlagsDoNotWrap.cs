@@ -20,21 +20,21 @@ namespace System.Reflection.Tests
         [Fact]
         public static void ConstructorInvoke()
         {
-            ConstructorInfo c = typeof(TestClass).GetConstructor(BindingFlags.Public|BindingFlags.Instance, null, Array.Empty<Type>(), null);
+            ConstructorInfo c = typeof(TestClass).GetConstructor(BindingFlags.Public|BindingFlags.Instance, null, Type.EmptyTypes, null);
             TestDoNotWrap<MyException2>((bf) => c.Invoke(bf, null, Array.Empty<object>(), null));
         }
 
         [Fact]
         public static void ConstructorInvokeTwoArgs()
         {
-            ConstructorInfo c = typeof(TestClass).GetConstructor(BindingFlags.Public | BindingFlags.Instance, Array.Empty<Type>());
+            ConstructorInfo c = typeof(TestClass).GetConstructor(BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes);
             TestDoNotWrap<MyException2>((bf) => c.Invoke(bf, null, Array.Empty<object>(), null));
         }
 
         [Fact]
         public static void ConstructorInvokeStringCtor()
         {
-            // Code coverage: Project N - String constructors go through a separate code path.
+            // Code coverage: String constructors go through a separate code path.
             ConstructorInfo c = typeof(string).GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, new Type[] { typeof(char[]), typeof(int), typeof(int) }, null);
             TestDoNotWrap<ArgumentNullException>((bf) => c.Invoke(bf, null, new object[] { null, 0, 0 }, null));
         }
@@ -49,7 +49,7 @@ namespace System.Reflection.Tests
         [Fact]
         public static void ConstructorInvokeUsingMethodInfoInvoke()
         {
-            ConstructorInfo c = typeof(TestClass).GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, Array.Empty<Type>(), null);
+            ConstructorInfo c = typeof(TestClass).GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
             TestDoNotWrap<MyException2>((bf) => c.Invoke(new TestClass(0), bf, null, Array.Empty<object>(), null));
         }
 

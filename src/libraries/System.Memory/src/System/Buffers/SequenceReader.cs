@@ -3,8 +3,6 @@
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Threading;
-using Internal.Runtime.CompilerServices;
 
 namespace System.Buffers
 {
@@ -101,7 +99,7 @@ namespace System.Buffers
                 if (_length < 0)
                 {
                     // Cast-away readonly to initialize lazy field
-                    Volatile.Write(ref Unsafe.AsRef(_length), Sequence.Length);
+                    Unsafe.AsRef(_length) = Sequence.Length;
                 }
                 return _length;
             }

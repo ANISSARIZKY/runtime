@@ -4,12 +4,13 @@
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace System.Net.Http.Headers
 {
     // Don't derive from BaseHeaderParser since parsing is delegated to Uri.TryCreate()
     // which will remove leading and trailing whitespace.
-    internal class UriHeaderParser : HttpHeaderParser
+    internal sealed class UriHeaderParser : HttpHeaderParser
     {
         private readonly UriKind _uriKind;
 
@@ -22,7 +23,7 @@ namespace System.Net.Http.Headers
             _uriKind = uriKind;
         }
 
-        public override bool TryParseValue(string? value, object? storeValue, ref int index, [NotNullWhen(true)] out object? parsedValue)
+        public override bool TryParseValue([NotNullWhen(true)] string? value, object? storeValue, ref int index, [NotNullWhen(true)] out object? parsedValue)
         {
             parsedValue = null;
 
@@ -59,44 +60,28 @@ namespace System.Net.Http.Headers
         // If not, just return the input value.
         internal static string DecodeUtf8FromString(string input)
         {
-            if (string.IsNullOrWhiteSpace(input))
+            if (!string.IsNullOrWhiteSpace(input))
             {
-                return input;
+                int possibleUtf8Pos = input.AsSpan().IndexOfAnyExceptInRange((char)0, (char)127);
+                if (possibleUtf8Pos >= 0 &&
+                    input.AsSpan(possibleUtf8Pos).IndexOfAnyExceptInRange((char)0, (char)255) < 0)
+                {
+                    Span<byte> rawBytes = input.Length <= 256 ? stackalloc byte[input.Length] : new byte[input.Length];
+                    for (int i = 0; i < input.Length; i++)
+                    {
+                        rawBytes[i] = (byte)input[i];
+                    }
+
+                    try
+                    {
+                        // We don't want '?' replacement characters, just fail.
+                        Encoding decoder = Encoding.GetEncoding("utf-8", EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+                        return decoder.GetString(rawBytes);
+                    }
+                    catch (ArgumentException) { } // Not actually Utf-8
+                }
             }
 
-            bool possibleUtf8 = false;
-            for (int i = 0; i < input.Length; i++)
-            {
-                if (input[i] > (char)255)
-                {
-                    return input; // This couldn't have come from the wire, someone assigned it directly.
-                }
-                else if (input[i] > (char)127)
-                {
-                    possibleUtf8 = true;
-                    break;
-                }
-            }
-            if (possibleUtf8)
-            {
-                byte[] rawBytes = new byte[input.Length];
-                for (int i = 0; i < input.Length; i++)
-                {
-                    if (input[i] > (char)255)
-                    {
-                        return input; // This couldn't have come from the wire, someone assigned it directly.
-                    }
-                    rawBytes[i] = (byte)input[i];
-                }
-                try
-                {
-                    // We don't want '?' replacement characters, just fail.
-                    System.Text.Encoding decoder = System.Text.Encoding.GetEncoding("utf-8", System.Text.EncoderFallback.ExceptionFallback,
-                        System.Text.DecoderFallback.ExceptionFallback);
-                    return decoder.GetString(rawBytes, 0, rawBytes.Length);
-                }
-                catch (ArgumentException) { } // Not actually Utf-8
-            }
             return input;
         }
 

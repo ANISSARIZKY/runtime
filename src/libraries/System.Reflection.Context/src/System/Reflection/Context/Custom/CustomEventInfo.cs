@@ -5,7 +5,7 @@ using System.Reflection.Context.Projection;
 
 namespace System.Reflection.Context.Custom
 {
-    internal class CustomEventInfo : ProjectingEventInfo
+    internal sealed class CustomEventInfo : ProjectingEventInfo
     {
         public CustomEventInfo(EventInfo template, CustomReflectionContext context)
             : base(template, context.Projector)
@@ -24,7 +24,7 @@ namespace System.Reflection.Context.Custom
 
         public override object[] GetCustomAttributes(Type attributeType, bool inherit)
         {
-            return AttributeUtils.GetCustomAttributes(ReflectionContext, this, attributeType, inherit);
+            return AttributeUtils.GetCustomAttributes(ReflectionContext, this, attributeType);
         }
 
         public override bool IsDefined(Type attributeType, bool inherit)

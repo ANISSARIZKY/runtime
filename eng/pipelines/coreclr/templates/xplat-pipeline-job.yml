@@ -8,9 +8,7 @@ parameters:
   container: ''
   testGroup: ''
   crossBuild: false
-  crossrootfsDir: ''
   liveLibrariesBuildConfig: ''
-  stagedBuild: false
   strategy: ''
   pool: ''
 
@@ -18,6 +16,7 @@ parameters:
   condition: true
   continueOnError: false
   dependsOn: ''
+  dependOnEvaluatePaths: false
   displayName: ''
   timeoutInMinutes: ''
   enableMicrobuild: ''
@@ -26,7 +25,7 @@ parameters:
   variables: {} ## any extra variables to add to the defaults defined below
 
 jobs:
-- template: xplat-job.yml
+- template: /eng/pipelines/common/templates/runtimes/xplat-job.yml
   parameters:
     buildConfig: ${{ parameters.buildConfig }}
     archType: ${{ parameters.archType }}
@@ -36,15 +35,15 @@ jobs:
     helixType: ${{ parameters.helixType }}
     container: ${{ parameters.container }}
     crossBuild: ${{ parameters.crossBuild }}
-    crossrootfsDir: ${{ parameters.crossrootfsDir }}
-    stagedBuild: ${{ parameters.stagedBuild }}
     strategy: ${{ parameters.strategy }}
     pool: ${{ parameters.pool }}
+    pgoType: ${{ parameters.pgoType }}
 
     # arcade-specific parameters
     condition: and(succeeded(), ${{ parameters.condition }})
     continueOnError: ${{ parameters.continueOnError }}
     dependsOn: ${{ parameters.dependsOn }}
+    dependOnEvaluatePaths: ${{ parameters.dependOnEvaluatePaths }}
     displayName: ${{ parameters.displayName }}
     timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
     enableMicrobuild: ${{ parameters.enableMicrobuild }}
@@ -64,7 +63,7 @@ jobs:
 
     # Build product defines what we are trying to build, either coreclr or mono
     - name: buildProductArtifactName
-      value: 'CoreCLRProduct_${{ parameters.runtimeVariant }}_$(osGroup)$(osSubgroup)_$(archType)_$(buildConfig)'
+      value: 'CoreCLRProduct_${{ parameters.pgoType }}_${{ parameters.runtimeVariant }}_$(osGroup)$(osSubgroup)_$(archType)_$(buildConfig)'
 
     - name: buildProductRootFolderPath
       value: '$(Build.SourcesDirectory)/artifacts/bin/coreclr/$(osGroup).$(archType).$(buildConfigUpper)'
@@ -87,22 +86,15 @@ jobs:
     - name: buildLinuxDacStagingPath
       value: '$(crossDacArtifactPath)/Linux.$(archType).$(buildConfigUpper)'
 
-    - name: crossDacHostArch
-      value: x64
-
-    - ${{ if eq(parameters.archType, 'arm') }}:
-      - name: crossDacHostArch
-        value: x86
-
     # We need this because both mono and coreclr build currently depends on CoreClr
     - name: coreClrProductArtifactName
-      value: 'CoreCLRProduct_${{ parameters.runtimeVariant }}_$(osGroup)$(osSubgroup)_$(archType)_$(buildConfig)'
+      value: 'CoreCLRProduct_${{ parameters.pgoType }}_${{ parameters.runtimeVariant }}_$(osGroup)$(osSubgroup)_$(archType)_$(buildConfig)'
 
     - name: coreClrProductRootFolderPath
       value: '$(Build.SourcesDirectory)/artifacts/bin/coreclr/$(osGroup).$(archType).$(buildConfigUpper)'
 
     - name: corelibProductArtifactName
-      value: 'CoreLib_$(osGroup)$(osSubgroup)_$(archType)_$(buildConfig)'
+      value: 'CoreLib_${{ parameters.pgoType }}_$(osGroup)$(osSubgroup)_$(archType)_$(buildConfig)'
 
     - name: managedGenericTestArtifactName
       value: 'CoreCLRManagedTestArtifacts_AnyOS_AnyCPU_$(buildConfig)'
@@ -126,13 +118,14 @@ jobs:
       value: ''
 
     # 'innerloop' and 'clrinterpreter' jobs run the Priority 0 tests; everything else runs the Priority 1 tests.
-    - ${{ if and(ne(parameters.testGroup, 'innerloop'), ne(parameters.testGroup, 'clrinterpreter')) }}:
+    # 'gc-standalone' is forced to run pri0 as well to start with.
+    - ${{ if and(ne(parameters.testGroup, 'innerloop'), ne(parameters.testGroup, 'clrinterpreter'), ne(parameters.testGroup, 'gc-standalone'), ne(parameters.testGroup, 'gc-standalone-server') ) }}:
       - ${{ if ne(parameters.osGroup, 'windows') }}:
         - name: priorityArg
           value: 'priority1'
       - ${{ if eq(parameters.osGroup, 'windows') }}:
         - name: priorityArg
-          value: '-priority=1'
+          value: '-priority 1'
 
     - librariesBuildArtifactName: ''
     - librariesOverrideArg: ''
@@ -149,8 +142,8 @@ jobs:
     - name: osArg
       value: ''
 
-    - ${{ if eq(parameters.osGroup, 'FreeBSD') }}:
+    - ${{ if eq(parameters.osGroup, 'freebsd') }}:
       - name: osArg
-        value: -os FreeBSD
+        value: -os freebsd
 
     steps: ${{ parameters.steps }}

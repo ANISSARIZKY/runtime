@@ -4,7 +4,7 @@
 using System.IO;
 using Xunit;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlReaderTests
 {
     /// <summary>
     /// This class is not completely testing XmlReader Encoding, it has a regression tests for the fix of the issue: https://github.com/dotnet/runtime/issues/28615
@@ -80,7 +80,7 @@ namespace System.Xml.Tests
 
             Assert.True(reader.Read());
             Assert.True(reader.Read());
-            XmlException ex = Assert.Throws<XmlException>(() => reader.Read());;
+            XmlException ex = Assert.Throws<XmlException>(() => reader.Read());
         }
 
         [Fact]

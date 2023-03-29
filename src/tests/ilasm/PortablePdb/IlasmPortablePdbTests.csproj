@@ -1,12 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-  </PropertyGroup>
   <ItemGroup>
     <Compile Include="IlasmPortablePdbTester.cs" />
     <Compile Include="IlasmPortablePdbTesterCommon.cs" />
     <Compile Include="IlasmPortablePdbTesterTypes.cs" />
-    <Compile Include="..\..\Common\XunitBase.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Resources\**" />
@@ -33,6 +29,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Include="TestFiles\TestLocalScopes4.il">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="TestFiles\TestMethodDebugInformation.il">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Include="TestFiles\TestMethodDebugInformation_unix.il">

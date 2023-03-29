@@ -349,7 +349,7 @@ namespace System.Collections.Tests
             AssertExtensions.Throws<ArgumentOutOfRangeException>("loadFactor", () => new Hashtable(100, float.NegativeInfinity, null)); // Load factor is infinity
         }
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsDebuggerTypeProxyAttributeSupported))]
         public void DebuggerAttribute()
         {
             DebuggerAttributes.ValidateDebuggerDisplayReferences(new Hashtable());
@@ -869,7 +869,7 @@ namespace System.Collections.Tests
             }
             else
             {
-                // Make sure that construtor imports all keys and values
+                // Make sure that constructor imports all keys and values
                 Assert.Equal(hash2.Count, hash1.Count);
                 for (int i = 0; i < 100; i++)
                 {
@@ -1007,7 +1007,7 @@ namespace System.Collections.Tests
 
         private const int MAX_TEST_TIME_MS = 10000; // 10 seconds
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
         [OuterLoop]
         public void GetItem_ThreadSafety()
         {
@@ -1100,7 +1100,7 @@ namespace System.Collections.Tests
         private Hashtable _hash2;
         private int _iNumberOfElements = 20;
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
         [OuterLoop]
         public void SynchronizedThreadSafety()
         {

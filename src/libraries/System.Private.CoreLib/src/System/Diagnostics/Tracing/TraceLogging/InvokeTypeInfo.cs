@@ -1,16 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#if ES_BUILD_STANDALONE
-using System;
-#endif
 using System.Collections.Generic;
 
-#if ES_BUILD_STANDALONE
-namespace Microsoft.Diagnostics.Tracing
-#else
 namespace System.Diagnostics.Tracing
-#endif
 {
     /// <summary>
     /// TraceLogging: An implementation of TraceLoggingTypeInfo that works
@@ -77,13 +70,13 @@ namespace System.Diagnostics.Tracing
         {
             if (this.properties != null)
             {
-                var membersNames = new List<string>();
-                var membersValues = new List<object?>();
+                var membersNames = new string[this.properties.Length];
+                var membersValues = new object?[this.properties.Length];
                 for (int i = 0; i < this.properties.Length; i++)
                 {
                     object? propertyValue = properties[i].propertyInfo.GetValue(value);
-                    membersNames.Add(properties[i].name);
-                    membersValues.Add(properties[i].typeInfo.GetData(propertyValue));
+                    membersNames[i] = properties[i].name;
+                    membersValues[i] = properties[i].typeInfo.GetData(propertyValue);
                 }
                 return new EventPayload(membersNames, membersValues);
             }

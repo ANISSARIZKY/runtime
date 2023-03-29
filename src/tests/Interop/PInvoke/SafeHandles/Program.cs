@@ -10,7 +10,7 @@ namespace SafeHandleTests
 {
     class Test
     {
-        public static int Main(string[] args)
+        public static int Main()
         {
             try
             {
@@ -26,7 +26,9 @@ namespace SafeHandleTests
             catch (Exception ex)
             {
                 Console.WriteLine(ex.ToString());
+                return 101;
             }
+
             return 100;
         }
     }

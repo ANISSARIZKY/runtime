@@ -5,17 +5,13 @@ using System;
 using System.Diagnostics;
 using System.Text;
 
-#if ES_BUILD_STANDALONE
-namespace Microsoft.Diagnostics.Tracing
-#else
 namespace System.Diagnostics.Tracing
-#endif
 {
     /// <summary>
     /// TraceLogging: Contains the information needed to generate tracelogging
     /// metadata for an event field.
     /// </summary>
-    internal class FieldMetadata
+    internal sealed class FieldMetadata
     {
         /// <summary>
         /// Name of the field

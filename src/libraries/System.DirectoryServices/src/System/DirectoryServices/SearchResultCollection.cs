@@ -4,7 +4,6 @@
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Collections;
-using System.DirectoryServices.Interop;
 using System.Text;
 
 using INTPTR_INTPTRCAST = System.IntPtr;
@@ -18,8 +17,8 @@ namespace System.DirectoryServices
     public class SearchResultCollection : MarshalByRefObject, ICollection, IEnumerable, IDisposable
     {
         private IntPtr _handle;
-        private UnsafeNativeMethods.IDirectorySearch _searchObject;
-        private ArrayList _innerList;
+        private UnsafeNativeMethods.IDirectorySearch? _searchObject;
+        private ArrayList? _innerList;
         private bool _disposed;
         private readonly DirectoryEntry _rootEntry;       // clone of parent entry object
         private const string ADS_DIRSYNC_COOKIE = "fc8cb04d-311d-406c-8cb9-1ae8b843b418";
@@ -37,11 +36,11 @@ namespace System.DirectoryServices
             this.srch = srch;
         }
 
-        public SearchResult this[int index] => (SearchResult)InnerList[index];
+        public SearchResult this[int index] => (SearchResult)InnerList[index]!;
 
         public int Count => InnerList.Count;
 
-        internal string Filter { get; }
+        internal string? Filter { get; }
 
         private ArrayList InnerList
         {
@@ -50,10 +49,12 @@ namespace System.DirectoryServices
                 if (_innerList == null)
                 {
                     _innerList = new ArrayList();
-                    IEnumerator enumerator = new ResultsEnumerator(this,
-                                                                                           _rootEntry.GetUsername(),
-                                                                                           _rootEntry.GetPassword(),
-                                                                                           _rootEntry.AuthenticationType);
+                    var enumerator = new ResultsEnumerator(
+                        this,
+                        _rootEntry.GetUsername(),
+                        _rootEntry.GetPassword(),
+                        _rootEntry.AuthenticationType);
+
                     while (enumerator.MoveNext())
                         _innerList.Add(enumerator.Current);
                 }
@@ -62,17 +63,8 @@ namespace System.DirectoryServices
             }
         }
 
-        internal UnsafeNativeMethods.IDirectorySearch SearchObject
-        {
-            get
-            {
-                if (_searchObject == null)
-                {
-                    _searchObject = (UnsafeNativeMethods.IDirectorySearch)_rootEntry.AdsObject;   // get it only once
-                }
-                return _searchObject;
-            }
-        }
+        internal UnsafeNativeMethods.IDirectorySearch SearchObject =>
+            _searchObject ??= (UnsafeNativeMethods.IDirectorySearch)_rootEntry.AdsObject;   // get it only once
 
         /// <devdoc>
         /// Gets the handle returned by IDirectorySearch::ExecuteSearch, which was called
@@ -226,16 +218,16 @@ namespace System.DirectoryServices
         /// <devdoc>
         /// Supports a simple ForEach-style iteration over a collection.
         /// </devdoc>
-        private class ResultsEnumerator : IEnumerator
+        private sealed class ResultsEnumerator : IEnumerator
         {
-            private readonly NetworkCredential _parentCredentials;
+            private readonly NetworkCredential? _parentCredentials;
             private readonly AuthenticationTypes _parentAuthenticationType;
             private readonly SearchResultCollection _results;
             private bool _initialized;
-            private SearchResult _currentResult;
+            private SearchResult? _currentResult;
             private bool _eof;
 
-            internal ResultsEnumerator(SearchResultCollection results, string parentUserName, string parentPassword, AuthenticationTypes parentAuthenticationType)
+            internal ResultsEnumerator(SearchResultCollection results, string? parentUserName, string? parentPassword, AuthenticationTypes parentAuthenticationType)
             {
                 if (parentUserName != null && parentPassword != null)
                     _parentCredentials = new NetworkCredential(parentUserName, parentPassword);
@@ -255,10 +247,7 @@ namespace System.DirectoryServices
                     if (!_initialized || _eof)
                         throw new InvalidOperationException(SR.DSNoCurrentEntry);
 
-                    if (_currentResult == null)
-                        _currentResult = GetCurrentResult();
-
-                    return _currentResult;
+                    return _currentResult ??= GetCurrentResult();
                 }
             }
 
@@ -285,7 +274,7 @@ namespace System.DirectoryServices
                                 values[i] = new AdsValueHelper(*pValue).GetValue();
                                 pValue++;
                             }
-                            entry.Properties.Add(Marshal.PtrToStringUni(pszColumnName), new ResultPropertyValueCollection(values));
+                            entry.Properties.Add(Marshal.PtrToStringUni(pszColumnName)!, new ResultPropertyValueCollection(values));
                         }
                         finally
                         {
@@ -314,8 +303,8 @@ namespace System.DirectoryServices
             /// </devdoc>
             public bool MoveNext()
             {
-                DirectorySynchronization tempsync = null;
-                DirectoryVirtualListView tempvlv = null;
+                DirectorySynchronization? tempsync = null;
+                DirectoryVirtualListView? tempvlv = null;
                 int errorCode = 0;
 
                 if (_eof)

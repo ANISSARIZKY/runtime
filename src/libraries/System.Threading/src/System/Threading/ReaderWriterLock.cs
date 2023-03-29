@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.Serialization;
+using System.Runtime.Versioning;
 
 namespace System.Threading
 {
@@ -73,12 +74,10 @@ namespace System.Threading
             return (uint)_writerSeqNum > (uint)seqNum;
         }
 
+        [UnsupportedOSPlatform("browser")]
         public void AcquireReaderLock(int millisecondsTimeout)
         {
-            if (millisecondsTimeout < -1)
-            {
-                throw GetInvalidTimeoutException(nameof(millisecondsTimeout));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(millisecondsTimeout, -1);
 
             ThreadLocalLockEntry threadLocalLockEntry = ThreadLocalLockEntry.GetOrCreateCurrent(_lockID);
 
@@ -241,7 +240,7 @@ namespace System.Threading
                                 readerEvent.Reset();
                                 Interlocked.Add(ref _state, LockStates.Reader - LockStates.ReaderSignaled);
 
-                                // Honor the orginal status
+                                // Honor the original status
                                 ++threadLocalLockEntry._readerLevel;
                                 ReleaseReaderLock();
                             }
@@ -275,14 +274,12 @@ namespace System.Threading
             ++threadLocalLockEntry._readerLevel;
         }
 
+        [UnsupportedOSPlatform("browser")]
         public void AcquireReaderLock(TimeSpan timeout) => AcquireReaderLock(ToTimeoutMilliseconds(timeout));
 
         public void AcquireWriterLock(int millisecondsTimeout)
         {
-            if (millisecondsTimeout < -1)
-            {
-                throw GetInvalidTimeoutException(nameof(millisecondsTimeout));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(millisecondsTimeout, -1);
 
             int threadID = GetCurrentThreadID();
 
@@ -411,7 +408,7 @@ namespace System.Threading
                                 Debug.Assert((knownState & LockStates.WriterSignaled) != 0);
                                 Debug.Assert((knownState & LockStates.Writer) == 0);
 
-                                // Honor the orginal status
+                                // Honor the original status
                                 _writerID = threadID;
                                 Debug.Assert(_writerLevel == 0);
                                 _writerLevel = 1;
@@ -665,12 +662,10 @@ namespace System.Threading
             }
         }
 
+        [UnsupportedOSPlatform("browser")]
         public LockCookie UpgradeToWriterLock(int millisecondsTimeout)
         {
-            if (millisecondsTimeout < -1)
-            {
-                throw GetInvalidTimeoutException(nameof(millisecondsTimeout));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(millisecondsTimeout, -1);
 
             LockCookie lockCookie = default;
             int threadID = GetCurrentThreadID();
@@ -744,6 +739,7 @@ namespace System.Threading
             }
         }
 
+        [UnsupportedOSPlatform("browser")]
         public LockCookie UpgradeToWriterLock(TimeSpan timeout) => UpgradeToWriterLock(ToTimeoutMilliseconds(timeout));
 
         public void DowngradeFromWriterLock(ref LockCookie lockCookie)
@@ -911,6 +907,7 @@ namespace System.Threading
             return lockCookie;
         }
 
+        [UnsupportedOSPlatform("browser")]
         public void RestoreLock(ref LockCookie lockCookie)
         {
             // Validate cookie
@@ -976,6 +973,7 @@ namespace System.Threading
         /// <summary>
         /// Helper function that restores the lock to the original state indicated by parameters
         /// </summary>
+        [UnsupportedOSPlatform("browser")]
         private void RecoverLock(ref LockCookie lockCookie, LockCookieFlags flags)
         {
             // Contrary to the legacy code, this method does not use a finite timeout for recovering the previous lock state, as
@@ -1106,18 +1104,13 @@ namespace System.Threading
             readerEvent?.Dispose();
         }
 
-        private static ArgumentOutOfRangeException GetInvalidTimeoutException(string parameterName)
-        {
-            return new ArgumentOutOfRangeException(parameterName, SR.ArgumentOutOfRange_TimeoutMilliseconds);
-        }
-
         private static int ToTimeoutMilliseconds(TimeSpan timeout)
         {
             var timeoutMilliseconds = (long)timeout.TotalMilliseconds;
-            if (timeoutMilliseconds < -1 || timeoutMilliseconds > int.MaxValue)
-            {
-                throw GetInvalidTimeoutException(nameof(timeout));
-            }
+
+            ArgumentOutOfRangeException.ThrowIfLessThan(timeoutMilliseconds, -1, nameof(timeout));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(timeoutMilliseconds, int.MaxValue, nameof(timeout));
+
             return (int)timeoutMilliseconds;
         }
 
@@ -1147,7 +1140,7 @@ namespace System.Threading
             }
         }
 
-        private static ApplicationException GetTimeoutException()
+        private static ReaderWriterLockApplicationException GetTimeoutException()
         {
             return new ReaderWriterLockApplicationException(HResults.ERROR_TIMEOUT, SR.ReaderWriterLock_Timeout);
         }
@@ -1157,7 +1150,7 @@ namespace System.Threading
         /// <see cref="Exception.HResult"/> value was set to ERROR_NOT_OWNER without first converting that error code into an
         /// HRESULT. The same value is used here for compatibility.
         /// </summary>
-        private static ApplicationException GetNotOwnerException()
+        private static ReaderWriterLockApplicationException GetNotOwnerException()
         {
             return
                 new ReaderWriterLockApplicationException(
@@ -1165,7 +1158,7 @@ namespace System.Threading
                     SR.ReaderWriterLock_NotOwner);
         }
 
-        private static ApplicationException GetInvalidLockCookieException()
+        private static ReaderWriterLockApplicationException GetInvalidLockCookieException()
         {
             return new ReaderWriterLockApplicationException(HResults.E_INVALIDARG, SR.ReaderWriterLock_InvalidLockCookie);
         }
@@ -1263,20 +1256,10 @@ namespace System.Threading
                 Debug.Assert(lockID != 0);
 
                 ThreadLocalLockEntry? headEntry = t_lockEntryHead;
-                if (headEntry != null)
+                if (headEntry != null && headEntry._lockID == lockID)
                 {
-                    if (headEntry._lockID == lockID)
-                    {
-                        VerifyNoNonemptyEntryInListAfter(lockID, headEntry);
-                        return headEntry;
-                    }
-
-                    if (headEntry.IsFree)
-                    {
-                        VerifyNoNonemptyEntryInListAfter(lockID, headEntry);
-                        headEntry._lockID = lockID;
-                        return headEntry;
-                    }
+                    VerifyNoNonemptyEntryInListAfter(lockID, headEntry);
+                    return headEntry;
                 }
 
                 return GetOrCreateCurrentSlow(lockID, headEntry);

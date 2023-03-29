@@ -16,8 +16,9 @@
 .assembly DevDiv_406160
 {
 }
+.assembly extern xunit.core {}
 
-.class private auto ansi beforefieldinit Bug.Program
+.class public auto ansi beforefieldinit Bug.Program
        extends [System.Runtime]System.Object
 {
   .method static char ILGEN_METHOD(int16, unsigned int16, native unsigned int)
@@ -55,6 +56,9 @@
 
   .method public hidebysig static int32  Main() cil managed
   {
+    .custom instance void [xunit.core]Xunit.FactAttribute::.ctor() = (
+        01 00 00 00
+    )
     .entrypoint
     // Code size       22 (0x16)
     .maxstack  8

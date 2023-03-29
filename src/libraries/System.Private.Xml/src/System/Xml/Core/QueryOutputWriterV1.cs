@@ -10,7 +10,7 @@ namespace System.Xml
 {
     /// <summary>
     /// This writer wraps an XmlWriter that was not build using the XmlRawWriter architecture (such as XmlTextWriter or a custom XmlWriter)
-    /// for use in the XslCompilerTransform. Depending on the Xsl stylesheet output settings (which gets transfered to this writer via the
+    /// for use in the XslCompilerTransform. Depending on the Xsl stylesheet output settings (which gets transferred to this writer via the
     /// internal properties of XmlWriterSettings) this writer will inserts additional lexical information into the resulting Xml 1.0 document:
     ///
     ///   1. CData sections
@@ -20,7 +20,7 @@ namespace System.Xml
     /// It also calls WriteStateDocument if standalone="yes" and/or a DocType declaration is written out in order to enforce document conformance
     /// checking.
     /// </summary>
-    internal class QueryOutputWriterV1 : XmlWriter
+    internal sealed class QueryOutputWriterV1 : XmlWriter
     {
         private readonly XmlWriter _wrapped;
         private bool _inCDataSection;
@@ -145,7 +145,7 @@ namespace System.Xml
                 if (ws == WriteState.Start || ws == WriteState.Prolog)
                 {
                     _wrapped.WriteDocType(
-                            string.IsNullOrEmpty(prefix) ? localName : prefix + ":" + localName,
+                            string.IsNullOrEmpty(prefix) ? localName : $"{prefix}:{localName}",
                             _publicId,
                             _systemId,
                             null);

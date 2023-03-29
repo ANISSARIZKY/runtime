@@ -43,7 +43,7 @@ namespace System.DirectoryServices.Protocols
         PhantomRoot = 2
     }
 
-    internal class UtilityHandle
+    internal static class UtilityHandle
     {
         private static readonly ConnectionHandle s_handle = new ConnectionHandle();
 
@@ -93,7 +93,9 @@ namespace System.DirectoryServices.Protocols
 
         public DirectoryControl(string type, byte[] value, bool isCritical, bool serverSide)
         {
-            Type = type ?? throw new ArgumentNullException(nameof(type));
+            ArgumentNullException.ThrowIfNull(type);
+
+            Type = type;
 
             if (value != null)
             {
@@ -173,7 +175,7 @@ namespace System.DirectoryServices.Protocols
                 else if (controls[i].Type == "1.2.840.113556.1.4.474")
                 {
                     // The control is a SortControl.
-                    int result = 0;
+                    int result;
                     string attribute = null;
                     object[] o = BerConverter.TryDecode("{ea}", value, out bool decodeSucceeded);
 
@@ -410,7 +412,9 @@ namespace System.DirectoryServices.Protocols
 
         public VerifyNameControl(string serverName) : this()
         {
-            _serverName = serverName ?? throw new ArgumentNullException(nameof(serverName));
+            ArgumentNullException.ThrowIfNull(serverName);
+
+            _serverName = serverName;
         }
 
         public VerifyNameControl(string serverName, int flag) : this(serverName)
@@ -637,10 +641,7 @@ namespace System.DirectoryServices.Protocols
         private SortKey[] _keys = Array.Empty<SortKey>();
         public SortRequestControl(params SortKey[] sortKeys) : base("1.2.840.113556.1.4.473", null, true, true)
         {
-            if (sortKeys == null)
-            {
-                throw new ArgumentNullException(nameof(sortKeys));
-            }
+            ArgumentNullException.ThrowIfNull(sortKeys);
 
             for (int i = 0; i < sortKeys.Length; i++)
             {
@@ -706,34 +707,38 @@ namespace System.DirectoryServices.Protocols
             }
         }
 
-        public override byte[] GetValue()
+        public override unsafe byte[] GetValue()
         {
+            SortKeyInterop[] nativeSortKeys = new SortKeyInterop[_keys.Length];
+            for (int i = 0; i < _keys.Length; ++i)
+            {
+                nativeSortKeys[i] = new SortKeyInterop(_keys[i]);
+            }
+
             IntPtr control = IntPtr.Zero;
-            int structSize = Marshal.SizeOf(typeof(SortKey));
-            int keyCount = _keys.Length;
+            int structSize = Marshal.SizeOf(typeof(SortKeyInterop));
+            int keyCount = nativeSortKeys.Length;
             IntPtr memHandle = Utility.AllocHGlobalIntPtrArray(keyCount + 1);
 
             try
             {
-                IntPtr tempPtr = IntPtr.Zero;
+                void** pMemHandle = (void**)memHandle;
                 IntPtr sortPtr = IntPtr.Zero;
                 int i = 0;
                 for (i = 0; i < keyCount; i++)
                 {
                     sortPtr = Marshal.AllocHGlobal(structSize);
-                    Marshal.StructureToPtr(_keys[i], sortPtr, false);
-                    tempPtr = (IntPtr)((long)memHandle + IntPtr.Size * i);
-                    Marshal.WriteIntPtr(tempPtr, sortPtr);
+                    Marshal.StructureToPtr(nativeSortKeys[i], sortPtr, false);
+                    pMemHandle[i] = (void*)sortPtr;
                 }
-                tempPtr = (IntPtr)((long)memHandle + IntPtr.Size * i);
-                Marshal.WriteIntPtr(tempPtr, IntPtr.Zero);
+                pMemHandle[i] = null;
 
                 bool critical = IsCritical;
                 int error = LdapPal.CreateDirectorySortControl(UtilityHandle.GetHandle(), memHandle, critical ? (byte)1 : (byte)0, ref control);
 
                 if (error != 0)
                 {
-                    if (Utility.IsLdapError((LdapError)error))
+                    if (LdapErrorMappings.IsLdapError(error))
                     {
                         string errorMessage = LdapErrorMappings.MapResultCode(error);
                         throw new LdapException(error, errorMessage);
@@ -746,7 +751,7 @@ namespace System.DirectoryServices.Protocols
 
                 LdapControl managedControl = new LdapControl();
                 Marshal.PtrToStructure(control, managedControl);
-                berval value = managedControl.ldctl_value;
+                BerVal value = managedControl.ldctl_value;
                 // reinitialize the value
                 _directoryControlValue = null;
                 if (value != null)
@@ -1022,7 +1027,7 @@ namespace System.DirectoryServices.Protocols
     }
 
     [SupportedOSPlatform("windows")]
-    public class QuotaControl : DirectoryControl
+    public partial class QuotaControl : DirectoryControl
     {
         private byte[] _sid;
 
@@ -1031,23 +1036,6 @@ namespace System.DirectoryServices.Protocols
         public QuotaControl(SecurityIdentifier querySid) : this()
         {
             QuerySid = querySid;
-        }
-
-        public SecurityIdentifier QuerySid
-        {
-            get => _sid == null ? null : new SecurityIdentifier(_sid, 0);
-            set
-            {
-                if (value == null)
-                {
-                    _sid = null;
-                }
-                else
-                {
-                    _sid = new byte[value.BinaryLength];
-                    value.GetBinaryForm(_sid, 0);
-                }
-            }
         }
 
         public override byte[] GetValue()
@@ -1071,20 +1059,14 @@ namespace System.DirectoryServices.Protocols
 
         public int Add(DirectoryControl control)
         {
-            if (control == null)
-            {
-                throw new ArgumentNullException(nameof(control));
-            }
+            ArgumentNullException.ThrowIfNull(control);
 
             return List.Add(control);
         }
 
         public void AddRange(DirectoryControl[] controls)
         {
-            if (controls == null)
-            {
-                throw new ArgumentNullException(nameof(controls));
-            }
+            ArgumentNullException.ThrowIfNull(controls);
 
             foreach (DirectoryControl control in controls)
             {
@@ -1099,10 +1081,7 @@ namespace System.DirectoryServices.Protocols
 
         public void AddRange(DirectoryControlCollection controlCollection)
         {
-            if (controlCollection == null)
-            {
-                throw new ArgumentNullException(nameof(controlCollection));
-            }
+            ArgumentNullException.ThrowIfNull(controlCollection);
 
             int currentCount = controlCollection.Count;
             for (int i = 0; i < currentCount; i = ((i) + (1)))
@@ -1119,10 +1098,7 @@ namespace System.DirectoryServices.Protocols
 
         public void Insert(int index, DirectoryControl value)
         {
-            if (value == null)
-            {
-                throw new ArgumentNullException(nameof(value));
-            }
+            ArgumentNullException.ThrowIfNull(value);
 
             List.Insert(index, value);
         }
@@ -1131,10 +1107,8 @@ namespace System.DirectoryServices.Protocols
 
         protected override void OnValidate(object value)
         {
-            if (value == null)
-            {
-                throw new ArgumentNullException(nameof(value));
-            }
+            ArgumentNullException.ThrowIfNull(value);
+
             if (!(value is DirectoryControl))
             {
                 throw new ArgumentException(SR.Format(SR.InvalidValueType, nameof(DirectoryControl)), nameof(value));

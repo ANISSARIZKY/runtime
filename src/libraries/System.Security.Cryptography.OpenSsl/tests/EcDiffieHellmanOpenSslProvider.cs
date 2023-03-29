@@ -25,6 +25,9 @@ namespace System.Security.Cryptography.EcDiffieHellman.Tests
         public bool IsCurveValid(Oid oid) => _ecdsaProvider.IsCurveValid(oid);
 
         public bool ExplicitCurvesSupported => _ecdsaProvider.ExplicitCurvesSupported;
+
+        public bool CanDeriveNewPublicKey => true;
+        public bool SupportsRawDerivation => true;
     }
 
     public partial class ECDiffieHellmanFactory

@@ -3,13 +3,13 @@ parameters:
   buildConfig: ''
   container: ''
   crossDacPlatforms: {}
+  dependOnEvaluatePaths: false
   isOfficialBuild: false
   osGroup: ''
   osSubgroup: ''
   platform: ''
   pool: ''
   runtimeVariant: ''
-  stagedBuild: false
   testGroup: ''
   timeoutInMinutes: ''
   variables: {}
@@ -26,8 +26,8 @@ jobs:
     osSubgroup: ${{ parameters.osSubgroup }}
     pool: ${{ parameters.pool }}
     runtimeVariant: ${{ parameters.runtimeVariant }}
-    stagedBuild: ${{ parameters.stagedBuild }}
     timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
+    dependOnEvaluatePaths: ${{ parameters.dependOnEvaluatePaths }}
 
     name: crossdacpack
     displayName: CrossDac Packaging
@@ -36,12 +36,12 @@ jobs:
     - name: officialBuildIdArg
       value: ''
     - name: crossDacArgs
-      value: ''
+      value: '/p:CrossDacArtifactsDir=$(crossDacArtifactPath)/$(buildCrossDacArtifactName)'
     - ${{ if and(eq(variables['System.TeamProject'], 'internal'), ne(variables['Build.Reason'], 'PullRequest')) }}:
       - name: officialBuildIdArg
         value: '/p:OfficialBuildId=$(Build.BuildNumber)'
-      - name: crossDacArgs
-        value: '/p:CrossDacArtifactsDir=$(crossDacArtifactPath)/$(buildCrossDacArtifactName)'
+    - name: SignType
+      value: $[ coalesce(variables.OfficialSignType, 'real') ]
     - ${{ parameters.variables }}
 
     dependsOn:
@@ -55,12 +55,13 @@ jobs:
       inputs:
         artifactName: $(buildCrossDacArtifactName)
         downloadPath: $(crossDacArtifactPath)
+        checkDownloadedFiles: true
 
     - script: $(Build.SourcesDirectory)$(dir)build$(scriptExt) -subset crossdacpack -arch $(archType) $(osArg) -c $(buildConfig) $(officialBuildIdArg) $(crossDacArgs) -ci
       displayName: Build crossdac packaging
 
     # Save packages using the prepare-signed-artifacts format.
-    - template: /eng/pipelines/common/upload-unsigned-artifacts-step.yml
+    - template: /eng/pipelines/common/upload-intermediate-artifacts-step.yml
       parameters:
         name: ${{ parameters.platform }}
 

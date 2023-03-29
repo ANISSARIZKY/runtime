@@ -5,17 +5,8 @@
 #include <config.h>
 
 #ifdef ENABLE_PERFTRACING
-#include "ds-rt-config.h"
+#include <eventpipe/ds-rt-config.h>
 #include "ep-rt-types-mono.h"
-
-typedef struct _rt_mono_array_internal_t ds_rt_port_array_t;
-typedef struct _rt_mono_array_iterator_internal_t ds_rt_port_array_iterator_t;
-
-typedef struct _rt_mono_array_internal_t ds_rt_port_config_array_t;
-typedef struct _rt_mono_array_iterator_internal_t ds_rt_port_config_array_iterator_t;
-
-typedef struct _rt_mono_array_internal_t ds_rt_ipc_poll_handle_array_t;
-typedef struct _rt_mono_array_iterator_internal_t ds_rt_ipc_poll_handle_array_iterator_t;
 
 #endif /* ENABLE_PERFTRACING */
 #endif /* __DIAGNOSTICS_RT_TYPES_MONO_H__ */

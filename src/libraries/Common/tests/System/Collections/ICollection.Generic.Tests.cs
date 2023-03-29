@@ -3,6 +3,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using Xunit;
 
 namespace System.Collections.Tests
@@ -334,6 +336,46 @@ namespace System.Collections.Tests
             }
         }
 
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsPreciseGcSupported))]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ICollection_Generic_Remove_ReferenceRemovedFromCollection(bool useRemove)
+        {
+            if (typeof(T).IsValueType || IsReadOnly || AddRemoveClear_ThrowsNotSupported)
+            {
+                return;
+            }
+
+            ICollection<T> collection = GenericICollectionFactory();
+
+            WeakReference<object> wr = PopulateAndRemove(collection, useRemove);
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                GC.Collect();
+                return !wr.TryGetTarget(out _);
+            }, 30_000));
+            GC.KeepAlive(collection);
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            WeakReference<object> PopulateAndRemove(ICollection<T> collection, bool useRemove)
+            {
+                AddToCollection(collection, 1);
+                T value = collection.First();
+
+                if (useRemove)
+                {
+                    Assert.True(collection.Remove(value));
+                }
+                else
+                {
+                    collection.Clear();
+                    Assert.Equal(0, collection.Count);
+                }
+
+                return new WeakReference<object>(value);
+            }
+        }
+
         #endregion
 
         #region Contains
@@ -447,7 +489,7 @@ namespace System.Collections.Tests
             ICollection<T> collection = GenericICollectionFactory(count);
             T[] array = new T[count];
             if (count > 0)
-                Assert.Throws<ArgumentException>(() => collection.CopyTo(array, count));
+                Assert.ThrowsAny<ArgumentException>(() => collection.CopyTo(array, count));
             else
                 collection.CopyTo(array, count); // does nothing since the array is empty
         }
@@ -469,7 +511,7 @@ namespace System.Collections.Tests
             {
                 ICollection<T> collection = GenericICollectionFactory(count);
                 T[] array = new T[count];
-                Assert.Throws<ArgumentException>(() => collection.CopyTo(array, 1));
+                Assert.ThrowsAny<ArgumentException>(() => collection.CopyTo(array, 1));
             }
         }
 

@@ -5,10 +5,11 @@ namespace Dynamic
 {
     using System;
     using TestLibrary;
+    using Xunit;
 
     class Program
     {
-        static int Main(string[] doNotUse)
+        static int Main()
         {
             // RegFree COM is not supported on Windows Nano
             if (Utilities.IsWindowsNanoServer)
@@ -22,6 +23,7 @@ namespace Dynamic
                 new CollectionTest().Run();
                 new EventTest().Run();
                 new ParametersTest().Run();
+                new NETServerTest().Run();
             }
             catch (Exception e)
             {

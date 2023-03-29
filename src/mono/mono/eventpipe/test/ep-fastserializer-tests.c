@@ -1,9 +1,9 @@
-#include "mono/eventpipe/ep.h"
-#include "mono/eventpipe/ep-block.h"
-#include "mono/eventpipe/ep-event.h"
-#include "mono/eventpipe/ep-event-instance.h"
-#include "mono/eventpipe/ep-stream.h"
-#include "eglib/test/test.h"
+#include <eventpipe/ep.h>
+#include <eventpipe/ep-block.h>
+#include <eventpipe/ep-event.h>
+#include <eventpipe/ep-event-instance.h>
+#include <eventpipe/ep-stream.h>
+#include <eglib/test/test.h>
 
 #define TEST_PROVIDER_NAME "MyTestProvider"
 
@@ -76,11 +76,11 @@ test_fast_serializer_object_fast_serialize (void)
 
 	test_location = 2;
 
-	provider = ep_create_provider (TEST_PROVIDER_NAME, NULL, NULL, NULL);
+	provider = ep_create_provider (TEST_PROVIDER_NAME, NULL, NULL);
 	ep_raise_error_if_nok (provider != NULL);
 
 	test_location = 3;
-	
+
 	ep_event = ep_event_alloc (provider, 1, 1, 1, EP_EVENT_LEVEL_VERBOSE, false, NULL, 0);
 	ep_raise_error_if_nok (ep_event != NULL);
 

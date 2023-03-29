@@ -46,9 +46,9 @@ namespace Microsoft.NET.HostModel.ComHost
                     Guid guid = GetTypeGuid(metadataReader, definition);
                     string guidString = GetTypeGuid(metadataReader, definition).ToString("B");
 
-                    if (clsidMap.ContainsKey(guidString))
+                    if (clsidMap.TryGetValue(guidString, out ClsidEntry value))
                     {
-                        throw new ConflictingGuidException(clsidMap[guidString].Type, GetTypeName(metadataReader, definition), guid);
+                        throw new ConflictingGuidException(value.Type, GetTypeName(metadataReader, definition), guid);
                     }
 
                     string progId = GetProgId(metadataReader, definition);
@@ -65,7 +65,7 @@ namespace Microsoft.NET.HostModel.ComHost
 
             using (StreamWriter writer = File.CreateText(clsidMapPath))
             {
-                writer.Write(JsonSerializer.Serialize(clsidMap, new JsonSerializerOptions { IgnoreNullValues = true }));
+                writer.Write(JsonSerializer.Serialize(clsidMap, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull }));
             }
         }
 
@@ -249,7 +249,7 @@ namespace Microsoft.NET.HostModel.ComHost
             Unknown
         }
 
-        private class TypeResolver : ICustomAttributeTypeProvider<KnownType>
+        private sealed class TypeResolver : ICustomAttributeTypeProvider<KnownType>
         {
             public KnownType GetPrimitiveType(PrimitiveTypeCode typeCode)
             {

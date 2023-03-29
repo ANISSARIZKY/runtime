@@ -56,7 +56,7 @@ g_module_open (const gchar *file, GModuleFlags flags)
 
 	if (file != NULL) {
 		gunichar2 *file16;
-		file16 = u8to16(file); 
+		file16 = u8to16(file);
 		module->main_module = FALSE;
 		module->handle = LoadLibraryW (file16);
 		g_free(file16);
@@ -64,7 +64,7 @@ g_module_open (const gchar *file, GModuleFlags flags)
 			g_free (module);
 			return NULL;
 		}
-			
+
 	} else {
 		module->main_module = TRUE;
 		module->handle = GetModuleHandle (NULL);
@@ -163,17 +163,21 @@ g_module_address (void *addr, char *file_name, size_t file_name_len,
 	 * this being an exception.
 	 */
 	BOOL ret = GetModuleHandleExW (GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)addr, &module);
-	if (ret)
+	if (!ret)
 		return FALSE;
 
 	if (file_name != NULL && file_name_len >= 1) {
 		/* sigh, non-const. AIX for POSIX is the same way. */
 		WCHAR fname [MAX_PATH];
 		DWORD bytes = GetModuleFileNameW (module, fname, G_N_ELEMENTS (fname));
-		/* XXX: check for ERROR_INSUFFICIENT_BUFFER? */
 		if (bytes) {
 			/* Convert back to UTF-8 from wide for runtime */
-			*file_name = '\0'; /* XXX */
+			GFixedBufferCustomAllocatorData custom_alloc_data;
+			custom_alloc_data.buffer = file_name;
+			custom_alloc_data.buffer_size = file_name_len;
+			custom_alloc_data.req_buffer_size = 0;
+			if (!g_utf16_to_utf8_custom_alloc (fname, -1, NULL, NULL, g_fixed_buffer_custom_allocator, &custom_alloc_data, NULL))
+				*file_name = '\0';
 		} else {
 			*file_name = '\0';
 		}
@@ -217,7 +221,7 @@ g_module_error (void)
 #else
 	WCHAR local_buf [1024];
 	if (!FormatMessageW (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
-		code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), local_buf, G_N_ELEMENTS (local_buf) - 1, NULL) )
+		code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), local_buf, STRING_LENGTH (local_buf), NULL) )
 		local_buf [0] = TEXT('\0');
 
 	ret = u16to8 (local_buf);
@@ -252,18 +256,18 @@ gchar *
 g_module_build_path (const gchar *directory, const gchar *module_name)
 {
 	const char *lib_prefix = "";
-	
+
 	if (module_name == NULL)
 		return NULL;
 
 	if (strncmp (module_name, "lib", 3) != 0)
 		lib_prefix = LIBPREFIX;
-	
-	if (directory && *directory){ 
-		
+
+	if (directory && *directory){
+
 		return g_strdup_printf ("%s/%s%s" LIBSUFFIX, directory, lib_prefix, module_name);
 	}
-	return g_strdup_printf ("%s%s" LIBSUFFIX, lib_prefix, module_name); 
+	return g_strdup_printf ("%s%s" LIBSUFFIX, lib_prefix, module_name);
 }
 
 // This is not about GModule but is still a close fit.

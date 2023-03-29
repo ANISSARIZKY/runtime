@@ -4,7 +4,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 
@@ -13,34 +13,51 @@ namespace Microsoft.Extensions.Logging
     /// <summary>
     /// Formatter to convert the named format items like {NamedformatItem} to <see cref="string.Format(IFormatProvider, string, object)"/> format.
     /// </summary>
-    internal class LogValuesFormatter
+    internal sealed class LogValuesFormatter
     {
         private const string NullValue = "(null)";
-        private static readonly char[] FormatDelimiters = {',', ':'};
-        private readonly string _format;
+        private static readonly char[] FormatDelimiters = { ',', ':' };
         private readonly List<string> _valueNames = new List<string>();
+#if NET8_0_OR_GREATER
+        private readonly CompositeFormat _format;
+#else
+        private readonly string _format;
+#endif
+
+        // NOTE: If this assembly ever builds for netcoreapp, the below code should change to:
+        // - Be annotated as [SkipLocalsInit] to avoid zero'ing the stackalloc'd char span
+        // - Format _valueNames.Count directly into a span
 
         public LogValuesFormatter(string format)
         {
-            if (format == null)
-            {
-                throw new ArgumentNullException(nameof(format));
-            }
+            ThrowHelper.ThrowIfNull(format);
 
             OriginalFormat = format;
 
-            var sb = new StringBuilder();
+            var vsb = new ValueStringBuilder(stackalloc char[256]);
             int scanIndex = 0;
             int endIndex = format.Length;
 
             while (scanIndex < endIndex)
             {
                 int openBraceIndex = FindBraceIndex(format, '{', scanIndex, endIndex);
+                if (scanIndex == 0 && openBraceIndex == endIndex)
+                {
+                    // No holes found.
+                    _format =
+#if NET8_0_OR_GREATER
+                        CompositeFormat.Parse(format);
+#else
+                        format;
+#endif
+                    return;
+                }
+
                 int closeBraceIndex = FindBraceIndex(format, '}', openBraceIndex, endIndex);
 
                 if (closeBraceIndex == endIndex)
                 {
-                    sb.Append(format, scanIndex, endIndex - scanIndex);
+                    vsb.Append(format.AsSpan(scanIndex, endIndex - scanIndex));
                     scanIndex = endIndex;
                 }
                 else
@@ -48,16 +65,21 @@ namespace Microsoft.Extensions.Logging
                     // Format item syntax : { index[,alignment][ :formatString] }.
                     int formatDelimiterIndex = FindIndexOfAny(format, FormatDelimiters, openBraceIndex, closeBraceIndex);
 
-                    sb.Append(format, scanIndex, openBraceIndex - scanIndex + 1);
-                    sb.Append(_valueNames.Count.ToString(CultureInfo.InvariantCulture));
+                    vsb.Append(format.AsSpan(scanIndex, openBraceIndex - scanIndex + 1));
+                    vsb.Append(_valueNames.Count.ToString());
                     _valueNames.Add(format.Substring(openBraceIndex + 1, formatDelimiterIndex - openBraceIndex - 1));
-                    sb.Append(format, formatDelimiterIndex, closeBraceIndex - formatDelimiterIndex + 1);
+                    vsb.Append(format.AsSpan(formatDelimiterIndex, closeBraceIndex - formatDelimiterIndex + 1));
 
                     scanIndex = closeBraceIndex + 1;
                 }
             }
 
-            _format = sb.ToString();
+            _format =
+#if NET8_0_OR_GREATER
+                CompositeFormat.Parse(vsb.ToString());
+#else
+                vsb.ToString();
+#endif
         }
 
         public string OriginalFormat { get; private set; }
@@ -117,7 +139,35 @@ namespace Microsoft.Extensions.Logging
             return findIndex == -1 ? endIndex : findIndex;
         }
 
-        public string Format(object[] values)
+        public string Format(object?[]? values)
+        {
+            object?[]? formattedValues = values;
+
+            if (values != null)
+            {
+                for (int i = 0; i < values.Length; i++)
+                {
+                    object formattedValue = FormatArgument(values[i]);
+                    // If the formatted value is changed, we allocate and copy items to a new array to avoid mutating the array passed in to this method
+                    if (!ReferenceEquals(formattedValue, values[i]))
+                    {
+                        formattedValues = new object[values.Length];
+                        Array.Copy(values, formattedValues, i);
+                        formattedValues[i++] = formattedValue;
+                        for (; i < values.Length; i++)
+                        {
+                            formattedValues[i] = FormatArgument(values[i]);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            return string.Format(CultureInfo.InvariantCulture, _format, formattedValues ?? Array.Empty<object>());
+        }
+
+        // NOTE: This method mutates the items in the array if needed to avoid extra allocations, and should only be used when caller expects this to happen
+        internal string FormatWithOverwrite(object?[]? values)
         {
             if (values != null)
             {
@@ -132,25 +182,55 @@ namespace Microsoft.Extensions.Logging
 
         internal string Format()
         {
+#if NET8_0_OR_GREATER
+            return _format.Format;
+#else
             return _format;
+#endif
         }
 
-        internal string Format(object arg0)
+#if NET8_0_OR_GREATER
+        internal string Format<TArg0>(TArg0 arg0)
         {
-            return string.Format(CultureInfo.InvariantCulture, _format, FormatArgument(arg0));
+            object? arg0String = null;
+            return
+                !TryFormatArgumentIfNullOrEnumerable(arg0, ref arg0String) ?
+                string.Format(CultureInfo.InvariantCulture, _format, arg0) :
+                string.Format(CultureInfo.InvariantCulture, _format, arg0String);
         }
 
-        internal string Format(object arg0, object arg1)
+        internal string Format<TArg0, TArg1>(TArg0 arg0, TArg1 arg1)
         {
-            return string.Format(CultureInfo.InvariantCulture, _format, FormatArgument(arg0), FormatArgument(arg1));
+            object? arg0String = null, arg1String = null;
+            return
+                !TryFormatArgumentIfNullOrEnumerable(arg0, ref arg0String) &&
+                !TryFormatArgumentIfNullOrEnumerable(arg1, ref arg1String) ?
+                string.Format(CultureInfo.InvariantCulture, _format, arg0, arg1) :
+                string.Format(CultureInfo.InvariantCulture, _format, arg0String ?? arg0, arg1String ?? arg1);
         }
 
-        internal string Format(object arg0, object arg1, object arg2)
+        internal string Format<TArg0, TArg1, TArg2>(TArg0 arg0, TArg1 arg1, TArg2 arg2)
         {
-            return string.Format(CultureInfo.InvariantCulture, _format, FormatArgument(arg0), FormatArgument(arg1), FormatArgument(arg2));
+            object? arg0String = null, arg1String = null, arg2String = null;
+            return
+                !TryFormatArgumentIfNullOrEnumerable(arg0, ref arg0String) &&
+                !TryFormatArgumentIfNullOrEnumerable(arg1, ref arg1String) &&
+                !TryFormatArgumentIfNullOrEnumerable(arg2, ref arg2String) ?
+                string.Format(CultureInfo.InvariantCulture, _format, arg0, arg1, arg2) :
+                string.Format(CultureInfo.InvariantCulture, _format, arg0String ?? arg0, arg1String ?? arg1, arg2String ?? arg2);
         }
+#else
+        internal string Format(object? arg0) =>
+            string.Format(CultureInfo.InvariantCulture, _format, FormatArgument(arg0));
 
-        public KeyValuePair<string, object> GetValue(object[] values, int index)
+        internal string Format(object? arg0, object? arg1) =>
+            string.Format(CultureInfo.InvariantCulture, _format, FormatArgument(arg0), FormatArgument(arg1));
+
+        internal string Format(object? arg0, object? arg1, object? arg2) =>
+            string.Format(CultureInfo.InvariantCulture, _format, FormatArgument(arg0), FormatArgument(arg1), FormatArgument(arg2));
+#endif
+
+        public KeyValuePair<string, object?> GetValue(object?[] values, int index)
         {
             if (index < 0 || index > _valueNames.Count)
             {
@@ -159,46 +239,58 @@ namespace Microsoft.Extensions.Logging
 
             if (_valueNames.Count > index)
             {
-                return new KeyValuePair<string, object>(_valueNames[index], values[index]);
+                return new KeyValuePair<string, object?>(_valueNames[index], values[index]);
             }
 
-            return new KeyValuePair<string, object>("{OriginalFormat}", OriginalFormat);
+            return new KeyValuePair<string, object?>("{OriginalFormat}", OriginalFormat);
         }
 
-        public IEnumerable<KeyValuePair<string, object>> GetValues(object[] values)
+        public IEnumerable<KeyValuePair<string, object?>> GetValues(object[] values)
         {
-            var valueArray = new KeyValuePair<string, object>[values.Length + 1];
+            var valueArray = new KeyValuePair<string, object?>[values.Length + 1];
             for (int index = 0; index != _valueNames.Count; ++index)
             {
-                valueArray[index] = new KeyValuePair<string, object>(_valueNames[index], values[index]);
+                valueArray[index] = new KeyValuePair<string, object?>(_valueNames[index], values[index]);
             }
 
-            valueArray[valueArray.Length - 1] = new KeyValuePair<string, object>("{OriginalFormat}", OriginalFormat);
+            valueArray[valueArray.Length - 1] = new KeyValuePair<string, object?>("{OriginalFormat}", OriginalFormat);
             return valueArray;
         }
 
-        private object FormatArgument(object value)
+        private static object FormatArgument(object? value)
+        {
+            object? stringValue = null;
+            return TryFormatArgumentIfNullOrEnumerable(value, ref stringValue) ? stringValue : value!;
+        }
+
+        private static bool TryFormatArgumentIfNullOrEnumerable(object? value, [NotNullWhen(true)] ref object? stringValue)
         {
             if (value == null)
             {
-                return NullValue;
+                stringValue = NullValue;
+                return true;
             }
 
-            // since 'string' implements IEnumerable, special case it
-            if (value is string)
+            // if the value implements IEnumerable but isn't itself a string, build a comma separated string.
+            if (value is not string && value is IEnumerable enumerable)
             {
-                return value;
+                var vsb = new ValueStringBuilder(stackalloc char[256]);
+                bool first = true;
+                foreach (object? e in enumerable)
+                {
+                    if (!first)
+                    {
+                        vsb.Append(", ");
+                    }
+
+                    vsb.Append(e != null ? e.ToString() : NullValue);
+                    first = false;
+                }
+                stringValue = vsb.ToString();
+                return true;
             }
 
-            // if the value implements IEnumerable, build a comma separated string.
-            var enumerable = value as IEnumerable;
-            if (enumerable != null)
-            {
-                return string.Join(", ", enumerable.Cast<object>().Select(o => o ?? NullValue));
-            }
-
-            return value;
+            return false;
         }
-
     }
 }

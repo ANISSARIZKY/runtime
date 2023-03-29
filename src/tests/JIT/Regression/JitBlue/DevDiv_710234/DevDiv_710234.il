@@ -6,8 +6,9 @@
 .assembly extern System.Console { auto }
 
 .assembly DevDiv_710234 { }
+.assembly extern xunit.core {}
 
-.class private auto ansi beforefieldinit DevDiv_710234
+.class public auto ansi beforefieldinit DevDiv_710234
        extends [System.Runtime]System.Object
 {
     .method static int64 Test(int16,int32,bool,float64,int32,int32)
@@ -99,8 +100,11 @@
           add  
           ret    
     }
-    .method private hidebysig static int32 Main() cil managed
+    .method public hidebysig static int32 Main() cil managed
     {
+        .custom instance void [xunit.core]Xunit.FactAttribute::.ctor() = (
+            01 00 00 00
+        )
         .entrypoint
         .locals init (int32 returnValue, int64 TestResult)
         nop

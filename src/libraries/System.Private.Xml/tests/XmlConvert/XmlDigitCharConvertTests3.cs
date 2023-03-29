@@ -1,9 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers.Binary;
 using OLEDB.Test.ModuleCore;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlConvertTests
 {
     internal class XmlDigitCharConvertTests3 : XmlDigitCharConvertTests
     {
@@ -28,7 +29,8 @@ namespace System.Xml.Tests
             string strEnVal = string.Empty;
             string strVal = string.Empty;
 
-            strVal = (BitConverter.ToChar(_byte_Digit, i)).ToString();
+            char c = (char)BinaryPrimitives.ReadUInt16LittleEndian(new Span<byte>(_byte_Digit, i, 2));
+            strVal = c.ToString();
             strEnVal = XmlConvert.EncodeName(strVal);
             CError.Compare(strEnVal, _Expbyte_Digit[i / 2], "Encode Comparison failed at " + i);
 

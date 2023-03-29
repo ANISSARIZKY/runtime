@@ -10,10 +10,9 @@ namespace System.Net.WebSockets
         private const string SupportedVersion = "13";
 
         internal static async Task<HttpListenerWebSocketContext> AcceptWebSocketAsyncCore(HttpListenerContext context,
-            string subProtocol,
+            string? subProtocol,
             int receiveBufferSize,
-            TimeSpan keepAliveInterval,
-            ArraySegment<byte>? internalBuffer = null)
+            TimeSpan keepAliveInterval)
         {
             ValidateOptions(subProtocol, receiveBufferSize, MinSendBufferSize, keepAliveInterval);
 
@@ -68,7 +67,7 @@ namespace System.Net.WebSockets
                                                                 request.IsLocal,
                                                                 request.IsSecureConnection,
                                                                 origin!,
-                                                                secWebSocketProtocols != null ? secWebSocketProtocols : Array.Empty<string>(),
+                                                                secWebSocketProtocols ?? Array.Empty<string>(),
                                                                 secWebSocketVersion!,
                                                                 secWebSocketKey!,
                                                                 webSocket);

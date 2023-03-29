@@ -2,16 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Buffers;
+using System.Buffers.Text;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
-
-#if SYSTEM_PRIVATE_CORELIB
-using Internal.Runtime.CompilerServices;
-#endif
 
 namespace System.Text.Unicode
 {
@@ -29,9 +26,8 @@ namespace System.Text.Unicode
             Debug.Assert(pOutputBuffer != null || outputCharsRemaining == 0, "Destination length must be zero if destination buffer pointer is null.");
 
             // First, try vectorized conversion.
-
             {
-                nuint numElementsConverted = ASCIIUtility.WidenAsciiToUtf16(pInputBuffer, pOutputBuffer, (uint)Math.Min(inputLength, outputCharsRemaining));
+                nuint numElementsConverted = Ascii.WidenAsciiToUtf16(pInputBuffer, pOutputBuffer, (uint)Math.Min(inputLength, outputCharsRemaining));
 
                 pInputBuffer += numElementsConverted;
                 pOutputBuffer += numElementsConverted;
@@ -78,7 +74,7 @@ namespace System.Text.Unicode
 #endif
                 // First, check for the common case of all-ASCII bytes.
 
-                if (ASCIIUtility.AllBytesInUInt32AreAscii(thisDWord))
+                if (Ascii.AllBytesInUInt32AreAscii(thisDWord))
                 {
                     // We read an all-ASCII sequence.
 
@@ -87,7 +83,7 @@ namespace System.Text.Unicode
                         goto ProcessRemainingBytesSlow; // running out of space, but may be able to write some data
                     }
 
-                    ASCIIUtility.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref *pOutputBuffer, thisDWord);
+                    Ascii.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref *pOutputBuffer, thisDWord);
                     pInputBuffer += 4;
                     pOutputBuffer += 4;
                     outputCharsRemaining -= 4;
@@ -106,15 +102,15 @@ namespace System.Text.Unicode
                         thisDWord = Unsafe.ReadUnaligned<uint>(pInputBuffer);
                         secondDWord = Unsafe.ReadUnaligned<uint>(pInputBuffer + sizeof(uint));
 
-                        if (!ASCIIUtility.AllBytesInUInt32AreAscii(thisDWord | secondDWord))
+                        if (!Ascii.AllBytesInUInt32AreAscii(thisDWord | secondDWord))
                         {
                             goto LoopTerminatedEarlyDueToNonAsciiData;
                         }
 
                         pInputBuffer += 8;
 
-                        ASCIIUtility.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref pOutputBuffer[0], thisDWord);
-                        ASCIIUtility.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref pOutputBuffer[4], secondDWord);
+                        Ascii.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref pOutputBuffer[0], thisDWord);
+                        Ascii.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref pOutputBuffer[4], secondDWord);
 
                         pOutputBuffer += 8;
                     }
@@ -125,15 +121,15 @@ namespace System.Text.Unicode
 
                 LoopTerminatedEarlyDueToNonAsciiData:
 
-                    if (ASCIIUtility.AllBytesInUInt32AreAscii(thisDWord))
+                    if (Ascii.AllBytesInUInt32AreAscii(thisDWord))
                     {
                         // The first DWORD contained all-ASCII bytes, so expand it.
 
-                        ASCIIUtility.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref *pOutputBuffer, thisDWord);
+                        Ascii.WidenFourAsciiBytesToUtf16AndWriteToBuffer(ref *pOutputBuffer, thisDWord);
 
                         // continue the outer loop from the second DWORD
 
-                        Debug.Assert(!ASCIIUtility.AllBytesInUInt32AreAscii(secondDWord));
+                        Debug.Assert(!Ascii.AllBytesInUInt32AreAscii(secondDWord));
                         thisDWord = secondDWord;
 
                         pInputBuffer += 4;
@@ -151,7 +147,7 @@ namespace System.Text.Unicode
 
             AfterReadDWordSkipAllBytesAsciiCheck:
 
-                Debug.Assert(!ASCIIUtility.AllBytesInUInt32AreAscii(thisDWord)); // this should have been handled earlier
+                Debug.Assert(!Ascii.AllBytesInUInt32AreAscii(thisDWord)); // this should have been handled earlier
 
                 // Next, try stripping off ASCII bytes one at a time.
                 // We only handle up to three ASCII bytes here since we handled the four ASCII byte case above.
@@ -852,7 +848,7 @@ namespace System.Text.Unicode
             // First, try vectorized conversion.
 
             {
-                nuint numElementsConverted = ASCIIUtility.NarrowUtf16ToAscii(pInputBuffer, pOutputBuffer, (uint)Math.Min(inputLength, outputBytesRemaining));
+                nuint numElementsConverted = Ascii.NarrowUtf16ToAscii(pInputBuffer, pOutputBuffer, (uint)Math.Min(inputLength, outputBytesRemaining));
 
                 pInputBuffer += numElementsConverted;
                 pOutputBuffer += numElementsConverted;
@@ -882,7 +878,8 @@ namespace System.Text.Unicode
             // vector is only used in those code paths, we leave it uninitialized if SSE4.1
             // is not enabled.
 
-            Unsafe.SkipInit(out Vector128<short> nonAsciiUtf16DataMask);
+            Vector128<short> nonAsciiUtf16DataMask;
+
             if (Sse41.X64.IsSupported || (AdvSimd.Arm64.IsSupported && BitConverter.IsLittleEndian))
             {
                 nonAsciiUtf16DataMask = Vector128.Create(unchecked((short)0xFF80)); // mask of non-ASCII bits in a UTF-16 char
@@ -950,6 +947,10 @@ namespace System.Text.Unicode
                         Vector128<short> utf16Data;
                         for (i = 0; (uint)i < maxIters; i++)
                         {
+                            // The trimmer won't trim out nonAsciiUtf16DataMask unless this is in the loop.
+                            // Luckily, this is a nop and will be elided by the JIT
+                            Unsafe.SkipInit(out nonAsciiUtf16DataMask);
+
                             utf16Data = Unsafe.ReadUnaligned<Vector128<short>>(pInputBuffer);
 
                             if (AdvSimd.IsSupported)
@@ -1134,7 +1135,7 @@ namespace System.Text.Unicode
                     }
                     else
                     {
-                        pOutputBuffer[0] = (byte)(thisDWord >> 24); // extract [ AA 00 ## ## ]
+                        pOutputBuffer[0] = (byte)(thisDWord >> 16); // extract [ 00 AA ## ## ]
                     }
 
                     pInputBuffer++;

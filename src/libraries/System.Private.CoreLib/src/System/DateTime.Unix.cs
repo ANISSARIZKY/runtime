@@ -5,9 +5,8 @@ namespace System
 {
     public readonly partial struct DateTime
     {
-        internal const bool s_systemSupportsLeapSeconds = false;
+        internal static bool SystemSupportsLeapSeconds => false;
 
-#if !CORECLR
         public static DateTime UtcNow
         {
             get
@@ -15,12 +14,18 @@ namespace System
                 return new DateTime(((ulong)(Interop.Sys.GetSystemTimeAsTicks() + UnixEpochTicks)) | KindUtc);
             }
         }
-#endif
 
-        private static DateTime FromFileTimeLeapSecondsAware(long fileTime) => default;
-        private static long ToFileTimeLeapSecondsAware(long ticks) => default;
+#pragma warning disable IDE0060
+
+        // Never called
+        private static DateTime FromFileTimeLeapSecondsAware(ulong fileTime) => default;
+
+        // Never called
+        private static ulong ToFileTimeLeapSecondsAware(long ticks) => default;
 
         // IsValidTimeWithLeapSeconds is not expected to be called at all for now on non-Windows platforms
-        internal static bool IsValidTimeWithLeapSeconds(int year, int month, int day, int hour, int minute, int second, DateTimeKind kind) => false;
+        internal static bool IsValidTimeWithLeapSeconds(int year, int month, int day, int hour, int minute, DateTimeKind kind) => false;
+
+#pragma warning restore IDE0060
     }
 }

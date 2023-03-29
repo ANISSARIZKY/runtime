@@ -24,6 +24,8 @@ namespace System.Reflection.Metadata.Tests
             public string Name;
         }
 
+        private delegate ReadOnlySpan<uint> GetTagToTokenTypeArrayFunc();
+
         private IEnumerable<XxxTag> GetTags()
         {
             Type[] types = new[] {
@@ -48,24 +50,38 @@ namespace System.Reflection.Metadata.Tests
                    {
                        GetTagToTokenTypeArray = () =>
                        {
-                           var array = typeInfo.GetDeclaredField("TagToTokenTypeArray");
+                           var array = typeInfo.GetDeclaredProperty("TagToTokenTypeArray");
                            var vector = typeInfo.GetDeclaredField("TagToTokenTypeByteVector");
 
                            Assert.True((array == null) ^ (vector == null), typeInfo.Name + " does not have exactly one of TagToTokenTypeArray or TagToTokenTypeByteVector");
 
                            if (array != null)
                            {
-                               return (uint[])array.GetValue(null);
+                               return ((GetTagToTokenTypeArrayFunc)array.GetGetMethod(nonPublic: true).CreateDelegate(typeof(GetTagToTokenTypeArrayFunc)))().ToArray();
                            }
 
                            Assert.Contains(vector.FieldType, new[] { typeof(uint), typeof(ulong) });
                            if (vector.FieldType == typeof(uint))
                            {
-                               return BitConverter.GetBytes((uint)vector.GetValue(null)).Select(t => (uint)t << TokenTypeIds.RowIdBitCount).ToArray();
+                               uint value = (uint)vector.GetValue(null);
+                               uint[] ret = new uint[4];
+                               for (uint i = 0; i < 4; i++)
+                               {
+                                   ret[i] = ((uint)(byte)value) << TokenTypeIds.RowIdBitCount;
+                                   value >>= 8;
+                               }
+                               return ret;
                            }
                            else
                            {
-                               return BitConverter.GetBytes((ulong)vector.GetValue(null)).Select(t => (uint)t << TokenTypeIds.RowIdBitCount).ToArray();
+                               ulong value = (ulong)vector.GetValue(null);
+                               uint[] ret = new uint[8];
+                               for (uint i = 0; i < 8; i++)
+                               {
+                                   ret[i] = ((uint)(byte)value) << TokenTypeIds.RowIdBitCount;
+                                   value >>= 8;
+                               }
+                               return ret;
                            }
                        },
 
@@ -79,7 +95,7 @@ namespace System.Reflection.Metadata.Tests
                    };
         }
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsNotBuiltWithAggressiveTrimming))]
         public void ValidateTagToTokenConversion()
         {
             foreach (var tag in GetTags())

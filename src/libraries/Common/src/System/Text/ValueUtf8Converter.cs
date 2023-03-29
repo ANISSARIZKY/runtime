@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Buffers;
 
 namespace System.Text
@@ -24,7 +23,7 @@ namespace System.Text
 
         public Span<byte> ConvertAndTerminateString(ReadOnlySpan<char> value)
         {
-            int maxSize = Encoding.UTF8.GetMaxByteCount(value.Length) + 1;
+            int maxSize = checked(Encoding.UTF8.GetMaxByteCount(value.Length) + 1);
             if (_bytes.Length < maxSize)
             {
                 Dispose();

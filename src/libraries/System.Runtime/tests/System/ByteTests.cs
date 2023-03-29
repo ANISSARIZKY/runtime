@@ -88,16 +88,29 @@ namespace System.Tests
         {
             foreach (NumberFormatInfo emptyFormat in new[] { null, NumberFormatInfo.CurrentInfo })
             {
-                yield return new object[] { (byte)0, "G", emptyFormat, "0" };
-                yield return new object[] { (byte)123, "G", emptyFormat, "123" };
-                yield return new object[] { byte.MaxValue, "G", emptyFormat, "255" };
+                foreach (string glike in new[] { "G", "R" })
+                {
+                    yield return new object[] { (byte)0, glike, emptyFormat, "0" };
+                    yield return new object[] { (byte)123, glike, emptyFormat, "123" };
+                    yield return new object[] { byte.MaxValue, glike, emptyFormat, "255" };
+                }
 
                 yield return new object[] { (byte)123, "D", emptyFormat, "123" };
                 yield return new object[] { (byte)123, "D99", emptyFormat, "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000123" };
 
                 yield return new object[] { (byte)0x24, "x", emptyFormat, "24" };
                 yield return new object[] { (byte)24, "N", emptyFormat, string.Format("{0:N}", 24.00) };
+
+
             }
+            NumberFormatInfo invariantFormat = NumberFormatInfo.InvariantInfo;
+            yield return new object[] { (byte)32, "C100", invariantFormat, "\u00A432.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" };
+            yield return new object[] { (byte)32, "P100", invariantFormat, "3,200.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 %" };
+            yield return new object[] { (byte)32, "D100", invariantFormat, "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000032" };
+            yield return new object[] { (byte)32, "E100", invariantFormat, "3.2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000E+001" };
+            yield return new object[] { (byte)32, "F100", invariantFormat, "32.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" };
+            yield return new object[] { (byte)32, "N100", invariantFormat, "32.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" };
+            yield return new object[] { (byte)32, "X100", invariantFormat, "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020" };
 
             var customFormat = new NumberFormatInfo()
             {
@@ -153,10 +166,6 @@ namespace System.Tests
         public static void ToString_InvalidFormat_ThrowsFormatException()
         {
             byte b = 123;
-            Assert.Throws<FormatException>(() => b.ToString("r")); // Invalid format
-            Assert.Throws<FormatException>(() => b.ToString("r", null)); // Invalid format
-            Assert.Throws<FormatException>(() => b.ToString("R")); // Invalid format
-            Assert.Throws<FormatException>(() => b.ToString("R", null)); // Invalid format
             Assert.Throws<FormatException>(() => b.ToString("Y")); // Invalid format
             Assert.Throws<FormatException>(() => b.ToString("Y", null)); // Invalid format
         }

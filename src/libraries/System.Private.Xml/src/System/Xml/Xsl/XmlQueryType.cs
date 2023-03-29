@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text;
 using System.Xml.Schema;
@@ -167,7 +168,7 @@ namespace System.Xml.Xsl
         /// <summary>
         /// Strongly-typed Equals that returns true if this type and "that" type are equivalent.
         /// </summary>
-        public bool Equals(XmlQueryType? that)
+        public bool Equals([NotNullWhen(true)] XmlQueryType? that)
         {
             if (that == null)
                 return false;
@@ -318,7 +319,7 @@ namespace System.Xml.Xsl
         /// <summary>
         /// True if "obj" is an XmlQueryType, and this type is the exact same static type.
         /// </summary>
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             XmlQueryType? that = obj as XmlQueryType;
 
@@ -572,7 +573,7 @@ namespace System.Xml.Xsl
                         if (!isXQ)
                             goto case XmlTypeCode.Element;
 
-                        s += "{(element" + NameAndType(true) + "?&text?&comment?&processing-instruction?)*}";
+                        s += $"{{(element{NameAndType(true)}?&text?&comment?&processing-instruction?)*}}";
                         break;
 
                     case XmlTypeCode.Element:
@@ -585,7 +586,7 @@ namespace System.Xml.Xsl
             {
                 // Get QualifiedName from SchemaType
                 if (SchemaType.QualifiedName.IsEmpty)
-                    s = "<:" + s_typeNames[(int)TypeCode];
+                    s = $"<:{s_typeNames[(int)TypeCode]}";
                 else
                     s = QNameToString(SchemaType.QualifiedName);
             }
@@ -612,7 +613,7 @@ namespace System.Xml.Xsl
 
             if (SchemaType.QualifiedName.IsEmpty)
             {
-                typeName = "typeof(" + nodeName + ")";
+                typeName = $"typeof({nodeName})";
             }
             else
             {
@@ -627,7 +628,7 @@ namespace System.Xml.Xsl
             if (nodeName == "*" && typeName == "*")
                 return "";
 
-            return "(" + nodeName + ", " + typeName + ")";
+            return $"({nodeName}, {typeName})";
         }
 
         /// <summary>
@@ -648,15 +649,15 @@ namespace System.Xml.Xsl
             }
             else if (name.Namespace == XmlReservedNs.NsXs)
             {
-                return "xs:" + name.Name;
+                return $"xs:{name.Name}";
             }
             else if (name.Namespace == XmlReservedNs.NsXQueryDataType)
             {
-                return "xdt:" + name.Name;
+                return $"xdt:{name.Name}";
             }
             else
             {
-                return "{" + name.Namespace + "}" + name.Name;
+                return $"{{{name.Namespace}}}{name.Name}";
             }
         }
 
@@ -905,7 +906,7 @@ namespace System.Xml.Xsl
                 set
                 {
                     Debug.Assert(index1 < _bits.Length && index2 < _bits.Length, "Index out of range.");
-                    if (value == true)
+                    if (value)
                     {
                         _bits[index1] |= (ulong)1 << index2;
                     }

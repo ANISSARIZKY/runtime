@@ -27,7 +27,7 @@ Every managed thread has an associated Thread object, defined in [threads.h][thr
 
 All Thread objects are stored in the ThreadStore (also defined in [threads.h][threads.h]), which is a simple list of all known Thread objects. To enumerate all managed threads, one must first acquire the ThreadStoreLock, then use ThreadStore::GetAllThreadList to enumerate all Thread objects. This list may include managed threads which are not currently assigned to native threads (for example, they may not yet be started, or the native thread may already have exited).
 
-[threads.h]: ../../../../src/coreclr/src/vm/threads.h
+[threads.h]: ../../../../src/coreclr/vm/threads.h
 
 Each managed thread that is currently assigned to a native thread is reachable via a native thread-local storage (TLS) slot on that native thread. This allows code that is executing on that native thread to get the corresponding Thread object, via GetThread().
 
@@ -103,9 +103,9 @@ Hijacking for GC suspension is done by Thread::SysSuspendForGC. This method atte
 2. Get the current CONTEXT for the thread, via GetThreadContext. This is an OS concept; CONTEXT represents the current register state of the thread. This allows us to inspect its instruction pointer, and thus determine what type of code it is currently executing.
 3. Check again if the thread is in cooperative mode, as it may have already left cooperative mode before it could be suspended. If so, the thread is in dangerous territory: the thread may be executing arbitrary native code, and must be resumed immediately to avoid deadlocks.
 4. Check if the thread is running managed code. It is possible that it is executing native VM code in cooperative mode (see Synchronization, below), in which case the thread must be immediately resumed as in the previous step.
-5. Now the thread is suspended in managed code. Depending on whether that code is fully- or partially-interruptable, one of the following is performed:
-  * If fully interruptable, it is safe to perform a GC at any point, since the thread is, by definition, at a safe point. It is reasonable to leave the thread suspended at this point (because it's safe) but various historical OS bugs prevent this from working, because the CONTEXT retrieved earlier may be corrupt). Instead, the thread's instruction pointer is overwritten, redirecting it to a stub that will capture a more complete CONTEXT, leave cooperative mode, wait for the GC to complete, reenter cooperative mode, and restore the thread to its previous state.
-  * If partially-interruptable, the thread is, by definition, not at a safe point. However, the caller will be at a safe point (method transition). Using that knowledge, the CLR "hijacks" the top-most stack frame's return address (physically overwrite that location on the stack) with a stub similar to the one used for fully-interruptable code. When the method returns, it will no longer return to its actual caller, but rather to the stub (the method may also perform a GC poll, inserted by the JIT, before that point, which will cause it to leave cooperative mode and undo the hijack).
+5. Now the thread is suspended in managed code. Depending on whether that code is fully- or partially-interruptible, one of the following is performed:
+  * If fully interruptible, it is safe to perform a GC at any point, since the thread is, by definition, at a safe point. It is reasonable to leave the thread suspended at this point (because it's safe) but various historical OS bugs prevent this from working, because the CONTEXT retrieved earlier may be corrupt). Instead, the thread's instruction pointer is overwritten, redirecting it to a stub that will capture a more complete CONTEXT, leave cooperative mode, wait for the GC to complete, reenter cooperative mode, and restore the thread to its previous state.
+  * If partially-interruptible, the thread is, by definition, not at a safe point. However, the caller will be at a safe point (method transition). Using that knowledge, the CLR "hijacks" the top-most stack frame's return address (physically overwrite that location on the stack) with a stub similar to the one used for fully-interruptible code. When the method returns, it will no longer return to its actual caller, but rather to the stub (the method may also perform a GC poll, inserted by the JIT, before that point, which will cause it to leave cooperative mode and undo the hijack).
 
 ThreadAbort / AppDomain-Unload
 ==============================
@@ -135,8 +135,8 @@ Sync blocks are stored in the Sync Block Table, and are addressed by sync block 
 
 The details of object headers and sync blocks are defined in [syncblk.h][syncblk.h]/[.cpp][syncblk.cpp].
 
-[syncblk.h]: ../../../../src/coreclr/src/vm/syncblk.h
-[syncblk.cpp]: ../../../../src/coreclr/src/vm/syncblk.cpp
+[syncblk.h]: ../../../../src/coreclr/vm/syncblk.h
+[syncblk.cpp]: ../../../../src/coreclr/vm/syncblk.cpp
 
 If there is room on the object header, Monitor stores the managed thread ID of the thread that currently holds the lock on the object (or zero (0) if no thread holds the lock). Acquiring the lock in this case is a simple matter of spin-waiting until the object header's thread ID is zero, and then atomically setting it to the current thread's managed thread ID.
 

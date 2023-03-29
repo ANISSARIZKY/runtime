@@ -126,7 +126,7 @@ namespace System.Linq.Expressions
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
         public static MemberExpression Field(Expression? expression, FieldInfo field)
         {
-            ContractUtils.RequiresNotNull(field, nameof(field));
+            ArgumentNullException.ThrowIfNull(field);
 
             if (field.IsStatic)
             {
@@ -150,10 +150,11 @@ namespace System.Linq.Expressions
         /// <param name="expression">The containing object of the field.  This can be null for static fields.</param>
         /// <param name="fieldName">The field to be accessed.</param>
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
+        [RequiresUnreferencedCode(ExpressionRequiresUnreferencedCode)]
         public static MemberExpression Field(Expression expression, string fieldName)
         {
             ExpressionUtils.RequiresCanRead(expression, nameof(expression));
-            ContractUtils.RequiresNotNull(fieldName, nameof(fieldName));
+            ArgumentNullException.ThrowIfNull(fieldName);
 
             // bind to public names first
             FieldInfo? fi = expression.Type.GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy)
@@ -165,7 +166,6 @@ namespace System.Linq.Expressions
             return Expression.Field(expression, fi);
         }
 
-
         /// <summary>
         /// Creates a <see cref="MemberExpression"/> accessing a field.
         /// </summary>
@@ -173,10 +173,13 @@ namespace System.Linq.Expressions
         /// <param name="type">The <see cref="Type"/> containing the field.</param>
         /// <param name="fieldName">The field to be accessed.</param>
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
-        public static MemberExpression Field(Expression? expression, Type type, string fieldName)
+        public static MemberExpression Field(
+            Expression? expression,
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)] Type type,
+            string fieldName)
         {
-            ContractUtils.RequiresNotNull(type, nameof(type));
-            ContractUtils.RequiresNotNull(fieldName, nameof(fieldName));
+            ArgumentNullException.ThrowIfNull(type);
+            ArgumentNullException.ThrowIfNull(fieldName);
 
             // bind to public names first
             FieldInfo? fi = type.GetField(fieldName, BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy)
@@ -199,10 +202,11 @@ namespace System.Linq.Expressions
         /// <param name="expression">The containing object of the property.  This can be null for static properties.</param>
         /// <param name="propertyName">The property to be accessed.</param>
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
+        [RequiresUnreferencedCode(ExpressionRequiresUnreferencedCode)]
         public static MemberExpression Property(Expression expression, string propertyName)
         {
             ExpressionUtils.RequiresCanRead(expression, nameof(expression));
-            ContractUtils.RequiresNotNull(propertyName, nameof(propertyName));
+            ArgumentNullException.ThrowIfNull(propertyName);
             // bind to public names first
             PropertyInfo? pi = expression.Type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy)
                               ?? expression.Type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy);
@@ -220,10 +224,13 @@ namespace System.Linq.Expressions
         /// <param name="type">The <see cref="Type"/> containing the property.</param>
         /// <param name="propertyName">The property to be accessed.</param>
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
-        public static MemberExpression Property(Expression? expression, Type type, string propertyName)
+        public static MemberExpression Property(
+            Expression? expression,
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties| DynamicallyAccessedMemberTypes.NonPublicProperties)] Type type,
+            string propertyName)
         {
-            ContractUtils.RequiresNotNull(type, nameof(type));
-            ContractUtils.RequiresNotNull(propertyName, nameof(propertyName));
+            ArgumentNullException.ThrowIfNull(type);
+            ArgumentNullException.ThrowIfNull(propertyName);
             // bind to public names first
             PropertyInfo? pi = type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy)
                               ?? type.GetProperty(propertyName, BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.IgnoreCase | BindingFlags.FlattenHierarchy);
@@ -242,7 +249,7 @@ namespace System.Linq.Expressions
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
         public static MemberExpression Property(Expression? expression, PropertyInfo property)
         {
-            ContractUtils.RequiresNotNull(property, nameof(property));
+            ArgumentNullException.ThrowIfNull(property);
 
             MethodInfo? mi = property.GetGetMethod(nonPublic: true);
 
@@ -289,13 +296,15 @@ namespace System.Linq.Expressions
         /// <param name="expression">The containing object of the property.  This can be null for static properties.</param>
         /// <param name="propertyAccessor">An accessor method of the property to be accessed.</param>
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
+        [RequiresUnreferencedCode(PropertyFromAccessorRequiresUnreferencedCode)]
         public static MemberExpression Property(Expression? expression, MethodInfo propertyAccessor)
         {
-            ContractUtils.RequiresNotNull(propertyAccessor, nameof(propertyAccessor));
+            ArgumentNullException.ThrowIfNull(propertyAccessor);
             ValidateMethodInfo(propertyAccessor, nameof(propertyAccessor));
             return Property(expression, GetProperty(propertyAccessor, nameof(propertyAccessor)));
         }
 
+        [RequiresUnreferencedCode(PropertyFromAccessorRequiresUnreferencedCode)]
         private static PropertyInfo GetProperty(MethodInfo mi, string? paramName, int index = -1)
         {
             Type? type = mi.DeclaringType;
@@ -320,6 +329,8 @@ namespace System.Linq.Expressions
             throw Error.MethodNotPropertyAccessor(mi.DeclaringType, mi.Name, paramName, index);
         }
 
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
+            Justification = "Since the methods are already supplied, they won't be trimmed. Just checking for method equality.")]
         private static bool CheckMethod(MethodInfo method, MethodInfo propertyMethod)
         {
             if (method.Equals(propertyMethod))
@@ -345,6 +356,7 @@ namespace System.Linq.Expressions
         /// <param name="expression">The containing object of the member.  This can be null for static members.</param>
         /// <param name="propertyOrFieldName">The member to be accessed.</param>
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
+        [RequiresUnreferencedCode(ExpressionRequiresUnreferencedCode)]
         public static MemberExpression PropertyOrField(Expression expression, string propertyOrFieldName)
         {
             ExpressionUtils.RequiresCanRead(expression, nameof(expression));
@@ -373,7 +385,7 @@ namespace System.Linq.Expressions
         /// <returns>The created <see cref="MemberExpression"/>.</returns>
         public static MemberExpression MakeMemberAccess(Expression? expression, MemberInfo member)
         {
-            ContractUtils.RequiresNotNull(member, nameof(member));
+            ArgumentNullException.ThrowIfNull(member);
 
             if (member is FieldInfo fi)
             {

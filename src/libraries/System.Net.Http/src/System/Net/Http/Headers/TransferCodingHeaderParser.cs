@@ -5,7 +5,7 @@ using System.Diagnostics;
 
 namespace System.Net.Http.Headers
 {
-    internal class TransferCodingHeaderParser : BaseHeaderParser
+    internal sealed class TransferCodingHeaderParser : BaseHeaderParser
     {
         private readonly Func<TransferCodingHeaderValue> _transferCodingCreator;
 
@@ -37,14 +37,8 @@ namespace System.Net.Http.Headers
             return resultLength;
         }
 
-        private static TransferCodingHeaderValue CreateTransferCoding()
-        {
-            return new TransferCodingHeaderValue();
-        }
+        private static TransferCodingHeaderValue CreateTransferCoding() => new TransferCodingHeaderValue();
 
-        private static TransferCodingHeaderValue CreateTransferCodingWithQuality()
-        {
-            return new TransferCodingWithQualityHeaderValue();
-        }
+        private static TransferCodingWithQualityHeaderValue CreateTransferCodingWithQuality() => new TransferCodingWithQualityHeaderValue();
     }
 }

@@ -1,25 +1,25 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
+using System.Xml;
+using System.Xml.XPath;
+using System.Diagnostics;
+using System.Globalization;
+using System.Collections;
+
 namespace MS.Internal.Xml.XPath
 {
-    using System;
-    using System.Xml;
-    using System.Xml.XPath;
-    using System.Diagnostics;
-    using System.Globalization;
-    using System.Collections;
-
-    internal class XPathMultyIterator : ResetableIterator
+    internal sealed class XPathMultyIterator : ResettableIterator
     {
-        protected ResetableIterator[] arr;
-        protected int firstNotEmpty;
-        protected int position;
+        private readonly ResettableIterator[] arr;
+        private int firstNotEmpty;
+        private int position;
 
         public XPathMultyIterator(ArrayList inputArray)
         {
             // NOTE: We do not clone the passed inputArray supposing that it is not changed outside of this class
-            this.arr = new ResetableIterator[inputArray.Count];
+            this.arr = new ResettableIterator[inputArray.Count];
             for (int i = 0; i < this.arr.Length; i++)
             {
                 var iterator = (ArrayList?)inputArray[i];
@@ -51,7 +51,7 @@ namespace MS.Internal.Xml.XPath
             {
                 if (firstNotEmpty != pos)
                 {
-                    ResetableIterator empty = arr[pos];
+                    ResettableIterator empty = arr[pos];
                     Array.Copy(arr, firstNotEmpty, arr, firstNotEmpty + 1, pos - firstNotEmpty);
                     arr[firstNotEmpty] = empty;
                 }
@@ -61,49 +61,16 @@ namespace MS.Internal.Xml.XPath
             return true;
         }
 
-#if false
-        string dump { get { return Dump(); } }
-
-        string Dump(ResetableIterator it) {
-            it = (ResetableIterator) it.Clone();
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.Append('(');
-            do {
-                XPathNavigator nav = it.Current.Clone();
-                nav.MoveToAttribute("id1", "");
-                sb.Append(nav.Value);
-                sb.Append(", ");
-            } while (it.MoveNext());
-            sb.Length = sb.Length - 2;
-            sb.Append(')');
-            return sb.ToString();
-        }
-
-        string Dump() {
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            for (int i = 0; i < arr.Length; i ++) {
-                sb.Append(i);
-                sb.Append(": ");
-                if (i < firstNotEmpty) {
-                    sb.Append("()");
-                }   else {
-                    sb.Append(Dump(arr[i]));
-                }
-                sb.Append("; ");
-            }
-            return sb.ToString();
-        }
-#endif
 
         // Invariant: a[i] < a[i+1] for i > item
         // returns flase is head of the list was moved & as a result consistancy of list depends on head consistancy.
         private bool SiftItem(int item)
         {
             Debug.Assert(firstNotEmpty <= item && item < arr.Length);
-            ResetableIterator it = arr[item];
+            ResettableIterator it = arr[item];
             while (item + 1 < arr.Length)
             {
-                ResetableIterator itNext = arr[item + 1];
+                ResettableIterator itNext = arr[item + 1];
                 Debug.Assert(it.Current != null && itNext.Current != null);
                 XmlNodeOrder order = Query.CompareNodes(it.Current, itNext.Current);
                 if (order == XmlNodeOrder.Before)
@@ -143,7 +110,7 @@ namespace MS.Internal.Xml.XPath
 
         public XPathMultyIterator(XPathMultyIterator it)
         {
-            this.arr = (ResetableIterator[])it.arr.Clone();
+            this.arr = (ResettableIterator[])it.arr.Clone();
             this.firstNotEmpty = it.firstNotEmpty;
             this.position = it.position;
         }

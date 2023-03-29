@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.Primitives;
 
@@ -15,7 +14,7 @@ namespace Microsoft.Extensions.Configuration
     public class ConfigurationRoot : IConfigurationRoot, IDisposable
     {
         private readonly IList<IConfigurationProvider> _providers;
-        private readonly IList<IDisposable> _changeTokenRegistrations;
+        private readonly List<IDisposable> _changeTokenRegistrations;
         private ConfigurationReloadToken _changeToken = new ConfigurationReloadToken();
 
         /// <summary>
@@ -24,17 +23,14 @@ namespace Microsoft.Extensions.Configuration
         /// <param name="providers">The <see cref="IConfigurationProvider"/>s for this configuration.</param>
         public ConfigurationRoot(IList<IConfigurationProvider> providers)
         {
-            if (providers == null)
-            {
-                throw new ArgumentNullException(nameof(providers));
-            }
+            ThrowHelper.ThrowIfNull(providers);
 
             _providers = providers;
             _changeTokenRegistrations = new List<IDisposable>(providers.Count);
             foreach (IConfigurationProvider p in providers)
             {
                 p.Load();
-                _changeTokenRegistrations.Add(ChangeToken.OnChange(() => p.GetReloadToken(), () => RaiseChanged()));
+                _changeTokenRegistrations.Add(ChangeToken.OnChange(p.GetReloadToken, RaiseChanged));
             }
         }
 
@@ -48,34 +44,10 @@ namespace Microsoft.Extensions.Configuration
         /// </summary>
         /// <param name="key">The configuration key.</param>
         /// <returns>The configuration value.</returns>
-        public string this[string key]
+        public string? this[string key]
         {
-            get
-            {
-                for (int i = _providers.Count - 1; i >= 0; i--)
-                {
-                    IConfigurationProvider provider = _providers[i];
-
-                    if (provider.TryGet(key, out string value))
-                    {
-                        return value;
-                    }
-                }
-
-                return null;
-            }
-            set
-            {
-                if (!_providers.Any())
-                {
-                    throw new InvalidOperationException(SR.Error_NoSources);
-                }
-
-                foreach (IConfigurationProvider provider in _providers)
-                {
-                    provider.Set(key, value);
-                }
-            }
+            get => GetConfiguration(_providers, key);
+            set => SetConfiguration(_providers, key, value);
         }
 
         /// <summary>
@@ -133,6 +105,34 @@ namespace Microsoft.Extensions.Configuration
             foreach (IConfigurationProvider provider in _providers)
             {
                 (provider as IDisposable)?.Dispose();
+            }
+        }
+
+        internal static string? GetConfiguration(IList<IConfigurationProvider> providers, string key)
+        {
+            for (int i = providers.Count - 1; i >= 0; i--)
+            {
+                IConfigurationProvider provider = providers[i];
+
+                if (provider.TryGet(key, out string? value))
+                {
+                    return value;
+                }
+            }
+
+            return null;
+        }
+
+        internal static void SetConfiguration(IList<IConfigurationProvider> providers, string key, string? value)
+        {
+            if (providers.Count == 0)
+            {
+                throw new InvalidOperationException(SR.Error_NoSources);
+            }
+
+            foreach (IConfigurationProvider provider in providers)
+            {
+                provider.Set(key, value);
             }
         }
     }

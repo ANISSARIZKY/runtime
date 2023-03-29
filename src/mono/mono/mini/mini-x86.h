@@ -46,8 +46,8 @@ LONG CALLBACK seh_handler(EXCEPTION_POINTERS* ep);
 
 #ifndef HOST_WIN32
 
-#ifdef HAVE_WORKING_SIGALTSTACK
-/* 
+#ifdef ENABLE_SIGALTSTACK
+/*
  * solaris doesn't have pthread_getattr_np () needed by the sigaltstack setup
  * code.
  */
@@ -59,17 +59,8 @@ LONG CALLBACK seh_handler(EXCEPTION_POINTERS* ep);
 #define MONO_ARCH_USE_SIGACTION
 #endif /* __HAIKU__ */
 
-#endif /* HAVE_WORKING_SIGALTSTACK */
+#endif /* ENABLE_SIGALTSTACK */
 #endif /* !HOST_WIN32 */
-
-#define MONO_ARCH_SUPPORT_TASKLETS 1
-
-#ifndef DISABLE_SIMD
-#ifndef ENABLE_NETCORE
-#define MONO_ARCH_SIMD_INTRINSICS 1
-#define MONO_ARCH_NEED_SIMD_BANK 1
-#endif
-#endif
 
 /* we should lower this size and make sure we don't call heavy stack users in the segv handler */
 #if defined(__APPLE__)
@@ -88,23 +79,29 @@ LONG CALLBACK seh_handler(EXCEPTION_POINTERS* ep);
 #define MONO_ARCH_CALLEE_REGS X86_CALLEE_REGS
 #define MONO_ARCH_CALLEE_SAVED_REGS X86_CALLER_REGS
 
-#define MONO_ARCH_CALLEE_FREGS (0xff & ~(regmask (MONO_ARCH_FPSTACK_SIZE)))
+#ifdef TARGET_WIN32
+/* xmm7 is used as a scratch register */
+#define MONO_ARCH_CALLEE_FREGS 0x7f
 #define MONO_ARCH_CALLEE_SAVED_FREGS 0
+#define MONO_ARCH_FP_SCRATCH_REG X86_XMM7
+#else
+/* xmm7 is used as a scratch register */
+#define MONO_ARCH_CALLEE_FREGS 0x7f
+#define MONO_ARCH_CALLEE_SAVED_FREGS 0
+#define MONO_ARCH_FP_SCRATCH_REG X86_XMM7
+#endif
 
 /* All registers are clobered by a call */
-#define MONO_ARCH_CALLEE_XREGS (0xff & ~(regmask (MONO_MAX_XREGS)))
+#define MONO_ARCH_CALLEE_XREGS MONO_ARCH_CALLEE_FREGS
 #define MONO_ARCH_CALLEE_SAVED_XREGS 0
-
-#define MONO_ARCH_USE_FPSTACK TRUE
-#define MONO_ARCH_FPSTACK_SIZE 6
 
 #define MONO_ARCH_INST_FIXED_REG(desc) (((desc == ' ') || (desc == 'i')) ? -1 : ((desc == 's') ? X86_ECX : ((desc == 'a') ? X86_EAX : ((desc == 'd') ? X86_EDX : ((desc == 'l') ? X86_EAX : -1)))))
 
 #define MONO_ARCH_INST_FIXED_MASK(desc) ((desc == 'y') ? (X86_BYTE_REGS) : 0)
 
 /* RDX is clobbered by the opcode implementation before accessing sreg2 */
-/* 
- * Originally this contained X86_EDX for div/rem opcodes, but that led to unsolvable 
+/*
+ * Originally this contained X86_EDX for div/rem opcodes, but that led to unsolvable
  * situations since there are only 3 usable registers for local register allocation.
  * Instead, we handle the sreg2==edx case in the opcodes.
  */
@@ -119,20 +116,20 @@ LONG CALLBACK seh_handler(EXCEPTION_POINTERS* ep);
 /* must be at a power of 2 and >= 8 */
 #define MONO_ARCH_FRAME_ALIGNMENT 16
 
-/* fixme: align to 16byte instead of 32byte (we align to 32byte to get 
+/* fixme: align to 16byte instead of 32byte (we align to 32byte to get
  * reproduceable results for benchmarks */
 #define MONO_ARCH_CODE_ALIGNMENT 32
 
-/*This is the max size of the locals area of a given frame. I think 1MB is a safe default for now*/
+/* This is the max size of the locals area of a given frame. I think 1MB is a safe default for now */
 #define MONO_ARCH_MAX_FRAME_SIZE 0x100000
 
-/*This is how much a try block must be extended when is is preceeded by a Monitor.Enter() call.
+/* This is how much a try block must be extended when it is preceded by a Monitor.Enter() call.
 It's 4 bytes as this is how many bytes + 1 that 'add 0x10, %esp' takes. It is used to pop the arguments from
-the monitor.enter call and must be already protected.*/
+the monitor.enter call and must be already protected. */
 #define MONO_ARCH_MONITOR_ENTER_ADJUSTMENT 4
 
 struct MonoLMF {
-	/* 
+	/*
 	 * If the lowest bit is set to 1, then this is a trampoline LMF frame.
 	 * If the second lowest bit is set to 1, then this is a MonoLMFExt structure, and
 	 * the other fields are not valid.
@@ -161,19 +158,11 @@ typedef struct {
 
 #define MONO_CONTEXT_SET_LLVM_EXC_REG(ctx, exc) do { (ctx)->eax = (gsize)exc; } while (0)
 
-#ifdef _MSC_VER
-
-#define MONO_INIT_CONTEXT_FROM_FUNC(ctx, start_func) do { \
-    unsigned int stackptr; \
-    { \
-	   __asm mov stackptr, ebp \
-    } \
-	MONO_CONTEXT_SET_IP ((ctx), (start_func)); \
-	MONO_CONTEXT_SET_BP ((ctx), stackptr); \
-	MONO_CONTEXT_SET_SP ((ctx), stackptr); \
-} while (0)
-
-#else
+#if defined(HOST_WIN32)
+#define __builtin_extract_return_addr(x) x
+#define __builtin_return_address(x) _ReturnAddress()
+#define __builtin_frame_address(x) _AddressOfReturnAddress()
+#endif
 
 #define MONO_INIT_CONTEXT_FROM_FUNC(ctx,start_func) do {	\
 		MONO_CONTEXT_SET_IP ((ctx), (start_func));	\
@@ -181,7 +170,6 @@ typedef struct {
 		MONO_CONTEXT_SET_SP ((ctx), __builtin_frame_address (0));	\
 	} while (0)
 
-#endif
 
 #define MONO_ARCH_INIT_TOP_LMF_ENTRY(lmf) do { (lmf)->ebp = -1; } while (0)
 
@@ -190,6 +178,7 @@ typedef struct {
 
 #define MONO_ARCH_EMULATE_FCONV_TO_U8 1
 #define MONO_ARCH_EMULATE_FCONV_TO_U4 1
+#define MONO_ARCH_EMULATE_FREM 1
 
 #define MONO_ARCH_NEED_DIV_CHECK 1
 #define MONO_ARCH_HAVE_IS_INT_OVERFLOW 1
@@ -239,8 +228,10 @@ typedef struct {
 #define MONO_ARCH_HAVE_OP_TAILCALL_MEMBASE 1
 #define MONO_ARCH_HAVE_OP_TAILCALL_REG 1
 #define MONO_ARCH_HAVE_SDB_TRAMPOLINES 1
-#define MONO_ARCH_HAVE_PATCH_CODE_NEW 1
 #define MONO_ARCH_LLVM_TARGET_LAYOUT "e-p:32:32-n32-S128"
+#define MONO_ARCH_FLOAT32_SUPPORTED 1
+#define MONO_ARCH_NEED_SIMD_BANK 1
+#define MONO_ARCH_USE_SHARED_FP_SIMD_BANK 1
 
 /* Used for optimization, not complete */
 #define MONO_ARCH_IS_OP_MEMBASE(opcode) ((opcode) == OP_X86_PUSH_MEMBASE)
@@ -307,14 +298,14 @@ typedef enum {
 
 typedef struct {
 	gint16 offset;
-	gint8  reg;
+	guint8  reg;
 	ArgStorage storage;
 	int nslots;
 	gboolean is_pair;
 
 	/* Only if storage == ArgValuetypeInReg */
 	ArgStorage pair_storage [2];
-	gint8 pair_regs [2];
+	guint8 pair_regs [2];
 	guint8 pass_empty_struct : 1; // Set in scenarios when empty structs needs to be represented as argument.
 } ArgInfo;
 
@@ -367,5 +358,5 @@ mono_x86_start_gsharedvt_call (GSharedVtCallInfo *info, gpointer *caller, gpoint
 CallInfo*
 mono_arch_get_call_info (MonoMemPool *mp, MonoMethodSignature *sig);
 
-#endif /* __MONO_MINI_X86_H__ */  
+#endif /* __MONO_MINI_X86_H__ */
 

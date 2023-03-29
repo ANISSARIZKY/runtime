@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Threading;
 
 namespace System.Collections.Concurrent
@@ -93,7 +94,7 @@ namespace System.Collections.Concurrent
                 int count = c.Count;
                 if (count > length)
                 {
-                    length = Math.Min(ConcurrentQueueSegment<T>.RoundUpToPowerOf2(count), MaxSegmentLength);
+                    length = (int)Math.Min(BitOperations.RoundUpToPowerOf2((uint)count), MaxSegmentLength);
                 }
             }
 
@@ -527,13 +528,11 @@ namespace System.Collections.Concurrent
 
             // If the expected sequence number is not yet written, we're still waiting for
             // an enqueuer to finish storing it.  Spin until it's there.
-            if ((segment._slots[i].SequenceNumber & segment._slotsMask) != expectedSequenceNumberAndMask)
+            SpinWait spinner = default;
+            // Must read SequenceNumber before reading Item, thus Volatile.Read
+            while ((Volatile.Read(ref segment._slots[i].SequenceNumber) & segment._slotsMask) != expectedSequenceNumberAndMask)
             {
-                SpinWait spinner = default;
-                while ((Volatile.Read(ref segment._slots[i].SequenceNumber) & segment._slotsMask) != expectedSequenceNumberAndMask)
-                {
-                    spinner.SpinOnce();
-                }
+                spinner.SpinOnce();
             }
 
             // Return the value from the slot.
@@ -682,7 +681,7 @@ namespace System.Collections.Concurrent
             // check and this check, another item could have arrived).
             if (head._nextSegment == null)
             {
-                result = default!;
+                result = default;
                 return false;
             }
 

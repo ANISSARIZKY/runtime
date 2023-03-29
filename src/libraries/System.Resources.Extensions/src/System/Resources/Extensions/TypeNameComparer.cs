@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Collections.Generic;
 using System.Numerics.Hashing;
 using System.Reflection;
@@ -14,7 +13,7 @@ namespace System.Resources.Extensions
     /// When type names are missing, mscorlib is assumed.
     /// This comparer is not meant to capture all scenarios (eg: TypeForwards)
     /// but is meant to serve as a best effort, avoiding false positives, in the
-    /// absense of real type metadata.
+    /// absence of real type metadata.
     /// </summary>
     internal sealed class TypeNameComparer : IEqualityComparer<string>
     {
@@ -56,10 +55,14 @@ namespace System.Resources.Extensions
         public bool Equals(string assemblyQualifiedTypeName1, string assemblyQualifiedTypeName2)
 #pragma warning restore CS8767
         {
-            if (assemblyQualifiedTypeName1 == null)
+            if (assemblyQualifiedTypeName1 is null)
+            {
                 throw new ArgumentNullException(nameof(assemblyQualifiedTypeName1));
-            if (assemblyQualifiedTypeName2 == null)
+            }
+            if (assemblyQualifiedTypeName2 is null)
+            {
                 throw new ArgumentNullException(nameof(assemblyQualifiedTypeName2));
+            }
 
             if (ReferenceEquals(assemblyQualifiedTypeName1, assemblyQualifiedTypeName2))
                 return true;

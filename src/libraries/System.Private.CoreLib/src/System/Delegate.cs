@@ -12,8 +12,8 @@ namespace System
     {
         public virtual object Clone() => MemberwiseClone();
 
-        [return: NotNullIfNotNull("a")]
-        [return: NotNullIfNotNull("b")]
+        [return: NotNullIfNotNull(nameof(a))]
+        [return: NotNullIfNotNull(nameof(b))]
         public static Delegate? Combine(Delegate? a, Delegate? b)
         {
             if (a is null)
@@ -47,12 +47,9 @@ namespace System
         public static Delegate CreateDelegate(Type type, object target, string method, bool ignoreCase) => CreateDelegate(type, target, method, ignoreCase, throwOnBindFailure: true)!;
 
         // V1 api: Creates open delegates to static methods only, relaxed signature checking disallowed.
-        [RequiresUnreferencedCode("The target method might be removed")]
-        public static Delegate CreateDelegate(Type type, Type target, string method) => CreateDelegate(type, target, method, ignoreCase: false, throwOnBindFailure: true)!;
-        [RequiresUnreferencedCode("The target method might be removed")]
-        public static Delegate CreateDelegate(Type type, Type target, string method, bool ignoreCase) => CreateDelegate(type, target, method, ignoreCase, throwOnBindFailure: true)!;
+        public static Delegate CreateDelegate(Type type, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type target, string method) => CreateDelegate(type, target, method, ignoreCase: false, throwOnBindFailure: true)!;
+        public static Delegate CreateDelegate(Type type, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type target, string method, bool ignoreCase) => CreateDelegate(type, target, method, ignoreCase, throwOnBindFailure: true)!;
 
-#if !CORERT
         protected virtual Delegate CombineImpl(Delegate? d) => throw new MulticastNotSupportedException(SR.Multicast_Combine);
 
         protected virtual Delegate? RemoveImpl(Delegate d) => d.Equals(this) ? null : this;
@@ -63,7 +60,6 @@ namespace System
         {
             return DynamicInvokeImpl(args);
         }
-#endif
 
         public virtual void GetObjectData(SerializationInfo info, StreamingContext context) => throw new PlatformNotSupportedException();
 
@@ -97,7 +93,6 @@ namespace System
             return newDelegate;
         }
 
-        // Force inline as the true/false ternary takes it above ALWAYS_INLINE size even though the asm ends up smaller
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(Delegate? d1, Delegate? d2)
         {
@@ -105,14 +100,12 @@ namespace System
             // so it can become a simple test
             if (d2 is null)
             {
-                // return true/false not the test result https://github.com/dotnet/runtime/issues/4207
-                return (d1 is null) ? true : false;
+                return d1 is null;
             }
 
             return ReferenceEquals(d2, d1) ? true : d2.Equals((object?)d1);
         }
 
-        // Force inline as the true/false ternary takes it above ALWAYS_INLINE size even though the asm ends up smaller
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(Delegate? d1, Delegate? d2)
         {
@@ -120,8 +113,7 @@ namespace System
             // so it can become a simple test
             if (d2 is null)
             {
-                // return true/false not the test result https://github.com/dotnet/runtime/issues/4207
-                return (d1 is null) ? false : true;
+                return d1 is not null;
             }
 
             return ReferenceEquals(d2, d1) ? false : !d2.Equals(d1);

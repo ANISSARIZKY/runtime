@@ -34,24 +34,25 @@ initNonPortableDistroRid()
     local rootfsDir="$4"
     local nonPortableBuildID=""
 
-    if [ "$targetOs" = "Linux" ]; then
+    if [ "$targetOs" = "linux" ]; then
         if [ -e "${rootfsDir}/etc/os-release" ]; then
             source "${rootfsDir}/etc/os-release"
 
             # We have forced __PortableBuild=0. This is because -portablebuld
             # has been passed as false.
             if (( isPortable == 0 )); then
-                if [ "${ID}" = "rhel" ]; then
+                if [[ "${ID}" == "rhel" || "${ID}" == "rocky" || "${ID}" == "alpine" ]]; then
                     # remove the last version digit
                     VERSION_ID="${VERSION_ID%.*}"
                 fi
 
-                if [ -z "${VERSION_ID+x}" ]; then
-                        # Rolling release distros do not set VERSION_ID, so omit
-                        # it here to be consistent with everything else.
-                        nonPortableBuildID="${ID}-${buildArch}"
+                if [[ "${VERSION_ID}" =~ ^([[:digit:]]|\.)+$ ]]; then
+                    nonPortableBuildID="${ID}.${VERSION_ID}-${buildArch}"
                 else
-                        nonPortableBuildID="${ID}.${VERSION_ID}-${buildArch}"
+                    # Rolling release distros either do not set VERSION_ID, set it as blank or
+                    # set it to non-version looking string (such as TEMPLATE_VERSION_ID on ArchLinux);
+                    # so omit it here to be consistent with everything else.
+                    nonPortableBuildID="${ID}-${buildArch}"
                 fi
             fi
 
@@ -61,13 +62,13 @@ initNonPortableDistroRid()
         fi
     fi
 
-    if [ "$targetOs" = "FreeBSD" ]; then
+    if [ "$targetOs" = "freebsd" ]; then
         if (( isPortable == 0 )); then
             # $rootfsDir can be empty. freebsd-version is shell script and it should always work.
             __freebsd_major_version=$($rootfsDir/bin/freebsd-version | { read v; echo "${v%%.*}"; })
             nonPortableBuildID="freebsd.$__freebsd_major_version-${buildArch}"
         fi
-    elif getprop ro.product.system.model 2>&1 | grep -qi android; then
+    elif command -v getprop && getprop ro.product.system.model 2>&1 | grep -qi android; then
         __android_sdk_version=$(getprop ro.build.version.sdk)
         nonPortableBuildID="android.$__android_sdk_version-${buildArch}"
     elif [ "$targetOs" = "illumos" ]; then
@@ -85,7 +86,7 @@ initNonPortableDistroRid()
                 nonPortableBuildID=openindiana-"$buildArch"
             ;;
         esac
-    elif [ "$targetOs" = "Solaris" ]; then
+    elif [ "$targetOs" = "solaris" ]; then
         __uname_version=$(uname -v)
         __solaris_major_version=$(echo "${__uname_version%.*}")
         nonPortableBuildID=solaris."$__solaris_major_version"-"$buildArch"
@@ -119,7 +120,6 @@ initNonPortableDistroRid()
 #
 #   __DistroRid
 #   __PortableBuild
-#   __RuntimeId
 #
 initDistroRidGlobal()
 {
@@ -139,7 +139,7 @@ initDistroRidGlobal()
     fi
 
     if [ -n "${rootfsDir}" ]; then
-        # We may have a cross build. Check for the existance of the rootfsDir
+        # We may have a cross build. Check for the existence of the rootfsDir
         if [ ! -e "${rootfsDir}" ]; then
             echo "Error rootfsDir has been passed, but the location is not valid."
             exit 1
@@ -149,8 +149,13 @@ initDistroRidGlobal()
     initNonPortableDistroRid "${targetOs}" "${buildArch}" "${isPortable}" "${rootfsDir}"
 
     if [ "$buildArch" = "wasm" ]; then
-        __DistroRid=browser-wasm
-        export __DistroRid
+        if [ "$targetOs" = "browser" ]; then
+            __DistroRid=browser-wasm
+            export __DistroRid
+        elif [ "$targetOs" = "wasi" ]; then
+            __DistroRid=wasi-wasm
+            export __DistroRid
+        fi
     fi
 
     if [ -z "${__DistroRid}" ]; then
@@ -167,23 +172,33 @@ initDistroRidGlobal()
         fi
 
         if [ -z "${distroRid}" ]; then
-            if [ "$targetOs" = "Linux" ]; then
+            if [ "$targetOs" = "linux" ]; then
                 distroRid="linux-$buildArch"
-            elif [ "$targetOs" = "OSX" ]; then
+            elif [ "$targetOs" = "linux-bionic" ]; then
+                distroRid="linux-bionic-$buildArch"
+            elif [ "$targetOs" = "osx" ]; then
                 distroRid="osx-$buildArch"
-            elif [ "$targetOs" = "tvOS" ]; then
+            elif [ "$targetOs" = "maccatalyst" ]; then
+                distroRid="maccatalyst-$buildArch"
+            elif [ "$targetOs" = "tvos" ]; then
                 distroRid="tvos-$buildArch"
-            elif [ "$targetOs" = "iOS" ]; then
+            elif [ "$targetOs" = "tvossimulator" ]; then
+                distroRid="tvossimulator-$buildArch"
+            elif [ "$targetOs" = "ios" ]; then
                 distroRid="ios-$buildArch"
-            elif [ "$targetOs" = "Android" ]; then
+            elif [ "$targetOs" = "iossimulator" ]; then
+                distroRid="iossimulator-$buildArch"
+            elif [ "$targetOs" = "android" ]; then
                 distroRid="android-$buildArch"
-            elif [ "$targetOs" = "Browser" ]; then
+            elif [ "$targetOs" = "browser" ]; then
                 distroRid="browser-$buildArch"
-            elif [ "$targetOs" = "FreeBSD" ]; then
+            elif [ "$targetOs" = "wasi" ]; then
+                distroRid="wasi-$buildArch"
+            elif [ "$targetOs" = "freebsd" ]; then
                 distroRid="freebsd-$buildArch"
             elif [ "$targetOs" = "illumos" ]; then
                 distroRid="illumos-$buildArch"
-            elif [ "$targetOs" = "Solaris" ]; then
+            elif [ "$targetOs" = "solaris" ]; then
                 distroRid="solaris-$buildArch"
             fi
         fi
@@ -194,13 +209,8 @@ initDistroRidGlobal()
 
     if [ -z "$__DistroRid" ]; then
         echo "DistroRid is not set. This is almost certainly an error"
-
         exit 1
-    else
-        echo "__DistroRid: ${__DistroRid}"
-        echo "__RuntimeId: ${__DistroRid}"
-
-        __RuntimeId="${__DistroRid}"
-        export __RuntimeId
     fi
+
+    echo "__DistroRid: ${__DistroRid}"
 }

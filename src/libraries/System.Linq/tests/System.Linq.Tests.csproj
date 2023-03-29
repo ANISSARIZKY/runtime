@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>$(NetCoreAppCurrent)</TargetFrameworks>
+    <TargetFramework>$(NetCoreAppCurrent)</TargetFramework>
+    <DebuggerSupport Condition="'$(DebuggerSupport)' == '' and '$(TargetOS)' == 'browser'">true</DebuggerSupport>
   </PropertyGroup>
+  <ItemGroup>
+    <RdXmlFile Include="default.rd.xml" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="AggregateTests.cs" />
     <Compile Include="AllTests.cs" />
@@ -10,6 +14,7 @@
     <Compile Include="AsEnumerableTests.cs" />
     <Compile Include="AverageTests.cs" />
     <Compile Include="CastTests.cs" />
+    <Compile Include="ChunkTests.cs" />
     <Compile Include="ConcatTests.cs" />
     <Compile Include="ConsistencyTests.cs" />
     <Compile Include="ContainsTests.cs" />
@@ -37,7 +42,9 @@
     <Compile Include="OfTypeTests.cs" />
     <Compile Include="OrderByDescendingTests.cs" />
     <Compile Include="OrderByTests.cs" />
+    <Compile Include="OrderDescendingTests.cs" />
     <Compile Include="OrderedSubsetting.cs" />
+    <Compile Include="OrderTests.cs" />
     <Compile Include="RangeTests.cs" />
     <Compile Include="RepeatTests.cs" />
     <Compile Include="ReverseTests.cs" />

@@ -6,10 +6,6 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
-#if SYSTEM_PRIVATE_CORELIB
-using Internal.Runtime.CompilerServices;
-#endif
-
 namespace System.Text.Unicode
 {
     internal static partial class Utf8Utility
@@ -143,7 +139,7 @@ namespace System.Text.Unicode
                 tempB |= tempA;
 
                 uint tempC = (value << 2) & 0x0000_0F00u; // = [ 00000000 00000000 0000yyyy 00000000 ]
-                uint tempD = (value >> 6) & 0x0003_0000u; // = [ 00000000 00000000 00yy0000 00000000 ]
+                uint tempD = (value >> 4) & 0x0000_3000u; // = [ 00000000 00000000 00yy0000 00000000 ]
                 tempD |= tempC;
 
                 uint tempE = (value & 0x3Fu) + 0xF080_8080u; // = [ 11110000 10000000 10000000 10xxxxxx ]
@@ -232,7 +228,7 @@ namespace System.Text.Unicode
                 // want to return [ ######## ######## 110yyyyy 10xxxxxx ]
 
                 uint temp = (value >> 16) & 0x3Fu; // [ 00000000 00000000 00000000 00xxxxxx ]
-                value = (value >> 22) & 0x1F00u; // [ 00000000 00000000 000yyyyy 0000000 ]
+                value = (value >> 14) & 0x1F00u; // [ 00000000 00000000 000yyyyy 0000000 ]
                 return value + temp + 0xC080u;
             }
         }
@@ -498,7 +494,7 @@ namespace System.Text.Unicode
             // Return statement is written this way to work around https://github.com/dotnet/runtime/issues/4207.
 
             return (BitConverter.IsLittleEndian && (((value - 0x8080_80F0u) & 0xC0C0_C0F8u) == 0))
-                || (!BitConverter.IsLittleEndian && (((value - 0xF080_8000u) & 0xF8C0_C0C0u) == 0));
+                || (!BitConverter.IsLittleEndian && (((value - 0xF080_8080u) & 0xF8C0_C0C0u) == 0));
         }
 
         /// <summary>
@@ -720,7 +716,7 @@ namespace System.Text.Unicode
         }
 
         /// <summary>
-        /// Given a DWORD which represents a buffer of 2 packed UTF-16 values in machine endianess,
+        /// Given a DWORD which represents a buffer of 2 packed UTF-16 values in machine endianness,
         /// converts those scalar values to their 3-byte UTF-8 representation and writes the
         /// resulting 6 bytes to the destination buffer.
         /// </summary>
@@ -755,7 +751,7 @@ namespace System.Text.Unicode
         }
 
         /// <summary>
-        /// Given a DWORD which represents a buffer of 2 packed UTF-16 values in machine endianess,
+        /// Given a DWORD which represents a buffer of 2 packed UTF-16 values in machine endianness,
         /// converts the first UTF-16 value to its 3-byte UTF-8 representation and writes the
         /// resulting 3 bytes to the destination buffer.
         /// </summary>

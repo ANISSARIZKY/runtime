@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 
 namespace System.Security.Principal
@@ -13,8 +14,7 @@ namespace System.Security.Principal
 
         public GenericPrincipal(IIdentity identity, string[]? roles)
         {
-            if (identity == null)
-                throw new ArgumentNullException(nameof(identity));
+            ArgumentNullException.ThrowIfNull(identity);
 
             m_identity = identity;
             if (roles != null)
@@ -67,7 +67,7 @@ namespace System.Security.Principal
             get { return m_identity; }
         }
 
-        public override bool IsInRole(string? role)
+        public override bool IsInRole([NotNullWhen(true)] string? role)
         {
             if (role == null || m_roles == null)
                 return false;
@@ -83,6 +83,6 @@ namespace System.Security.Principal
         }
 
         // This is called by AppDomain.GetThreadPrincipal() via reflection.
-        private static IPrincipal GetDefaultInstance() => new GenericPrincipal(new GenericIdentity(string.Empty), new string[] { string.Empty });
+        private static GenericPrincipal GetDefaultInstance() => new GenericPrincipal(new GenericIdentity(string.Empty), new string[] { string.Empty });
     }
 }

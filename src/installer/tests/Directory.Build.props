@@ -9,8 +9,12 @@
     <TestRestoreNuGetConfigFile>$(ArtifactsObjDir)TestNuGetConfig\NuGet.config</TestRestoreNuGetConfigFile>
     <InternalNupkgCacheDir>$(ArtifactsObjDir)ExtraNupkgsForTestRestore\</InternalNupkgCacheDir>
     <TestArchitectures>$(TargetArchitecture)</TestArchitectures>
-    <TestInfraTargetFramework>$(NetCoreAppCurrent)</TestInfraTargetFramework>
-    <TestRunnerAdditionalArguments>-notrait category=failing</TestRunnerAdditionalArguments>
+    <TestInfraTargetFramework>$(NetCoreAppToolCurrent)</TestInfraTargetFramework>
+    <TestRunnerAdditionalArguments>--filter category!=failing -v detailed</TestRunnerAdditionalArguments>
+    <!-- Enable crash and hang dumps -->
+    <TestRunnerAdditionalArguments>$(TestRunnerAdditionalArguments) --blame-crash-dump-type full</TestRunnerAdditionalArguments>
+    <TestRunnerAdditionalArguments>$(TestRunnerAdditionalArguments) --blame-hang-timeout 5m --blame-hang-dump-type full</TestRunnerAdditionalArguments>
+    <UseVSTestRunner>true</UseVSTestRunner>
     <RunAnalyzers>false</RunAnalyzers>
   </PropertyGroup>
 

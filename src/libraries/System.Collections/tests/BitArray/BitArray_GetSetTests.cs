@@ -91,6 +91,18 @@ namespace System.Collections.Tests
             }
         }
 
+        [Fact]
+        public static void SetAll_ShouldNotLeaveDirtyBits()
+        {
+            BitArray bitArray = new BitArray(33, false);
+            bitArray.SetAll(true);
+            bitArray.RightShift(31);
+
+            Assert.True(bitArray[0]);
+            Assert.True(bitArray[1]);
+            Assert.False(bitArray[2]);
+        }
+
         public static IEnumerable<object[]> GetEnumerator_Data()
         {
             foreach (int size in new[] { 0, 1, BitsPerByte, BitsPerByte + 1, BitsPerInt32, BitsPerInt32 + 1 })
@@ -486,7 +498,7 @@ namespace System.Collections.Tests
                 Length = BitsPerInt32 + 3
             };
             yield return new object[] { "Length-Long > 32", lengthLong2 };
-            // alligned test cases
+            // aligned test cases
             yield return new object[] { "Aligned-Constructor", new BitArray(BitsPerInt32, true) };
             yield return new object[] { "Aligned-Not", new BitArray(BitsPerInt32, false).Not() };
             BitArray alignedSetAll = new BitArray(BitsPerInt32, false);
@@ -538,6 +550,41 @@ namespace System.Collections.Tests
             if (remainder > 0)
             {
                 Assert.Equal((byte)((1 << remainder) - 1), data[fullBytes]);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(HasAllSet_TestData))]
+        public static void HasAllSet(bool[] bits, bool expectedResult)
+        {
+            var bitArray = new BitArray(bits);
+            Assert.Equal(expectedResult, bitArray.HasAllSet());
+        }
+
+        [Theory]
+        [MemberData(nameof(HasAnySet_TestData))]
+        public static void HasAnySet(bool[] bits, bool expectedResult)
+        {
+            var bitArray = new BitArray(bits);
+            Assert.Equal(expectedResult, bitArray.HasAnySet());
+        }
+
+        public static IEnumerable<object[]> HasAllSet_TestData() => HasAnySet_TestData().Select(parameters => new object[] { ((bool[])parameters[0]).Select(bit => !bit).ToArray(), !(bool)parameters[1] });
+
+        public static IEnumerable<object[]> HasAnySet_TestData()
+        {
+            yield return new object[] { Array.Empty<bool>(), false };
+
+            foreach (int size in new[] { 1, BitsPerInt32 - 1, BitsPerInt32, BitsPerInt32 + 1, BitsPerInt32 * 2 - 1 })
+            {
+                yield return new object[] { new bool[size], false };
+
+                for (int i = 0; i < size; i++)
+                {
+                    bool[] bits = new bool[size];
+                    bits[i] = true;
+                    yield return new object[] { bits, true };
+                }
             }
         }
     }

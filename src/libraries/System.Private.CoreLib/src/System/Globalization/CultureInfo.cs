@@ -27,6 +27,7 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 
 namespace System.Globalization
@@ -100,11 +101,6 @@ namespace System.Globalization
         // The culture used in the user interface. This is mostly used to load correct localized resources.
         private static volatile CultureInfo? s_userDefaultUICulture;
 
-        // WARNING: We allow diagnostic tools to directly inspect these three members (s_InvariantCultureInfo, s_DefaultThreadCurrentUICulture and s_DefaultThreadCurrentCulture)
-        // See https://github.com/dotnet/corert/blob/master/Documentation/design-docs/diagnostics/diagnostics-tools-contract.md for more details.
-        // Please do not change the type, the name, or the semantic usage of this member without understanding the implication for tools.
-        // Get in touch with the diagnostics team if you have questions.
-
         // The Invariant culture;
         private static readonly CultureInfo s_InvariantCultureInfo = new CultureInfo(CultureData.Invariant, isReadOnly: true);
 
@@ -157,23 +153,22 @@ namespace System.Globalization
             return s_userDefaultUICulture!;
         }
 
+        private static string GetCultureNotSupportedExceptionMessage() => GlobalizationMode.Invariant ? SR.Argument_CultureNotSupportedInInvariantMode : SR.Argument_CultureNotSupported;
+
         public CultureInfo(string name) : this(name, true)
         {
         }
 
         public CultureInfo(string name, bool useUserOverride)
         {
-            if (name == null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
+            ArgumentNullException.ThrowIfNull(name);
 
             // Get our data providing record
             CultureData? cultureData = CultureData.GetCultureData(name, useUserOverride);
 
             if (cultureData == null)
             {
-                throw new CultureNotFoundException(nameof(name), name, SR.Argument_CultureNotSupported);
+                throw new CultureNotFoundException(nameof(name), name, GetCultureNotSupportedExceptionMessage());
             }
 
             _cultureData = cultureData;
@@ -208,10 +203,7 @@ namespace System.Globalization
         public CultureInfo(int culture, bool useUserOverride)
         {
             // We don't check for other invalid LCIDS here...
-            if (culture < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(culture), SR.ArgumentOutOfRange_NeedPosNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(culture);
 
             switch (culture)
             {
@@ -242,13 +234,10 @@ namespace System.Globalization
         /// </summary>
         internal CultureInfo(string cultureName, string textAndCompareCultureName)
         {
-            if (cultureName == null)
-            {
-                throw new ArgumentNullException(nameof(cultureName), SR.ArgumentNull_String);
-            }
+            ArgumentNullException.ThrowIfNull(textAndCompareCultureName);
 
             CultureData? cultureData = CultureData.GetCultureData(cultureName, false) ??
-                throw new CultureNotFoundException(nameof(cultureName), cultureName, SR.Argument_CultureNotSupported);
+                throw new CultureNotFoundException(nameof(cultureName), cultureName, GetCultureNotSupportedExceptionMessage());
 
             _cultureData = cultureData;
 
@@ -279,7 +268,7 @@ namespace System.Globalization
         }
 
         /// <summary>
-        /// Return a specific culture. A tad irrelevent now since we always
+        /// Return a specific culture. A tad irrelevant now since we always
         /// return valid data for neutral locales.
         ///
         /// Note that there's interesting behavior that tries to find a
@@ -394,10 +383,7 @@ namespace System.Globalization
             }
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 if (s_asyncLocalCurrentCulture == null)
                 {
@@ -417,10 +403,7 @@ namespace System.Globalization
             }
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 CultureInfo.VerifyCultureName(value, true);
 
@@ -496,25 +479,39 @@ namespace System.Globalization
                     CultureInfo culture;
                     string parentName = _cultureData.ParentName;
 
-                    if (parentName == "zh" && _name.Length == 5 && _name[2] == '-')
+                    if (parentName == "zh")
                     {
-                        // We need to keep the parent chain for the zh cultures as follows to preserve the resource lookup compatability
-                        //      zh-CN -> zh-Hans -> zh -> Invariant
-                        //      zh-HK -> zh-Hant -> zh -> Invariant
-                        //      zh-MO -> zh-Hant -> zh -> Invariant
-                        //      zh-SG -> zh-Hans -> zh -> Invariant
-                        //      zh-TW -> zh-Hant -> zh -> Invariant
+                        if (_name.Length == 5 && _name[2] == '-')
+                        {
+                            // We need to keep the parent chain for the zh cultures as follows to preserve the resource lookup compatibility
+                            //      zh-CN -> zh-Hans -> zh -> Invariant
+                            //      zh-HK -> zh-Hant -> zh -> Invariant
+                            //      zh-MO -> zh-Hant -> zh -> Invariant
+                            //      zh-SG -> zh-Hans -> zh -> Invariant
+                            //      zh-TW -> zh-Hant -> zh -> Invariant
 
-                        if ((_name[3] == 'C' && _name[4] == 'N' ) || // zh-CN
-                            (_name[3] == 'S' && _name[4] == 'G' ))   // zh-SG
-                        {
-                            parentName = "zh-Hans";
+                            if ((_name[3] == 'C' && _name[4] == 'N' ) || // zh-CN
+                                (_name[3] == 'S' && _name[4] == 'G' ))   // zh-SG
+                            {
+                                parentName = "zh-Hans";
+                            }
+                            else if ((_name[3] == 'H' && _name[4] == 'K' ) ||   // zh-HK
+                                    (_name[3] == 'M' && _name[4] == 'O' ) ||    // zh-MO
+                                    (_name[3] == 'T' && _name[4] == 'W' ))      // zh-TW
+                            {
+                                parentName = "zh-Hant";
+                            }
                         }
-                        else if ((_name[3] == 'H' && _name[4] == 'K' ) || // zh-HK
-                                 (_name[3] == 'M' && _name[4] == 'O' ) || // zh-MO
-                                 (_name[3] == 'T' && _name[4] == 'W' ))   // zh-TW
+                        else if (_name.Length > 8 && _name.AsSpan(2, 4) is "-Han" && _name[7] == '-') // cultures like zh-Hant-* and zh-Hans-*
                         {
-                            parentName = "zh-Hant";
+                            if (_name[6] == 't') // zh-Hant-*
+                            {
+                                parentName = "zh-Hant";
+                            }
+                            else if (_name[6] == 's') // zh-Hans-*
+                            {
+                                parentName = "zh-Hans";
+                            }
                         }
                     }
 
@@ -562,6 +559,12 @@ namespace System.Globalization
         /// This one has the sort information (ie: de-DE_phoneb)
         /// </summary>
         internal string SortName => _sortName ??= _cultureData.SortName;
+
+        /// <summary>
+        /// The culture name to use to interop with the underlying native globalization libraries like ICU or Windows NLS APIs.
+        /// For example, we can have the name de_DE@collation=phonebook when using ICU for the German culture de-DE with the phonebook sorting behavior.
+        /// </summary>
+        internal string? InteropName => _cultureData.InteropName;
 
         public string IetfLanguageTag =>
                 // special case the compatibility cultures
@@ -642,7 +645,7 @@ namespace System.Globalization
             }
         }
 
-        public override bool Equals(object? value)
+        public override bool Equals([NotNullWhen(true)] object? value)
         {
             if (object.ReferenceEquals(this, value))
             {
@@ -727,10 +730,7 @@ namespace System.Globalization
             }
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _numInfo = value;
@@ -757,10 +757,7 @@ namespace System.Globalization
 
             set
             {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
+                ArgumentNullException.ThrowIfNull(value);
 
                 VerifyWritable();
                 _dateTimeInfo = value;
@@ -950,10 +947,7 @@ namespace System.Globalization
 
         public static CultureInfo ReadOnly(CultureInfo ci)
         {
-            if (ci == null)
-            {
-                throw new ArgumentNullException(nameof(ci));
-            }
+            ArgumentNullException.ThrowIfNull(ci);
 
             if (ci.IsReadOnly)
             {
@@ -1023,10 +1017,7 @@ namespace System.Globalization
         /// </summary>
         public static CultureInfo GetCultureInfo(int culture)
         {
-            if (culture <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(culture), SR.ArgumentOutOfRange_NeedPosNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(culture);
 
             Dictionary<int, CultureInfo> lcidTable = CachedCulturesByLcid;
             CultureInfo? result;
@@ -1045,7 +1036,7 @@ namespace System.Globalization
             }
             catch (ArgumentException)
             {
-                throw new CultureNotFoundException(nameof(culture), culture, SR.Argument_CultureNotSupported);
+                throw new CultureNotFoundException(nameof(culture), culture, GetCultureNotSupportedExceptionMessage());
             }
 
             lock (lcidTable)
@@ -1062,11 +1053,7 @@ namespace System.Globalization
         /// </summary>
         public static CultureInfo GetCultureInfo(string name)
         {
-            // Make sure we have a valid, non-zero length string as name
-            if (name is null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
+            ArgumentNullException.ThrowIfNull(name);
 
             name = CultureData.AnsiToLower(name);
             Dictionary<string, CultureInfo> nameTable = CachedCulturesByName;
@@ -1081,7 +1068,7 @@ namespace System.Globalization
             }
 
             result = CreateCultureInfoNoThrow(name, useUserOverride: false) ??
-                throw new CultureNotFoundException(nameof(name), name, SR.Argument_CultureNotSupported);
+                throw new CultureNotFoundException(nameof(name), name, GetCultureNotSupportedExceptionMessage());
             result._isReadOnly = true;
 
             // Remember our name as constructed.  Do NOT use alternate sort name versions because
@@ -1102,14 +1089,8 @@ namespace System.Globalization
         /// </summary>
         public static CultureInfo GetCultureInfo(string name, string altName)
         {
-            if (name is null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
-            if (altName is null)
-            {
-                throw new ArgumentNullException(nameof(altName));
-            }
+            ArgumentNullException.ThrowIfNull(name);
+            ArgumentNullException.ThrowIfNull(altName);
 
             name = CultureData.AnsiToLower(name);
             altName = CultureData.AnsiToLower(altName);
@@ -1147,16 +1128,14 @@ namespace System.Globalization
 
         public static CultureInfo GetCultureInfo(string name, bool predefinedOnly)
         {
-            if (name is null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
+            ArgumentNullException.ThrowIfNull(name);
 
             if (predefinedOnly && !GlobalizationMode.Invariant)
             {
-                return GlobalizationMode.UseNls ?
-                    NlsGetPredefinedCultureInfo(name) :
-                    IcuGetPredefinedCultureInfo(name);
+                if (GlobalizationMode.UseNls ? !CultureData.NlsIsEnsurePredefinedLocaleName(name): !CultureData.IcuIsEnsurePredefinedLocaleName(name))
+                {
+                    throw new CultureNotFoundException(nameof(name), name, SR.Format(SR.Argument_InvalidPredefinedCultureName, name));
+                }
             }
 
             return GetCultureInfo(name);

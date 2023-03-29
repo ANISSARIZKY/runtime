@@ -13,7 +13,7 @@ using MS.Internal.Xml;
 
 namespace System.Xml.Xsl.XPath {
 
-    internal class XPathContext {
+    internal sealed class XPathContext {
         // Context is the most fundamental concept of XPath
         // In docs it is -- "current node-set" and "current node in this node-set"
         // on practice in this implementation we have "current node" (C), "position of current node in current node-set" (P)
@@ -59,7 +59,7 @@ namespace System.Xml.Xsl.XPath {
         // In simple XPath a/b[2] return value is pure iterator and can be left as it is
         // In more complex XPath (a/b)[2] resturn value is Tuple and should be isolated with context.
         //       this can be done as grouping as well.
-        // XSLT complies for-each and apply-templates in form (2) so converting to (3) shouldn't be a problem
+        // XSLT compiles for-each and apply-templates in form (2) so converting to (3) shouldn't be a problem
         // -- It look like solution is group (a/b) with For(DocOrderDistinct(...)) and we are set.
 
         // Methods that deal with XPath context. Xslt.QilGenerator calls these method as well:
@@ -96,7 +96,7 @@ namespace System.Xml.Xsl.XPath {
             return context;
         }
 
-        private class Replacer : QilActiveVisitor {
+        private sealed class Replacer : QilActiveVisitor {
             QilIterator from, to;
 
             public Replacer(QilFactory f) : base(f) {}

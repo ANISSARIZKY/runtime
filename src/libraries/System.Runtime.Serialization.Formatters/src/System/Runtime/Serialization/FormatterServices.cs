@@ -1,10 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization.Formatters;
@@ -16,7 +16,12 @@ namespace System.Runtime.Serialization
     {
         private static readonly ConcurrentDictionary<MemberHolder, MemberInfo[]> s_memberInfoTable = new ConcurrentDictionary<MemberHolder, MemberInfo[]>();
 
-        private static FieldInfo[] InternalGetSerializableMembers(Type type)
+        [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2065:UnrecognizedReflectionPattern",
+            Justification = "The parentType is read from an array which currently can't be annotated," +
+                            "but the input type is annotated with All, so all of its base types are also All.")]
+        private static FieldInfo[] InternalGetSerializableMembers(
+            // currently the only way to preserve base, non-public fields is to use All
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type)
         {
             Debug.Assert(type != null);
 
@@ -79,7 +84,8 @@ namespace System.Runtime.Serialization
             return typeMembers;
         }
 
-        private static FieldInfo[] GetSerializableFields(Type type)
+        private static FieldInfo[] GetSerializableFields(
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.NonPublicFields)] Type type)
         {
             // Get the list of all fields
             FieldInfo[] fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
@@ -156,17 +162,17 @@ namespace System.Runtime.Serialization
             return unique;
         }
 
-        public static MemberInfo[] GetSerializableMembers(Type type)
+        public static MemberInfo[] GetSerializableMembers(
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type)
         {
             return GetSerializableMembers(type, new StreamingContext(StreamingContextStates.All));
         }
 
-        public static MemberInfo[] GetSerializableMembers(Type type, StreamingContext context)
+        public static MemberInfo[] GetSerializableMembers(
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type,
+            StreamingContext context)
         {
-            if (type == null)
-            {
-                throw new ArgumentNullException(nameof(type));
-            }
+            ArgumentNullException.ThrowIfNull(type);
 
             // If we've already gathered the members for this type, just return them.
             // Otherwise, get them and add them.
@@ -189,7 +195,9 @@ namespace System.Runtime.Serialization
             [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.NonPublicConstructors)]
             Type type) => RuntimeHelpers.GetUninitializedObject(type);
 
-        public static object GetSafeUninitializedObject(Type type) => RuntimeHelpers.GetUninitializedObject(type);
+        public static object GetSafeUninitializedObject(
+            [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.NonPublicConstructors)]
+            Type type) => RuntimeHelpers.GetUninitializedObject(type);
 
         internal static void SerializationSetValue(MemberInfo fi, object? target, object? value)
         {
@@ -206,18 +214,10 @@ namespace System.Runtime.Serialization
 
         public static object PopulateObjectMembers(object obj, MemberInfo[] members, object?[] data)
         {
-            if (obj == null)
-            {
-                throw new ArgumentNullException(nameof(obj));
-            }
-            if (members == null)
-            {
-                throw new ArgumentNullException(nameof(members));
-            }
-            if (data == null)
-            {
-                throw new ArgumentNullException(nameof(data));
-            }
+            ArgumentNullException.ThrowIfNull(obj);
+            ArgumentNullException.ThrowIfNull(members);
+            ArgumentNullException.ThrowIfNull(data);
+
             if (members.Length != data.Length)
             {
                 throw new ArgumentException(SR.Argument_DataLengthDifferent);
@@ -256,14 +256,8 @@ namespace System.Runtime.Serialization
 
         public static object?[] GetObjectData(object obj, MemberInfo[] members)
         {
-            if (obj == null)
-            {
-                throw new ArgumentNullException(nameof(obj));
-            }
-            if (members == null)
-            {
-                throw new ArgumentNullException(nameof(members));
-            }
+            ArgumentNullException.ThrowIfNull(obj);
+            ArgumentNullException.ThrowIfNull(members);
 
             object?[] data = new object[members.Length];
             for (int i = 0; i < members.Length; i++)
@@ -287,19 +281,16 @@ namespace System.Runtime.Serialization
 
         public static ISerializationSurrogate GetSurrogateForCyclicalReference(ISerializationSurrogate innerSurrogate)
         {
-            if (innerSurrogate == null)
-            {
-                throw new ArgumentNullException(nameof(innerSurrogate));
-            }
+            ArgumentNullException.ThrowIfNull(innerSurrogate);
+
             return new SurrogateForCyclicalReference(innerSurrogate);
         }
 
+        [RequiresUnreferencedCode("Types might be removed")]
         public static Type? GetTypeFromAssembly(Assembly assem, string name)
         {
-            if (assem == null)
-            {
-                throw new ArgumentNullException(nameof(assem));
-            }
+            ArgumentNullException.ThrowIfNull(assem);
+
             return assem.GetType(name, throwOnError: false, ignoreCase: false);
         }
 
@@ -320,10 +311,7 @@ namespace System.Runtime.Serialization
 
         internal static string GetClrAssemblyName(Type type, out bool hasTypeForwardedFrom)
         {
-            if (type == null)
-            {
-                throw new ArgumentNullException(nameof(type));
-            }
+            ArgumentNullException.ThrowIfNull(type);
 
             // Special case types like arrays
             Type attributedType = type;

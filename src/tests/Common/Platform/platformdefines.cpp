@@ -142,13 +142,13 @@ error_t TP_getenv_s(size_t* pReturnValue, LPWSTR buffer, size_t sizeInWords, LPC
     if (NULL == pReturnValue || NULL == varname) return 1;
 
 #ifdef WINDOWS
-    
+
      size_t  returnValue;
      WCHAR   buf[100];
      if( 0 != _wgetenv_s(&returnValue, buf, 100, varname) || returnValue<=0 )
         return 2;
-    
-    
+
+
     TP_scpy_s(buffer, sizeInWords, (LPWSTR)buf);
 #else
     LPSTR pRet;
@@ -170,8 +170,9 @@ error_t TP_putenv_s(LPWSTR name, LPWSTR value)
         return 0;
 #else
     int retVal = 0;
-    char *assignment = (char*) malloc(sizeof(char) * (TP_slen(name) + TP_slen(value) + 1));
-    sprintf(assignment, "%s=%s", HackyConvertToSTR(name), HackyConvertToSTR(value));
+    size_t assignmentSize = sizeof(char) * (TP_slen(name) + TP_slen(value) + 1 + 1);
+    char *assignment = (char*) malloc(assignmentSize);
+    snprintf(assignment, assignmentSize, "%s=%s", HackyConvertToSTR(name), HackyConvertToSTR(value));
 
     if (0 != putenv(assignment))
         retVal = 2;
@@ -326,46 +327,6 @@ DWORD TP_GetFullPathName(LPWSTR fileName, DWORD nBufferLength, LPWSTR lpBuffer)
     return TP_slen(lpBuffer);
 #endif
 }
-DWORD TP_CreateThread(THREAD_ID* tThread, LPTHREAD_START_ROUTINE worker,  LPVOID lpParameter)
-{
-#ifdef WINDOWS
-    DWORD ret;
-    *tThread = CreateThread(
-        NULL,
-        0,
-        worker,
-        lpParameter,
-        0,
-        &ret);
-    return ret;
-#else
-    pthread_create(
-        tThread,
-        NULL,
-        (MacWorker)worker,
-        lpParameter);
-#ifdef MAC64
-    // This is a major kludge...64 bit posix threads just can't be cast into a DWORD and there just isn't
-    // a great way to get what we're using for the ID. The fact that we're casting this at all is kind of
-    // silly since we're returing the actual thread handle and everything being done to manipulate the thread
-    // is done with that. Anyhow, the only thing done with the dword returned from this method is a printf
-    // which is good since this DWORD really shouldn't be reliably used. Just in case it is though, return
-    // a value that can be traced back to here.
-    return 42;
-#else
-    return (DWORD)*tThread;
-#endif
-#endif
-}
-
-void TP_JoinThread(THREAD_ID tThread)
-{
-#ifdef WINDOWS
-    WaitForSingleObject(tThread, INFINITE);
-#else
-    pthread_join(tThread, NULL);
-#endif
-}
 
 #define INTSAFE_E_ARITHMETIC_OVERFLOW       ((HRESULT)0x80070216L)  // 0x216 = 534 = ERROR_ARITHMETIC_OVERFLOW
 #define ULONG_ERROR     (0xffffffffUL)
@@ -377,13 +338,13 @@ HRESULT ULongLongToULong(ULONGLONG ullOperand, ULONG* pulResult)
 {
     HRESULT hr = INTSAFE_E_ARITHMETIC_OVERFLOW;
     *pulResult = ULONG_ERROR;
-    
+
     if (ullOperand <= UINT32_MAX)
     {
         *pulResult = (ULONG)ullOperand;
         hr = S_OK;
     }
-    
+
     return hr;
 }
 
@@ -397,16 +358,16 @@ HRESULT ULongAdd(ULONG ulAugend, ULONG ulAddend,ULONG* pulResult)
         *pulResult = (ulAugend + ulAddend);
         hr = S_OK;
     }
-    
+
     return hr;
 }
 
 HRESULT ULongMult(ULONG ulMultiplicand, ULONG ulMultiplier, ULONG* pulResult)
 {
     ULONGLONG ull64Result = UInt32x32To64(ulMultiplicand, ulMultiplier);
-    
+
     return ULongLongToULong(ull64Result, pulResult);
-}     
+}
 
 HRESULT CbSysStringSize(ULONG cchSize, BOOL isByteLen, ULONG *result)
 {
@@ -428,7 +389,7 @@ HRESULT CbSysStringSize(ULONG cchSize, BOOL isByteLen, ULONG *result)
     else
     {
         ULONG temp = 0; // should not use in-place addition in ULongAdd
-        if (SUCCEEDED(ULongMult(cchSize, sizeof(WCHAR), &temp)) &
+        if (SUCCEEDED(ULongMult(cchSize, sizeof(WCHAR), &temp)) &&
             SUCCEEDED(ULongAdd(temp, constant, result)))
         {
             *result = *result & ~WIN32_ALLOC_ALIGN;
@@ -440,7 +401,7 @@ HRESULT CbSysStringSize(ULONG cchSize, BOOL isByteLen, ULONG *result)
 
 BSTR TP_SysAllocString(LPCWSTR psz)
 {
-#ifdef WINDOWS    
+#ifdef WINDOWS
     return SysAllocString(psz);
 #else
     if(psz == NULL)
@@ -462,7 +423,7 @@ BSTR CoreClrBStrAlloc(LPCWSTR psz, size_t len)
 
 #if defined(HOST_64BIT)
       // NOTE: There are some apps which peek back 4 bytes to look at the size of the BSTR. So, in case of 64-bit code,
-      // we need to ensure that the BSTR length can be found by looking one DWORD before the BSTR pointer. 
+      // we need to ensure that the BSTR length can be found by looking one DWORD before the BSTR pointer.
       *(DWORD_PTR *)bstr = (DWORD_PTR) 0;
       bstr = (BSTR) ((char *) bstr + sizeof (DWORD));
 #endif
@@ -477,12 +438,12 @@ BSTR CoreClrBStrAlloc(LPCWSTR psz, size_t len)
       bstr[len] = '\0'; // always 0 terminate
     }
 
-    return bstr; 
+    return bstr;
 }
 
 BSTR CoreClrBStrAlloc(LPCSTR psz, size_t len)
 {
-#ifdef WINDOWS    
+#ifdef WINDOWS
     return SysAllocStringByteLen(psz, (UINT)len);
 #else
     BSTR bstr;
@@ -512,25 +473,25 @@ BSTR CoreClrBStrAlloc(LPCSTR psz, size_t len)
     }
 
     return bstr;
-#endif    
+#endif
 }
 
 void CoreClrBStrFree(BSTR bstr)
 {
-#ifdef WINDOWS    
+#ifdef WINDOWS
     return SysFreeString(bstr);
 #else
     if (bstr == NULL)
       return;
-    CoreClrFree((BYTE *)bstr - sizeof(DWORD_PTR));  
-#endif    
+    CoreClrFree((BYTE *)bstr - sizeof(DWORD_PTR));
+#endif
 }
 
 size_t TP_SysStringByteLen(BSTR bstr)
 {
-#ifdef WINDOWS    
+#ifdef WINDOWS
     return SysStringByteLen(bstr);
-#else   
+#else
     if(bstr == NULL)
       return 0;
     int32_t * p32 = (int32_t *) bstr;
@@ -540,7 +501,7 @@ size_t TP_SysStringByteLen(BSTR bstr)
     //std::cout << p32 << p32_1 << endl;
     //std::cout << d32 << d32_1 << endl;
     return (unsigned int)(((DWORD *)bstr)[-1]);
-#endif    
+#endif
 }
 
 size_t TP_SysStringLen(BSTR bstr)
@@ -557,7 +518,7 @@ size_t TP_SysStringLen(BSTR bstr)
 size_t TP_strncpy_s(char* strDest, size_t numberOfElements, const char *strSource, size_t count)
 {
     // NOTE: Need to pass count + 1 since strncpy_s does not count null,
-    // while snprintf does. 
+    // while snprintf does.
     return snprintf(strDest, count + 1, "%s", strSource);
 }
 

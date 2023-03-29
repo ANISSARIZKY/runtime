@@ -1,9 +1,11 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Eventing.Reader;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using Xunit;
 
@@ -22,6 +24,9 @@ namespace System.Diagnostics.Tests
         [InlineData(false)]
         public void ProviderNameTests(bool noProviderName)
         {
+            if (PlatformDetection.IsWindows10Version22000OrGreater) // ActiveIssue("https://github.com/dotnet/runtime/issues/58829")
+                return;
+
             string log = "Application";
             string source = "Source_" + nameof(ProviderNameTests);
             using (var session = new EventLogSession())
@@ -58,10 +63,14 @@ namespace System.Diagnostics.Tests
                                     Assert.Equal("Aplicaci\u00F3n", logLink.DisplayName);
                                 }
                             }
-                            Assert.Contains("EventLogMessages.dll", providerMetadata.MessageFilePath);
+
+                            string[] expectedMessageFileNames = new[] { "EventLogMessages.dll", "System.Diagnostics.EventLog.Messages.dll" };
+                            string messageFileName = Path.GetFileName(providerMetadata.MessageFilePath);
+                            Assert.Contains(expectedMessageFileNames, expected => expected.Equals(messageFileName, StringComparison.OrdinalIgnoreCase));
                             if (providerMetadata.HelpLink != null)
                             {
-                                Assert.Contains("EventLogMessages.dll", providerMetadata.HelpLink.ToString());
+                                string helpLink = providerMetadata.HelpLink.ToString();
+                                Assert.Contains(expectedMessageFileNames, expected => -1 != helpLink.IndexOf(expected, StringComparison.OrdinalIgnoreCase));
                             }
                         }
                         else
@@ -82,6 +91,7 @@ namespace System.Diagnostics.Tests
         }
 
         [ConditionalFact(typeof(Helpers), nameof(Helpers.SupportsEventLogs))]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/64153")]
         public void GetProviderNames_AssertProperties()
         {
             const string Prefix = "win:";

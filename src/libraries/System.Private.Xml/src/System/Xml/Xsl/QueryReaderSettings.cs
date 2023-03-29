@@ -9,7 +9,7 @@ using System.Xml;
 
 namespace System.Xml.Xsl
 {
-    internal class QueryReaderSettings
+    internal sealed class QueryReaderSettings
     {
         private readonly bool _validatingReader;
         private readonly XmlReaderSettings? _xmlReaderSettings;
@@ -84,7 +84,7 @@ namespace System.Xml.Xsl
             }
         }
 
-        public XmlReader CreateReader(Stream stream, string baseUri)
+        public XmlReader CreateReader(Stream stream, string? baseUri)
         {
             XmlReader reader;
             if (_xmlReaderSettings != null)

@@ -26,7 +26,7 @@ namespace CoreXml.Test.XLinq
             module.AddChild(new XNodeReaderTests() { Attribute = new TestCaseAttribute() { Name = "XNodeReader", Desc = "XLinq XNodeReader Tests" } });
             module.Execute();
 
-            Assert.Equal(0, module.FailCount);
+            Assert.False(module.HasFailures, module.GetFailuresInfo());
         }
 
         #region Class
@@ -306,10 +306,6 @@ namespace CoreXml.Test.XLinq
                     this.AddChild(new TestVariation(OrdinalWithGetAttrSingleQ) { Attribute = new VariationAttribute("GetAttribute[i] Verify with This[i] - Single Quote") });
                     this.AddChild(new TestVariation(GetAttributeWithMoveAttrDoubleQ) { Attribute = new VariationAttribute("GetAttribute(i) Verify with MoveToAttribute[i] - Double Quote") { Priority = 0 } });
                     this.AddChild(new TestVariation(GetAttributeWithMoveAttrSingleQ) { Attribute = new VariationAttribute("GetAttribute(i) Verify with MoveToAttribute[i] - Single Quote") });
-                    this.AddChild(new TestVariation(NegativeOneOrdinal) { Attribute = new VariationAttribute("GetAttribute(i) NegativeOneOrdinal") { Priority = 0 } });
-                    this.AddChild(new TestVariation(FieldCountOrdinal) { Attribute = new VariationAttribute("GetAttribute(i) FieldCountOrdinal") });
-                    this.AddChild(new TestVariation(OrdinalPlusOne) { Attribute = new VariationAttribute("GetAttribute(i) OrdinalPlusOne") { Priority = 0 } });
-                    this.AddChild(new TestVariation(OrdinalMinusOne) { Attribute = new VariationAttribute("GetAttribute(i) OrdinalMinusOne") });
                 }
             }
             public partial class TCGetAttributeName : BridgeHelpers
@@ -344,10 +340,6 @@ namespace CoreXml.Test.XLinq
                     this.AddChild(new TestVariation(OrdinalWithGetAttrSingleQ) { Attribute = new VariationAttribute("This[i] Verify with GetAttribute[i] - Single Quote") });
                     this.AddChild(new TestVariation(OrdinalWithMoveAttrSingleQ) { Attribute = new VariationAttribute("This[i] Verify with MoveToAttribute[i] - Single Quote") });
                     this.AddChild(new TestVariation(OrdinalWithMoveAttrDoubleQ) { Attribute = new VariationAttribute("This[i] Verify with MoveToAttribute[i] - Double Quote") { Priority = 0 } });
-                    this.AddChild(new TestVariation(NegativeOneOrdinal) { Attribute = new VariationAttribute("ThisOrdinal NegativeOneOrdinal") { Priority = 0 } });
-                    this.AddChild(new TestVariation(FieldCountOrdinal) { Attribute = new VariationAttribute("ThisOrdinal FieldCountOrdinal") });
-                    this.AddChild(new TestVariation(OrdinalPlusOne) { Attribute = new VariationAttribute("ThisOrdinal OrdinalPlusOne") { Priority = 0 } });
-                    this.AddChild(new TestVariation(OrdinalMinusOne) { Attribute = new VariationAttribute("ThisOrdinal OrdinalMinusOne") });
                 }
             }
             public partial class TCMoveToAttributeOrdinal : BridgeHelpers
@@ -479,7 +471,7 @@ namespace CoreXml.Test.XLinq
                     this.AddChild(new TestVariation(TestReadInnerXml17) { Attribute = new VariationAttribute("ReadInnerXml on XmlDeclaration") });
                     this.AddChild(new TestVariation(TestReadInnerXml18) { Attribute = new VariationAttribute("Current node after ReadInnerXml on element") { Priority = 0 } });
                     this.AddChild(new TestVariation(TestReadInnerXml19) { Attribute = new VariationAttribute("Current node after ReadInnerXml on element") });
-                    this.AddChild(new TestVariation(TestTextReadInnerXml2) { Attribute = new VariationAttribute("ReadInnerXml with entity references, EntityHandling = ExpandCharEntites") });
+                    this.AddChild(new TestVariation(TestTextReadInnerXml2) { Attribute = new VariationAttribute("ReadInnerXml with entity references, EntityHandling = ExpandCharEntities") });
                     this.AddChild(new TestVariation(TestTextReadInnerXml4) { Attribute = new VariationAttribute("ReadInnerXml on EntityReference") });
                     this.AddChild(new TestVariation(TestTextReadInnerXml5) { Attribute = new VariationAttribute("ReadInnerXml on EndEntity") });
                     this.AddChild(new TestVariation(TestTextReadInnerXml18) { Attribute = new VariationAttribute("One large element") });
@@ -580,8 +572,6 @@ namespace CoreXml.Test.XLinq
                 // Test Case
                 public override void AddChildren()
                 {
-                    this.AddChild(new TestVariation(Variation1) { Attribute = new VariationAttribute("Move to Attribute using []") });
-                    this.AddChild(new TestVariation(Variation2) { Attribute = new VariationAttribute("GetAttribute") });
                     this.AddChild(new TestVariation(Variation3) { Attribute = new VariationAttribute("IsStartElement") });
                     this.AddChild(new TestVariation(Variation4) { Attribute = new VariationAttribute("LookupNamespace") });
                     this.AddChild(new TestVariation(Variation5) { Attribute = new VariationAttribute("MoveToAttribute") });
@@ -836,7 +826,7 @@ namespace CoreXml.Test.XLinq
                     this.AddChild(new TestVariation(ReadOuterXml17) { Attribute = new VariationAttribute("ReadOuterXml on ProcessingInstruction") });
                     this.AddChild(new TestVariation(ReadOuterXml24) { Attribute = new VariationAttribute("ReadOuterXml on CDATA") });
                     this.AddChild(new TestVariation(TRReadOuterXml27) { Attribute = new VariationAttribute("ReadOuterXml on element with entities, EntityHandling = ExpandCharEntities") });
-                    this.AddChild(new TestVariation(TRReadOuterXml28) { Attribute = new VariationAttribute("ReadOuterXml on attribute with entities, EntityHandling = ExpandCharEntites") });
+                    this.AddChild(new TestVariation(TRReadOuterXml28) { Attribute = new VariationAttribute("ReadOuterXml on attribute with entities, EntityHandling = ExpandCharEntities") });
                     this.AddChild(new TestVariation(TestTextReadOuterXml29) { Attribute = new VariationAttribute("One large element") });
                     this.AddChild(new TestVariation(ReadOuterXmlWhenNamespacesEqualsToFalseAndHasAnAttributeXmlns) { Attribute = new VariationAttribute("Read OuterXml when Namespaces=false and has an attribute xmlns") });
                 }

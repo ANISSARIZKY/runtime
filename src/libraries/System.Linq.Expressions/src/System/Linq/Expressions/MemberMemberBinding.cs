@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Dynamic.Utils;
 using System.Reflection;
 
@@ -77,8 +78,8 @@ namespace System.Linq.Expressions
         /// <returns>A <see cref="MemberMemberBinding"/> that has the <see cref="MemberBinding.BindingType"/> property equal to <see cref="MemberBinding"/> and the <see cref="MemberBinding.Member"/> and <see cref="MemberMemberBinding.Bindings"/> properties set to the specified values.</returns>
         public static MemberMemberBinding MemberBind(MemberInfo member, IEnumerable<MemberBinding> bindings)
         {
-            ContractUtils.RequiresNotNull(member, nameof(member));
-            ContractUtils.RequiresNotNull(bindings, nameof(bindings));
+            ArgumentNullException.ThrowIfNull(member);
+            ArgumentNullException.ThrowIfNull(bindings);
             ReadOnlyCollection<MemberBinding> roBindings = bindings.ToReadOnly();
             Type memberType;
             ValidateGettableFieldOrPropertyMember(member, out memberType);
@@ -96,6 +97,7 @@ namespace System.Linq.Expressions
         /// the Member property set to the <see cref="PropertyInfo"/> that represents the property accessed in <paramref name="propertyAccessor"/>,
         /// and <see cref="MemberMemberBinding.Bindings"/> properties set to the specified values.
         /// </returns>
+        [RequiresUnreferencedCode(PropertyFromAccessorRequiresUnreferencedCode)]
         public static MemberMemberBinding MemberBind(MethodInfo propertyAccessor, params MemberBinding[] bindings)
         {
             return MemberBind(propertyAccessor, (IEnumerable<MemberBinding>)bindings);
@@ -111,9 +113,10 @@ namespace System.Linq.Expressions
         /// the Member property set to the <see cref="PropertyInfo"/> that represents the property accessed in <paramref name="propertyAccessor"/>,
         /// and <see cref="MemberMemberBinding.Bindings"/> properties set to the specified values.
         /// </returns>
+        [RequiresUnreferencedCode(PropertyFromAccessorRequiresUnreferencedCode)]
         public static MemberMemberBinding MemberBind(MethodInfo propertyAccessor, IEnumerable<MemberBinding> bindings)
         {
-            ContractUtils.RequiresNotNull(propertyAccessor, nameof(propertyAccessor));
+            ArgumentNullException.ThrowIfNull(propertyAccessor);
             return MemberBind(GetProperty(propertyAccessor, nameof(propertyAccessor)), bindings);
         }
 
@@ -152,7 +155,7 @@ namespace System.Linq.Expressions
             for (int i = 0, n = bindings.Count; i < n; i++)
             {
                 MemberBinding b = bindings[i];
-                ContractUtils.RequiresNotNull(b, nameof(bindings));
+                ArgumentNullException.ThrowIfNull(b, nameof(bindings));
                 b.ValidateAsDefinedHere(i);
                 if (!b.Member.DeclaringType!.IsAssignableFrom(type))
                 {

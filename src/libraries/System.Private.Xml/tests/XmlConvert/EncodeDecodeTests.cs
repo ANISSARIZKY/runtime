@@ -1,9 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers.Binary;
 using OLEDB.Test.ModuleCore;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlConvertTests
 {
     internal class EncodeDecodeTests : SqlXmlConvertTests
     {
@@ -47,7 +48,8 @@ namespace System.Xml.Tests
             string strUni = string.Empty;
             for (int i = 0; i < _dbyte.Length; i = i + 2)
             {
-                strUni += (BitConverter.ToChar(_dbyte, i)).ToString();
+                char c = (char)BinaryPrimitives.ReadUInt16LittleEndian(new Span<byte>(_dbyte, i, 2));
+                strUni += c.ToString();
             }
             CError.WriteLine(strUni + " " + XmlConvert.EncodeName(strUni));
             CError.Compare(XmlConvert.EncodeName(strUni), "_xFF71_", "EncodeName");

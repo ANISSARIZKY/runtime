@@ -26,10 +26,7 @@ namespace System.Diagnostics
             [MemberNotNull(nameof(_name))]
             set
             {
-                if (value == null)
-                    throw new ArgumentNullException(nameof(value));
-                if (value.Length == 0)
-                    throw new ArgumentException(SR.Format(SR.InvalidNullEmptyArgument, nameof(value)), nameof(value));
+                ArgumentException.ThrowIfNullOrEmpty(value);
 
                 _name = value;
             }
@@ -41,18 +38,17 @@ namespace System.Diagnostics
             [MemberNotNull(nameof(_type))]
             set
             {
-                if (value == null)
-                    throw new ArgumentNullException(nameof(value));
+                ArgumentNullException.ThrowIfNull(value);
                 _type = value;
             }
         }
 
         public string? SwitchDescription { get; set; }
 
+        [RequiresUnreferencedCode("Types may be trimmed from the assembly.")]
         public static SwitchAttribute[] GetAll(Assembly assembly)
         {
-            if (assembly == null)
-                throw new ArgumentNullException(nameof(assembly));
+            ArgumentNullException.ThrowIfNull(assembly);
 
             List<object> switchAttribs = new List<object>();
             object[] attribs = assembly.GetCustomAttributes(typeof(SwitchAttribute), false);
@@ -68,7 +64,7 @@ namespace System.Diagnostics
             return ret;
         }
 
-        private static void GetAllRecursive(Type type, List<object> switchAttribs)
+        private static void GetAllRecursive([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type, List<object> switchAttribs)
         {
             GetAllRecursive((MemberInfo)type, switchAttribs);
             MemberInfo[] members = type.GetMembers(BindingFlags.Public | BindingFlags.NonPublic |

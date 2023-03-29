@@ -21,8 +21,8 @@ namespace System.Net.Http.Headers
         private const string readDate = "read-date";
         private const string size = "size";
 
-        // Use ObjectCollection<T> since we may have multiple parameters with the same name.
-        private ObjectCollection<NameValueHeaderValue>? _parameters;
+        // Use UnvalidatedObjectCollection<T> since we may have multiple parameters with the same name.
+        private UnvalidatedObjectCollection<NameValueHeaderValue>? _parameters;
         private string _dispositionType = null!;
 
         #endregion Fields
@@ -39,7 +39,7 @@ namespace System.Net.Http.Headers
             }
         }
 
-        public ICollection<NameValueHeaderValue> Parameters => _parameters ??= new ObjectCollection<NameValueHeaderValue>();
+        public ICollection<NameValueHeaderValue> Parameters => _parameters ??= new UnvalidatedObjectCollection<NameValueHeaderValue>();
 
         public string? Name
         {
@@ -104,18 +104,18 @@ namespace System.Net.Http.Headers
                         _parameters!.Remove(sizeParameter);
                     }
                 }
-                else if (value < 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
-                else if (sizeParameter != null)
-                {
-                    sizeParameter.Value = value.Value.ToString(CultureInfo.InvariantCulture);
-                }
                 else
                 {
-                    string sizeString = value.Value.ToString(CultureInfo.InvariantCulture);
-                    Parameters.Add(new NameValueHeaderValue(size, sizeString));
+                    ArgumentOutOfRangeException.ThrowIfNegative(value.GetValueOrDefault());
+                    if (sizeParameter != null)
+                    {
+                        sizeParameter.Value = value.Value.ToString(CultureInfo.InvariantCulture);
+                    }
+                    else
+                    {
+                        string sizeString = value.Value.ToString(CultureInfo.InvariantCulture);
+                        Parameters.Add(new NameValueHeaderValue(size, sizeString));
+                    }
                 }
             }
         }
@@ -134,14 +134,7 @@ namespace System.Net.Http.Headers
             Debug.Assert(source != null);
 
             _dispositionType = source._dispositionType;
-
-            if (source._parameters != null)
-            {
-                foreach (var parameter in source._parameters)
-                {
-                    this.Parameters.Add((NameValueHeaderValue)((ICloneable)parameter).Clone());
-                }
-            }
+            _parameters = source._parameters.Clone();
         }
 
         public ContentDispositionHeaderValue(string dispositionType)
@@ -162,7 +155,7 @@ namespace System.Net.Http.Headers
             return StringBuilderCache.GetStringAndRelease(sb);
         }
 
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             ContentDispositionHeaderValue? other = obj as ContentDispositionHeaderValue;
 
@@ -191,7 +184,7 @@ namespace System.Net.Http.Headers
 
         #region Parsing
 
-        public static ContentDispositionHeaderValue Parse(string? input)
+        public static ContentDispositionHeaderValue Parse(string input)
         {
             int index = 0;
             return (ContentDispositionHeaderValue)GenericHeaderParser.ContentDispositionParser.ParseValue(input,
@@ -232,7 +225,7 @@ namespace System.Net.Http.Headers
             }
 
             int current = startIndex + dispositionTypeLength;
-            current = current + HttpRuleParser.GetWhitespaceLength(input, current);
+            current += HttpRuleParser.GetWhitespaceLength(input, current);
             ContentDispositionHeaderValue contentDispositionHeader = new ContentDispositionHeaderValue();
             contentDispositionHeader._dispositionType = dispositionType!;
 
@@ -241,7 +234,7 @@ namespace System.Net.Http.Headers
             {
                 current++; // Skip delimiter.
                 int parameterLength = NameValueHeaderValue.GetNameValueListLength(input, current, ';',
-                    (ObjectCollection<NameValueHeaderValue>)contentDispositionHeader.Parameters);
+                    (UnvalidatedObjectCollection<NameValueHeaderValue>)contentDispositionHeader.Parameters);
 
                 if (parameterLength == 0)
                 {
@@ -334,7 +327,7 @@ namespace System.Net.Http.Headers
             else
             {
                 // Must always be quoted.
-                string dateString = "\"" + HttpDateParser.DateToString(date.Value) + "\"";
+                string dateString = $"\"{date.GetValueOrDefault():r}\"";
                 if (dateParameter != null)
                 {
                     dateParameter.Value = dateString;
@@ -391,7 +384,7 @@ namespace System.Net.Http.Headers
             }
             else
             {
-                string processedValue = string.Empty;
+                string processedValue;
                 if (parameter.EndsWith('*'))
                 {
                     processedValue = HeaderUtilities.Encode5987(value);
@@ -429,7 +422,7 @@ namespace System.Net.Http.Headers
                 throw new ArgumentException(SR.Format(CultureInfo.InvariantCulture,
                     SR.net_http_headers_invalid_value, input));
             }
-            else if (HeaderUtilities.ContainsNonAscii(result))
+            else if (!Ascii.IsValid(result))
             {
                 needsQuotes = true; // Encoded data must always be quoted, the equals signs are invalid in tokens.
                 result = EncodeMime(result); // =?utf-8?B?asdfasdfaesdf?=
@@ -477,9 +470,13 @@ namespace System.Net.Http.Headers
                 return false;
             }
 
-            string[] parts = processedInput.Split('?');
+            Span<Range> parts = stackalloc Range[6];
+            ReadOnlySpan<char> processedInputSpan = processedInput;
             // "=, encodingName, encodingType, encodedData, ="
-            if (parts.Length != 5 || parts[0] != "\"=" || parts[4] != "=\"" || parts[2].ToLowerInvariant() != "b")
+            if (processedInputSpan.Split(parts, '?') != 5 ||
+                processedInputSpan[parts[0]] is not "\"=" ||
+                processedInputSpan[parts[4]] is not "=\"" ||
+                !processedInputSpan[parts[2]].Equals("b", StringComparison.OrdinalIgnoreCase))
             {
                 // Not encoded.
                 // This does not support multi-line encoding.
@@ -489,8 +486,8 @@ namespace System.Net.Http.Headers
 
             try
             {
-                Encoding encoding = Encoding.GetEncoding(parts[1]);
-                byte[] bytes = Convert.FromBase64String(parts[3]);
+                Encoding encoding = Encoding.GetEncoding(processedInput[parts[1]]);
+                byte[] bytes = Convert.FromBase64String(processedInput[parts[3]]);
                 output = encoding.GetString(bytes, 0, bytes.Length);
                 return true;
             }
@@ -525,7 +522,7 @@ namespace System.Net.Http.Headers
             }
 
             string encodingString = input.Substring(0, quoteIndex);
-            string dataString = input.Substring(lastQuoteIndex + 1, input.Length - (lastQuoteIndex + 1));
+            string dataString = input.Substring(lastQuoteIndex + 1);
 
             StringBuilder decoded = new StringBuilder();
             try

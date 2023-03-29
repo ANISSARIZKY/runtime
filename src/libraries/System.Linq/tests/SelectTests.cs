@@ -16,7 +16,7 @@ namespace System.Linq.Tests
         public void SameResultsRepeatCallsStringQuery()
         {
             var q1 = from x1 in new string[] { "Alen", "Felix", null, null, "X", "Have Space", "Clinton", "" }
-                     select x1; ;
+                     select x1;
 
             var q2 = from x2 in new int[] { 55, 49, 9, -100, 24, 25, -1, 0 }
                      select x2;
@@ -808,8 +808,8 @@ namespace System.Linq.Tests
         [Fact]
         public void Select_SourceIsAnIList_Count()
         {
-            var souce = new List<int> { 1, 2, 3, 4 }.AsReadOnly();
-            Assert.Equal(souce.Count, souce.Select(i => i * 2).Count());
+            var source = new List<int> { 1, 2, 3, 4 }.AsReadOnly();
+            Assert.Equal(source.Count, source.Select(i => i * 2).Count());
         }
 
         [Fact]

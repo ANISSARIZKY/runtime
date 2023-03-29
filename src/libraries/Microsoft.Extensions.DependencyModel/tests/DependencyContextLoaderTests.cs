@@ -2,6 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using FluentAssertions;
+using System;
+using System.IO;
 using System.Reflection;
 using Xunit;
 
@@ -75,7 +77,8 @@ namespace Microsoft.Extensions.DependencyModel.Tests
             context.RuntimeLibraries.Should().Contain(l => l.Name == "System.Banana");
         }
 
-        [Fact]
+        // Load method is marked RequiresAssemblyFiles so this test doesn't make sense on single file
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.HasAssemblyFiles))]
         public void LoadCanLoadANonEntryAssembly()
         {
             var loader = new DependencyContextLoader();
@@ -89,6 +92,20 @@ namespace Microsoft.Extensions.DependencyModel.Tests
         {
             var loader = new DependencyContextLoader();
             Assert.Null(loader.Load(typeof(Moq.Mock).Assembly));
+        }
+
+        [Fact]
+        public void LoadReturnsNullWhenAssemblyLocationIsEmpty()
+        {
+            var loader = new DependencyContextLoader();
+            Assert.Null(loader.Load(new EmptyLocationAssembly()));
+        }
+
+        private class EmptyLocationAssembly : Assembly
+        {
+            public override string Location => string.Empty;
+            public override AssemblyName GetName() => new AssemblyName("EmptyLocation");
+            public override Stream? GetManifestResourceStream(string name) => null;
         }
     }
 }

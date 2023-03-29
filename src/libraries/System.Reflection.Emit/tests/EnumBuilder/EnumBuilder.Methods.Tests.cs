@@ -11,6 +11,15 @@ namespace System.Reflection.Emit.Tests
     {
         public static IEnumerable<object[]> DefineLiteral_TestData()
         {
+            foreach (object[] coreData in DefineLiteralTestDataCore())
+            {
+                yield return coreData.Concat(new object[] { true }).ToArray();
+                yield return coreData.Concat(new object[] { false }).ToArray();
+            }
+        }
+
+        private static IEnumerable<object[]> DefineLiteralTestDataCore()
+        {
             yield return new object[] { typeof(byte), (byte)0 };
             yield return new object[] { typeof(byte), (byte)1 };
 
@@ -51,7 +60,7 @@ namespace System.Reflection.Emit.Tests
         [Theory]
         [ActiveIssue("https://github.com/dotnet/runtime/issues/2389", TestRuntimes.Mono)]
         [MemberData(nameof(DefineLiteral_TestData))]
-        public void DefineLiteral(Type underlyingType, object literalValue)
+        public void DefineLiteral(Type underlyingType, object literalValue, bool useCreateTypeInfo)
         {
             EnumBuilder enumBuilder = Helpers.DynamicEnum(TypeAttributes.Public, underlyingType);
             FieldBuilder literal = enumBuilder.DefineLiteral("FieldOne", literalValue);
@@ -61,7 +70,10 @@ namespace System.Reflection.Emit.Tests
             Assert.Equal(FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.Literal, literal.Attributes);
             Assert.Equal(enumBuilder.AsType(), literal.FieldType);
 
-            Type createdEnum = enumBuilder.CreateTypeInfo().AsType();
+            Type createdEnum = useCreateTypeInfo ?
+                enumBuilder.CreateType() :
+                enumBuilder.CreateType();
+
             FieldInfo createdLiteral = createdEnum.GetField("FieldOne");
             Assert.Equal(createdEnum, createdLiteral.FieldType);
 
@@ -123,17 +135,27 @@ namespace System.Reflection.Emit.Tests
 
         public static IEnumerable<object[]> DefineLiteral_InvalidLiteralValue_ThrowsTypeLoadExceptionOnCreation_TestData()
         {
-            yield return new object[] { typeof(DateTime), DateTime.Now };
-            yield return new object[] { typeof(string), "" }; ;
+            yield return new object[] { typeof(DateTime), DateTime.Now, true };
+            yield return new object[] { typeof(DateTime), DateTime.Now, false };
+
+            yield return new object[] { typeof(string), "", true };
+            yield return new object[] { typeof(string), "", false };
         }
 
         [Theory]
         [MemberData(nameof(DefineLiteral_InvalidLiteralValue_ThrowsTypeLoadExceptionOnCreation_TestData))]
-        public void DefineLiteral_InvalidLiteralValue_ThrowsTypeLoadExceptionOnCreation(Type underlyingType, object literalValue)
+        public void DefineLiteral_InvalidLiteralValue_ThrowsTypeLoadExceptionOnCreation(Type underlyingType, object literalValue, bool useCreateTypeInfo)
         {
             EnumBuilder enumBuilder = Helpers.DynamicEnum(TypeAttributes.Public, underlyingType);
             FieldBuilder literal = enumBuilder.DefineLiteral("LiteralName", literalValue);
-            Assert.Throws<TypeLoadException>(() => enumBuilder.CreateTypeInfo());
+            if (useCreateTypeInfo)
+            {
+                Assert.Throws<TypeLoadException>(() => enumBuilder.CreateTypeInfo());
+            }
+            else
+            {
+                Assert.Throws<TypeLoadException>(() => enumBuilder.CreateType());
+            }
         }
 
         [Fact]
@@ -212,7 +234,7 @@ namespace System.Reflection.Emit.Tests
         public void SetCustomAttribute_ConstructorInfo_ByteArray()
         {
             EnumBuilder enumBuilder = Helpers.DynamicEnum(TypeAttributes.Public, typeof(int));
-            enumBuilder.CreateTypeInfo().AsType();
+            enumBuilder.CreateType();
 
             ConstructorInfo attributeConstructor = typeof(BoolAttribute).GetConstructor(new Type[] { typeof(bool) });
             enumBuilder.SetCustomAttribute(attributeConstructor, new byte[] { 01, 00, 01 });
@@ -226,7 +248,7 @@ namespace System.Reflection.Emit.Tests
         public void SetCustomAttribute_CustomAttributeBuilder()
         {
             EnumBuilder enumBuilder = Helpers.DynamicEnum(TypeAttributes.Public, typeof(int));
-            enumBuilder.CreateTypeInfo().AsType();
+            enumBuilder.CreateType();
 
             ConstructorInfo attributeConstructor = typeof(BoolAttribute).GetConstructor(new Type[] { typeof(bool) });
             CustomAttributeBuilder attributeBuilder = new CustomAttributeBuilder(attributeConstructor, new object[] { true });

@@ -34,17 +34,19 @@ namespace System.Net
             _cookies = null!;
         }
 
-        [ObsoleteAttribute("Serialization is obsoleted for this type.  https://go.microsoft.com/fwlink/?linkid=14202")]
+        [Obsolete("Serialization has been deprecated for HttpWebResponse.")]
         protected HttpWebResponse(SerializationInfo serializationInfo, StreamingContext streamingContext) : base(serializationInfo, streamingContext)
         {
             throw new PlatformNotSupportedException();
         }
 
+        [Obsolete("Serialization has been deprecated for HttpWebResponse.")]
         void ISerializable.GetObjectData(SerializationInfo serializationInfo, StreamingContext streamingContext)
         {
             throw new PlatformNotSupportedException();
         }
 
+        [Obsolete("Serialization has been deprecated for HttpWebResponse.")]
         protected override void GetObjectData(SerializationInfo serializationInfo, StreamingContext streamingContext)
         {
             throw new PlatformNotSupportedException();
@@ -78,8 +80,7 @@ namespace System.Net
             get
             {
                 CheckDisposed();
-                long? length = _httpResponseMessage.Content?.Headers.ContentLength;
-                return length.HasValue ? length.Value : -1;
+                return _httpResponseMessage.Content?.Headers.ContentLength ?? -1;
             }
         }
 
@@ -96,20 +97,7 @@ namespace System.Net
                 {
                     // In most cases, there is only one media type value as per RFC. But for completeness, we
                     // return all values in cases of overly malformed strings.
-                    var builder = new StringBuilder();
-                    int ndx = 0;
-                    foreach (string value in values)
-                    {
-                        if (ndx > 0)
-                        {
-                            builder.Append(',');
-                        }
-
-                        builder.Append(value);
-                        ndx++;
-                    }
-
-                    return builder.ToString();
+                    return string.Join(',', values);
                 }
                 else
                 {
@@ -284,7 +272,7 @@ namespace System.Net
                     string srchString = contentType.ToLowerInvariant();
 
                     //media subtypes of text type has a default as specified by rfc 2616
-                    if (srchString.Trim().StartsWith("text/", StringComparison.Ordinal))
+                    if (srchString.AsSpan().Trim().StartsWith("text/", StringComparison.Ordinal))
                     {
                         _characterSet = "ISO-8859-1";
                     }
@@ -358,7 +346,7 @@ namespace System.Net
         {
             CheckDisposed();
             string? headerValue = Headers[headerName];
-            return (headerValue == null) ? string.Empty : headerValue;
+            return headerValue ?? string.Empty;
         }
 
         public override void Close()
@@ -378,36 +366,9 @@ namespace System.Net
 
         private void CheckDisposed()
         {
-            if (_httpResponseMessage == null)
-            {
-                throw new ObjectDisposedException(this.GetType().ToString());
-            }
+            ObjectDisposedException.ThrowIf(_httpResponseMessage == null, this);
         }
 
-        private string GetHeaderValueAsString(IEnumerable<string> values)
-        {
-            // There is always at least one value even if it is an empty string.
-            var enumerator = values.GetEnumerator();
-            bool success = enumerator.MoveNext();
-            Debug.Assert(success, "There should be at least one value");
-
-            string headerValue = enumerator.Current;
-
-            if (enumerator.MoveNext())
-            {
-                // Multi-valued header
-                var buffer = new StringBuilder(headerValue);
-
-                do
-                {
-                    buffer.Append(", ");
-                    buffer.Append(enumerator.Current);
-                } while (enumerator.MoveNext());
-
-                return buffer.ToString();
-            }
-
-            return headerValue;
-        }
+        private static string GetHeaderValueAsString(IEnumerable<string> values) => string.Join(", ", values);
     }
 }

@@ -17,7 +17,7 @@ namespace System.Globalization
         private const int MinCalendarYear = 1318;
         private const int MaxCalendarYear = 1500;
 
-        private struct DateMapping
+        private readonly struct DateMapping
         {
             internal DateMapping(int MonthsLengthFlags, int GYear, int GMonth, int GDay)
             {
@@ -25,8 +25,8 @@ namespace System.Globalization
                 GregorianDate = new DateTime(GYear, GMonth, GDay);
             }
 
-            internal int HijriMonthsLengthFlags;
-            internal DateTime GregorianDate;
+            internal readonly int HijriMonthsLengthFlags;
+            internal readonly DateTime GregorianDate;
         }
 
         private static readonly DateMapping[] s_hijriYearInfo = InitDateMapping();
@@ -330,7 +330,7 @@ namespace System.Globalization
             CheckYearRange(year, era);
             if (month < 1 || month > 12)
             {
-                throw new ArgumentOutOfRangeException(nameof(month), month, SR.ArgumentOutOfRange_Month);
+                ThrowHelper.ThrowArgumentOutOfRange_Month(month);
             }
         }
 
@@ -459,10 +459,7 @@ namespace System.Globalization
             return GetDatePart(time, DatePartDay);
         }
 
-        public override DayOfWeek GetDayOfWeek(DateTime time)
-        {
-            return (DayOfWeek)((int)(time.Ticks / TicksPerDay + 1) % 7);
-        }
+        public override DayOfWeek GetDayOfWeek(DateTime time) => time.DayOfWeek;
 
         public override int GetDayOfYear(DateTime time)
         {
@@ -628,10 +625,7 @@ namespace System.Globalization
 
         public override int ToFourDigitYear(int year)
         {
-            if (year < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(year), year, SR.ArgumentOutOfRange_NeedNonNegNum);
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(year);
 
             if (year < 100)
             {

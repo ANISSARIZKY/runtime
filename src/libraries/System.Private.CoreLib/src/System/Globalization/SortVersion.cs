@@ -1,16 +1,17 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace System.Globalization
 {
     [Serializable]
-    [System.Runtime.CompilerServices.TypeForwardedFrom("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+    [TypeForwardedFrom("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
     public sealed class SortVersion : IEquatable<SortVersion?>
     {
         private readonly int m_NlsVersion; // Do not rename (binary serialization)
-        private Guid m_SortId; // Do not rename (binary serialization)
+        private readonly Guid m_SortId; // Do not rename (binary serialization)
 
         public int FullVersion => m_NlsVersion;
 
@@ -38,12 +39,12 @@ namespace System.Globalization
             m_SortId = customVersion;
         }
 
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             return obj is SortVersion otherVersion && Equals(otherVersion);
         }
 
-        public bool Equals(SortVersion? other)
+        public bool Equals([NotNullWhen(true)] SortVersion? other)
         {
             if (other == null)
             {
@@ -58,7 +59,6 @@ namespace System.Globalization
             return m_NlsVersion * 7 | m_SortId.GetHashCode();
         }
 
-        // Force inline as the true/false ternary takes it above ALWAYS_INLINE size even though the asm ends up smaller
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(SortVersion? left, SortVersion? right)
         {
@@ -66,8 +66,7 @@ namespace System.Globalization
             // so it can become a simple test
             if (right is null)
             {
-                // return true/false not the test result https://github.com/dotnet/runtime/issues/4207
-                return (left is null) ? true : false;
+                return left is null;
             }
 
             return right.Equals(left);

@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -12,6 +13,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.Net.Sockets
 {
@@ -24,8 +26,11 @@ namespace System.Net.Sockets
 
         private SafeSocketHandle _handle;
 
-        // _rightEndPoint is null if the socket has not been bound.  Otherwise, it is any EndPoint of the
-        // correct type (IPEndPoint, etc).
+        // _rightEndPoint is null if the socket has not been bound.  Otherwise, it is an EndPoint of the
+        // correct type (IPEndPoint, etc). The Bind operation sets _rightEndPoint. Other operations must only set
+        // it when the value is still null.
+        // This enables tracking the file created by UnixDomainSocketEndPoint when the Socket is bound,
+        // and to delete that file when the Socket gets disposed.
         internal EndPoint? _rightEndPoint;
         internal EndPoint? _remoteEndPoint;
 
@@ -48,24 +53,14 @@ namespace System.Net.Sockets
         // to poll for the real state until we're done connecting.
         private bool _nonBlockingConnectInProgress;
 
-        // Keep track of the kind of endpoint used to do a non-blocking connect, so we can set
-        // it to _rightEndPoint when we discover we're connected.
-        private EndPoint? _nonBlockingConnectRightEndPoint;
+        // Keep track of the kind of endpoint used to do a connect, so we can set
+        // it to _rightEndPoint when we're connected.
+        private EndPoint? _pendingConnectRightEndPoint;
 
         // These are constants initialized by constructor.
         private AddressFamily _addressFamily;
         private SocketType _socketType;
         private ProtocolType _protocolType;
-
-        // These caches are one degree off of Socket since they're not used in the sync case/when disabled in config.
-        private CacheSet? _caches;
-
-        private class CacheSet
-        {
-            internal CallbackClosure? AcceptClosureCache;
-            internal CallbackClosure? SendClosureCache;
-            internal CallbackClosure? ReceiveClosureCache;
-        }
 
         // Bool marked true if the native socket option IP_PKTINFO or IPV6_PKTINFO has been set.
         private bool _receivingPacketInformation;
@@ -73,7 +68,6 @@ namespace System.Net.Sockets
         private int _closeTimeout = Socket.DefaultCloseTimeout;
         private int _disposed; // 0 == false, anything else == true
 
-        #region Constructors
         public Socket(SocketType socketType, ProtocolType protocolType)
             : this(OSSupportsIPv6 ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork, socketType, protocolType)
         {
@@ -136,95 +130,98 @@ namespace System.Net.Sockets
             try
             {
                 // Get properties like address family and blocking mode from the OS.
-                LoadSocketTypeFromHandle(handle, out _addressFamily, out _socketType, out _protocolType, out _willBlockInternal, out _isListening);
+                LoadSocketTypeFromHandle(handle, out _addressFamily, out _socketType, out _protocolType, out _willBlockInternal, out _isListening, out bool isSocket);
 
-                // We should change stackalloc if this ever grows too big.
-                Debug.Assert(SocketPal.MaximumAddressSize <= 512);
-                // Try to get the address of the socket.
-                Span<byte> buffer = stackalloc byte[SocketPal.MaximumAddressSize];
-                int bufferLength = buffer.Length;
-                fixed (byte* bufferPtr = buffer)
+                if (isSocket)
                 {
-                    if (SocketPal.GetSockName(handle, bufferPtr, &bufferLength) != SocketError.Success)
+                    // We should change stackalloc if this ever grows too big.
+                    Debug.Assert(SocketPal.MaximumAddressSize <= 512);
+                    // Try to get the address of the socket.
+                    Span<byte> buffer = stackalloc byte[SocketPal.MaximumAddressSize];
+                    int bufferLength = buffer.Length;
+                    fixed (byte* bufferPtr = buffer)
                     {
-                        return;
-                    }
-                }
-
-                Debug.Assert(bufferLength <= buffer.Length);
-
-                // Try to get the local end point.  That will in turn enable the remote
-                // end point to be retrieved on-demand when the property is accessed.
-                Internals.SocketAddress? socketAddress = null;
-                switch (_addressFamily)
-                {
-                    case AddressFamily.InterNetwork:
-                        _rightEndPoint = new IPEndPoint(
-                            new IPAddress((long)SocketAddressPal.GetIPv4Address(buffer.Slice(0, bufferLength)) & 0x0FFFFFFFF),
-                            SocketAddressPal.GetPort(buffer));
-                        break;
-
-                    case AddressFamily.InterNetworkV6:
-                        Span<byte> address = stackalloc byte[IPAddressParserStatics.IPv6AddressBytes];
-                        SocketAddressPal.GetIPv6Address(buffer.Slice(0, bufferLength), address, out uint scope);
-                        _rightEndPoint = new IPEndPoint(
-                            new IPAddress(address, scope),
-                            SocketAddressPal.GetPort(buffer));
-                        break;
-
-                    case AddressFamily.Unix:
-                        socketAddress = new Internals.SocketAddress(_addressFamily, buffer.Slice(0, bufferLength));
-                        _rightEndPoint = new UnixDomainSocketEndPoint(IPEndPointExtensions.GetNetSocketAddress(socketAddress));
-                        break;
-                }
-
-                // Try to determine if we're connected, based on querying for a peer, just as we would in RemoteEndPoint,
-                // but ignoring any failures; this is best-effort (RemoteEndPoint also does a catch-all around the Create call).
-                if (_rightEndPoint != null)
-                {
-                    try
-                    {
-                        // Local and remote end points may be different sizes for protocols like Unix Domain Sockets.
-                        bufferLength = buffer.Length;
-                        switch (SocketPal.GetPeerName(handle, buffer, ref bufferLength))
+                        if (SocketPal.GetSockName(handle, bufferPtr, &bufferLength) != SocketError.Success)
                         {
-                            case SocketError.Success:
-                                switch (_addressFamily)
-                                {
-                                    case AddressFamily.InterNetwork:
-                                        _remoteEndPoint = new IPEndPoint(
-                                            new IPAddress((long)SocketAddressPal.GetIPv4Address(buffer.Slice(0, bufferLength)) & 0x0FFFFFFFF),
-                                            SocketAddressPal.GetPort(buffer));
-                                        break;
-
-                                    case AddressFamily.InterNetworkV6:
-                                        Span<byte> address = stackalloc byte[IPAddressParserStatics.IPv6AddressBytes];
-                                        SocketAddressPal.GetIPv6Address(buffer.Slice(0, bufferLength), address, out uint scope);
-                                        _remoteEndPoint = new IPEndPoint(
-                                            new IPAddress(address, scope),
-                                            SocketAddressPal.GetPort(buffer));
-                                        break;
-
-                                    case AddressFamily.Unix:
-                                        socketAddress = new Internals.SocketAddress(_addressFamily, buffer.Slice(0, bufferLength));
-                                        _remoteEndPoint = new UnixDomainSocketEndPoint(IPEndPointExtensions.GetNetSocketAddress(socketAddress));
-                                        break;
-                                }
-
-                                _isConnected = true;
-                                break;
-
-                            case SocketError.InvalidArgument:
-                                // On some OSes (e.g. macOS), EINVAL means the socket has been shut down.
-                                // This can happen if, for example, socketpair was used and the parent
-                                // process closed its copy of the child's socket.  Since we don't know
-                                // whether we're actually connected or not, err on the side of saying
-                                // we're connected.
-                                _isConnected = true;
-                                break;
+                            return;
                         }
                     }
-                    catch { }
+
+                    Debug.Assert(bufferLength <= buffer.Length);
+
+                    // Try to get the local end point.  That will in turn enable the remote
+                    // end point to be retrieved on-demand when the property is accessed.
+                    Internals.SocketAddress? socketAddress = null;
+                    switch (_addressFamily)
+                    {
+                        case AddressFamily.InterNetwork:
+                            _rightEndPoint = new IPEndPoint(
+                                new IPAddress((long)SocketAddressPal.GetIPv4Address(buffer.Slice(0, bufferLength)) & 0x0FFFFFFFF),
+                                SocketAddressPal.GetPort(buffer));
+                            break;
+
+                        case AddressFamily.InterNetworkV6:
+                            Span<byte> address = stackalloc byte[IPAddressParserStatics.IPv6AddressBytes];
+                            SocketAddressPal.GetIPv6Address(buffer.Slice(0, bufferLength), address, out uint scope);
+                            _rightEndPoint = new IPEndPoint(
+                                new IPAddress(address, scope),
+                                SocketAddressPal.GetPort(buffer));
+                            break;
+
+                        case AddressFamily.Unix:
+                            socketAddress = new Internals.SocketAddress(AddressFamily.Unix, buffer.Slice(0, bufferLength));
+                            _rightEndPoint = new UnixDomainSocketEndPoint(IPEndPointExtensions.GetNetSocketAddress(socketAddress));
+                            break;
+                    }
+
+                    // Try to determine if we're connected, based on querying for a peer, just as we would in RemoteEndPoint,
+                    // but ignoring any failures; this is best-effort (RemoteEndPoint also does a catch-all around the Create call).
+                    if (_rightEndPoint != null)
+                    {
+                        try
+                        {
+                            // Local and remote end points may be different sizes for protocols like Unix Domain Sockets.
+                            bufferLength = buffer.Length;
+                            switch (SocketPal.GetPeerName(handle, buffer, ref bufferLength))
+                            {
+                                case SocketError.Success:
+                                    switch (_addressFamily)
+                                    {
+                                        case AddressFamily.InterNetwork:
+                                            _remoteEndPoint = new IPEndPoint(
+                                                new IPAddress((long)SocketAddressPal.GetIPv4Address(buffer.Slice(0, bufferLength)) & 0x0FFFFFFFF),
+                                                SocketAddressPal.GetPort(buffer));
+                                            break;
+
+                                        case AddressFamily.InterNetworkV6:
+                                            Span<byte> address = stackalloc byte[IPAddressParserStatics.IPv6AddressBytes];
+                                            SocketAddressPal.GetIPv6Address(buffer.Slice(0, bufferLength), address, out uint scope);
+                                            _remoteEndPoint = new IPEndPoint(
+                                                new IPAddress(address, scope),
+                                                SocketAddressPal.GetPort(buffer));
+                                            break;
+
+                                        case AddressFamily.Unix:
+                                            socketAddress = new Internals.SocketAddress(AddressFamily.Unix, buffer.Slice(0, bufferLength));
+                                            _remoteEndPoint = new UnixDomainSocketEndPoint(IPEndPointExtensions.GetNetSocketAddress(socketAddress));
+                                            break;
+                                    }
+
+                                    _isConnected = true;
+                                    break;
+
+                                case SocketError.InvalidArgument:
+                                    // On some OSes (e.g. macOS), EINVAL means the socket has been shut down.
+                                    // This can happen if, for example, socketpair was used and the parent
+                                    // process closed its copy of the child's socket.  Since we don't know
+                                    // whether we're actually connected or not, err on the side of saying
+                                    // we're connected.
+                                    _isConnected = true;
+                                    break;
+                            }
+                        }
+                        catch { }
+                    }
                 }
             }
             catch
@@ -235,19 +232,27 @@ namespace System.Net.Sockets
             }
         }
 
-        private static SafeSocketHandle ValidateHandle(SafeSocketHandle handle) =>
-            handle is null ? throw new ArgumentNullException(nameof(handle)) :
-            handle.IsInvalid ? throw new ArgumentException(SR.Arg_InvalidHandle, nameof(handle)) :
-            handle;
-        #endregion
+        private static SafeSocketHandle ValidateHandle(SafeSocketHandle handle)
+        {
+            ArgumentNullException.ThrowIfNull(handle);
 
-        #region Properties
+            if (handle.IsInvalid)
+            {
+                throw new ArgumentException(SR.Arg_InvalidHandle, nameof(handle));
+            }
+
+            return handle;
+        }
+
+        //
+        // Properties
+        //
 
         // The CLR allows configuration of these properties, separately from whether the OS supports IPv4/6.  We
         // do not provide these config options, so SupportsIPvX === OSSupportsIPvX.
-        [Obsolete("SupportsIPv4 is obsoleted for this type, please use OSSupportsIPv4 instead. https://go.microsoft.com/fwlink/?linkid=14202")]
+        [Obsolete("SupportsIPv4 has been deprecated. Use OSSupportsIPv4 instead.")]
         public static bool SupportsIPv4 => OSSupportsIPv4;
-        [Obsolete("SupportsIPv6 is obsoleted for this type, please use OSSupportsIPv6 instead. https://go.microsoft.com/fwlink/?linkid=14202")]
+        [Obsolete("SupportsIPv6 has been deprecated. Use OSSupportsIPv6 instead.")]
         public static bool SupportsIPv6 => OSSupportsIPv6;
 
         public static bool OSSupportsIPv4 => SocketProtocolSupportPal.OSSupportsIPv4;
@@ -286,14 +291,7 @@ namespace System.Net.Sockets
             {
                 ThrowIfDisposed();
 
-                if (_nonBlockingConnectInProgress && Poll(0, SelectMode.SelectWrite))
-                {
-                    // Update the state if we've become connected after a non-blocking connect.
-                    _isConnected = true;
-                    _rightEndPoint = _nonBlockingConnectRightEndPoint;
-                    UpdateLocalEndPointOnConnect();
-                    _nonBlockingConnectInProgress = false;
-                }
+                CheckNonBlockingConnectCompleted();
 
                 if (_rightEndPoint == null)
                 {
@@ -333,14 +331,7 @@ namespace System.Net.Sockets
 
                 if (_remoteEndPoint == null)
                 {
-                    if (_nonBlockingConnectInProgress && Poll(0, SelectMode.SelectWrite))
-                    {
-                        // Update the state if we've become connected after a non-blocking connect.
-                        _isConnected = true;
-                        _rightEndPoint = _nonBlockingConnectRightEndPoint;
-                        UpdateLocalEndPointOnConnect();
-                        _nonBlockingConnectInProgress = false;
-                    }
+                    CheckNonBlockingConnectCompleted();
 
                     if (_rightEndPoint == null || !_isConnected)
                     {
@@ -417,22 +408,17 @@ namespace System.Net.Sockets
             }
         }
 
+        // On .NET Framework, this property functions as a socket-level switch between IOCP-based and Win32 event based async IO.
+        // On that platform, setting UseOnlyOverlappedIO = true prevents assigning a completion port to the socket,
+        // allowing calls to DuplicateAndClose() even after performing asynchronous IO.
+        // .NET (Core) Windows sockets are entirely IOCP-based, and the concept of "overlapped IO"
+        // does not exist on other platforms, therefore UseOnlyOverlappedIO is a dummy, compat-only property.
+        [Obsolete("UseOnlyOverlappedIO has been deprecated and is not supported.")]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool UseOnlyOverlappedIO
         {
-            get
-            {
-                return false;
-            }
-            set
-            {
-                //
-                // This implementation does not support non-IOCP-based async I/O on Windows, and this concept is
-                // not even meaningful on other platforms.  This option is really only functionally meaningful
-                // if the user calls DuplicateAndClose.  Since we also don't support DuplicateAndClose,
-                // we can safely ignore the caller's choice here, rather than breaking compat further with something
-                // like PlatformNotSupportedException.
-                //
-            }
+            get { return false; }
+            set { }
         }
 
         // Gets the connection state of the Socket. This property will return the latest
@@ -445,14 +431,7 @@ namespace System.Net.Sockets
             {
                 if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"_isConnected:{_isConnected}");
 
-                if (_nonBlockingConnectInProgress && Poll(0, SelectMode.SelectWrite))
-                {
-                    // Update the state if we've become connected after a non-blocking connect.
-                    _isConnected = true;
-                    _rightEndPoint = _nonBlockingConnectRightEndPoint;
-                    UpdateLocalEndPointOnConnect();
-                    _nonBlockingConnectInProgress = false;
-                }
+                CheckNonBlockingConnectCompleted();
 
                 return _isConnected;
             }
@@ -517,10 +496,7 @@ namespace System.Net.Sockets
             }
             set
             {
-                if (value < 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
 
                 SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReceiveBuffer, value);
             }
@@ -535,10 +511,7 @@ namespace System.Net.Sockets
 
             set
             {
-                if (value < 0)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
 
                 SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.SendBuffer, value);
             }
@@ -552,10 +525,7 @@ namespace System.Net.Sockets
             }
             set
             {
-                if (value < -1)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfLessThan(value, -1);
                 if (value == -1)
                 {
                     value = 0;
@@ -574,10 +544,7 @@ namespace System.Net.Sockets
 
             set
             {
-                if (value < -1)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfLessThan(value, -1);
                 if (value == -1)
                 {
                     value = 0;
@@ -633,10 +600,8 @@ namespace System.Net.Sockets
             set
             {
                 // Valid values are from 0 to 255 since TTL is really just a byte value on the wire.
-                if (value < 0 || value > 255)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 255);
 
                 if (_addressFamily == AddressFamily.InterNetwork)
                 {
@@ -721,6 +686,10 @@ namespace System.Net.Sockets
         {
             get
             {
+                if (SocketType == SocketType.Stream)
+                {
+                    return false;
+                }
                 return (int)GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast)! != 0 ? true : false;
             }
             set
@@ -739,7 +708,7 @@ namespace System.Net.Sockets
             {
                 if (AddressFamily != AddressFamily.InterNetworkV6)
                 {
-                    throw new NotSupportedException(SR.net_invalidversion);
+                    return false;
                 }
                 return ((int)GetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only)! == 0);
             }
@@ -765,21 +734,17 @@ namespace System.Net.Sockets
         {
             return (family == _addressFamily) || (family == AddressFamily.InterNetwork && IsDualMode);
         }
-        #endregion
 
-        #region Public Methods
+        //
+        // Public Methods
+        //
 
         // Associates a socket with an end point.
         public void Bind(EndPoint localEP)
         {
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, localEP);
             ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (localEP == null)
-            {
-                throw new ArgumentNullException(nameof(localEP));
-            }
+            ArgumentNullException.ThrowIfNull(localEP);
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"localEP:{localEP}");
 
@@ -809,23 +774,18 @@ namespace System.Net.Sockets
                 UpdateStatusAfterSocketErrorAndThrowException(errorCode);
             }
 
-            if (_rightEndPoint == null)
-            {
-                // Save a copy of the EndPoint so we can use it for Create().
-                _rightEndPoint = endPointSnapshot;
-            }
+            // Save a copy of the EndPoint so we can use it for Create().
+            // For UnixDomainSocketEndPoint, track the file to delete on Dispose.
+            _rightEndPoint = endPointSnapshot is UnixDomainSocketEndPoint unixEndPoint ?
+                                unixEndPoint.CreateBoundEndPoint() :
+                                endPointSnapshot;
         }
 
         // Establishes a connection to a remote system.
         public void Connect(EndPoint remoteEP)
         {
             ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (remoteEP == null)
-            {
-                throw new ArgumentNullException(nameof(remoteEP));
-            }
+            ArgumentNullException.ThrowIfNull(remoteEP);
 
             if (_isDisconnected)
             {
@@ -863,12 +823,8 @@ namespace System.Net.Sockets
             ValidateForMultiConnect(isMultiEndpoint: false);
 
             Internals.SocketAddress socketAddress = Serialize(ref remoteEP);
-
-            if (!Blocking)
-            {
-                _nonBlockingConnectRightEndPoint = remoteEP;
-                _nonBlockingConnectInProgress = true;
-            }
+            _pendingConnectRightEndPoint = remoteEP;
+            _nonBlockingConnectInProgress = !Blocking;
 
             DoConnect(remoteEP, socketAddress);
         }
@@ -876,11 +832,7 @@ namespace System.Net.Sockets
         public void Connect(IPAddress address, int port)
         {
             ThrowIfDisposed();
-
-            if (address == null)
-            {
-                throw new ArgumentNullException(nameof(address));
-            }
+            ArgumentNullException.ThrowIfNull(address);
 
             if (!TcpValidationHelpers.ValidatePortNumber(port))
             {
@@ -906,11 +858,8 @@ namespace System.Net.Sockets
         public void Connect(string host, int port)
         {
             ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(host);
 
-            if (host == null)
-            {
-                throw new ArgumentNullException(nameof(host));
-            }
             if (!TcpValidationHelpers.ValidatePortNumber(port))
             {
                 throw new ArgumentOutOfRangeException(nameof(port));
@@ -938,11 +887,8 @@ namespace System.Net.Sockets
         public void Connect(IPAddress[] addresses, int port)
         {
             ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(addresses);
 
-            if (addresses == null)
-            {
-                throw new ArgumentNullException(nameof(addresses));
-            }
             if (addresses.Length == 0)
             {
                 throw new ArgumentException(SR.net_sockets_invalid_ipaddress_length, nameof(addresses));
@@ -998,10 +944,7 @@ namespace System.Net.Sockets
 
         public void Close(int timeout)
         {
-            if (timeout < -1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(timeout));
-            }
+            ArgumentOutOfRangeException.ThrowIfLessThan(timeout, -1);
 
             _closeTimeout = timeout;
 
@@ -1041,8 +984,6 @@ namespace System.Net.Sockets
         // Creates a new Sockets.Socket instance to handle an incoming connection.
         public Socket Accept()
         {
-            // Validate input parameters.
-
             ThrowIfDisposed();
 
             if (_rightEndPoint == null)
@@ -1083,11 +1024,7 @@ namespace System.Net.Sockets
             }
             catch (Exception ex)
             {
-                if (SocketsTelemetry.Log.IsEnabled())
-                {
-                    SocketsTelemetry.Log.AfterAccept(SocketError.Interrupted, ex.Message);
-                }
-
+                SocketsTelemetry.Log.AfterAccept(SocketError.Interrupted, ex.Message);
                 throw;
             }
 
@@ -1097,12 +1034,13 @@ namespace System.Net.Sockets
                 Debug.Assert(acceptedSocketHandle.IsInvalid);
                 UpdateAcceptSocketErrorForDisposed(ref errorCode);
 
-                if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterAccept(errorCode);
+                SocketsTelemetry.Log.AfterAccept(errorCode);
 
+                acceptedSocketHandle.Dispose();
                 UpdateStatusAfterSocketErrorAndThrowException(errorCode);
             }
 
-            if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterAccept(SocketError.Success);
+            SocketsTelemetry.Log.AfterAccept(SocketError.Success);
 
             Debug.Assert(!acceptedSocketHandle.IsInvalid);
 
@@ -1146,11 +1084,7 @@ namespace System.Net.Sockets
         public int Send(IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, out SocketError errorCode)
         {
             ThrowIfDisposed();
-
-            if (buffers == null)
-            {
-                throw new ArgumentNullException(nameof(buffers));
-            }
+            ArgumentNullException.ThrowIfNull(buffers);
 
             if (buffers.Count == 0)
             {
@@ -1170,7 +1104,7 @@ namespace System.Net.Sockets
                 // Update the internal state of this socket according to the error before throwing.
                 UpdateStatusAfterSocketError(errorCode);
                 if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, new SocketException((int)errorCode));
-                // Don't log transfered byte count in case of a failure.
+                // Don't log transferred byte count in case of a failure.
                 return 0;
             }
             else if (SocketsTelemetry.Log.IsEnabled())
@@ -1200,7 +1134,6 @@ namespace System.Net.Sockets
 
             ValidateBufferArguments(buffer, offset, size);
 
-            errorCode = SocketError.Success;
             ValidateBlockingMode();
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"SRC:{LocalEndPoint} DST:{RemoteEndPoint} size:{size}");
 
@@ -1269,10 +1202,57 @@ namespace System.Net.Sockets
 
         public void SendFile(string? fileName)
         {
-            SendFile(fileName, null, null, TransmitFileOptions.UseDefaultWorkerThread);
+            SendFile(fileName, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty, TransmitFileOptions.UseDefaultWorkerThread);
         }
 
+        /// <summary>
+        /// Sends the file <paramref name="fileName"/> and buffers of data to a connected <see cref="Socket"/> object
+        /// using the specified <see cref="TransmitFileOptions"/> value.
+        /// </summary>
+        /// <param name="fileName">
+        /// A <see cref="string"/> that contains the path and name of the file to be sent. This parameter can be <see langword="null"/>.
+        /// </param>
+        /// <param name="preBuffer">
+        /// A <see cref="byte"/> array that contains data to be sent before the file is sent. This parameter can be <see langword="null"/>.
+        /// </param>
+        /// <param name="postBuffer">
+        /// A <see cref="byte"/> array that contains data to be sent after the file is sent. This parameter can be <see langword="null"/>.
+        /// </param>
+        /// <param name="flags">
+        /// One or more of <see cref="TransmitFileOptions"/> values.
+        /// </param>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> object has been closed.</exception>
+        /// <exception cref="NotSupportedException">The <see cref="Socket"/> object is not connected to a remote host.</exception>
+        /// <exception cref="InvalidOperationException">The <see cref="Socket"/> object is not in blocking mode and cannot accept this synchronous call.</exception>
+        /// <exception cref="FileNotFoundException">The file <paramref name="fileName"/> was not found.</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
         public void SendFile(string? fileName, byte[]? preBuffer, byte[]? postBuffer, TransmitFileOptions flags)
+        {
+            SendFile(fileName, preBuffer.AsSpan(), postBuffer.AsSpan(), flags);
+        }
+
+        /// <summary>
+        /// Sends the file <paramref name="fileName"/> and buffers of data to a connected <see cref="Socket"/> object
+        /// using the specified <see cref="TransmitFileOptions"/> value.
+        /// </summary>
+        /// <param name="fileName">
+        /// A <see cref="string"/> that contains the path and name of the file to be sent. This parameter can be <see langword="null"/>.
+        /// </param>
+        /// <param name="preBuffer">
+        /// A <see cref="ReadOnlySpan{T}"/> that contains data to be sent before the file is sent. This buffer can be empty.
+        /// </param>
+        /// <param name="postBuffer">
+        /// A <see cref="ReadOnlySpan{T}"/> that contains data to be sent after the file is sent. This buffer can be empty.
+        /// </param>
+        /// <param name="flags">
+        /// One or more of <see cref="TransmitFileOptions"/> values.
+        /// </param>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> object has been closed.</exception>
+        /// <exception cref="NotSupportedException">The <see cref="Socket"/> object is not connected to a remote host.</exception>
+        /// <exception cref="InvalidOperationException">The <see cref="Socket"/> object is not in blocking mode and cannot accept this synchronous call.</exception>
+        /// <exception cref="FileNotFoundException">The file <paramref name="fileName"/> was not found.</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        public void SendFile(string? fileName, ReadOnlySpan<byte> preBuffer, ReadOnlySpan<byte> postBuffer, TransmitFileOptions flags)
         {
             ThrowIfDisposed();
 
@@ -1286,7 +1266,6 @@ namespace System.Net.Sockets
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"::SendFile() SRC:{LocalEndPoint} DST:{RemoteEndPoint} fileName:{fileName}");
 
             SendFileInternal(fileName, preBuffer, postBuffer, flags);
-
         }
 
         // Sends data to a specific end point, starting at the indicated location in the buffer.
@@ -1295,10 +1274,7 @@ namespace System.Net.Sockets
             ThrowIfDisposed();
 
             ValidateBufferArguments(buffer, offset, size);
-            if (remoteEP == null)
-            {
-                throw new ArgumentNullException(nameof(remoteEP));
-            }
+            ArgumentNullException.ThrowIfNull(remoteEP);
 
             ValidateBlockingMode();
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"SRC:{LocalEndPoint} size:{size} remoteEP:{remoteEP}");
@@ -1321,11 +1297,8 @@ namespace System.Net.Sockets
                 if (SocketType == SocketType.Dgram) SocketsTelemetry.Log.DatagramSent();
             }
 
-            if (_rightEndPoint == null)
-            {
-                // Save a copy of the EndPoint so we can use it for Create().
-                _rightEndPoint = remoteEP;
-            }
+            // Save a copy of the EndPoint so we can use it for Create().
+            _rightEndPoint ??= remoteEP;
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.DumpBuffer(this, buffer, offset, size);
             return bytesTransferred;
@@ -1345,6 +1318,61 @@ namespace System.Net.Sockets
         public int SendTo(byte[] buffer, EndPoint remoteEP)
         {
             return SendTo(buffer, 0, buffer != null ? buffer.Length : 0, SocketFlags.None, remoteEP);
+        }
+
+        /// <summary>
+        /// Sends data to the specified endpoint.
+        /// </summary>
+        /// <param name="buffer">A span of bytes that contains the data to be sent.</param>
+        /// <param name="remoteEP">The <see cref="EndPoint"/> that represents the destination for the data.</param>
+        /// <returns>The number of bytes sent.</returns>
+        /// <exception cref="ArgumentNullException"><c>remoteEP</c> is <see langword="null" />.</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> has been closed.</exception>
+        public int SendTo(ReadOnlySpan<byte> buffer, EndPoint remoteEP)
+        {
+            return SendTo(buffer, SocketFlags.None, remoteEP);
+        }
+
+        /// <summary>
+        /// Sends data to a specific endpoint using the specified <see cref="SocketFlags"/>.
+        /// </summary>
+        /// <param name="buffer">A span of bytes that contains the data to be sent.</param>
+        /// <param name="socketFlags">A bitwise combination of the <see cref="SocketFlags"/> values.</param>
+        /// <param name="remoteEP">The <see cref="EndPoint"/> that represents the destination for the data.</param>
+        /// <returns>The number of bytes sent.</returns>
+        /// <exception cref="ArgumentNullException"><c>remoteEP</c> is <see langword="null" />.</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> has been closed.</exception>
+        public int SendTo(ReadOnlySpan<byte> buffer, SocketFlags socketFlags, EndPoint remoteEP)
+        {
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(remoteEP);
+
+            ValidateBlockingMode();
+
+            Internals.SocketAddress socketAddress = Serialize(ref remoteEP);
+
+            int bytesTransferred;
+            SocketError errorCode = SocketPal.SendTo(_handle, buffer, socketFlags, socketAddress.Buffer, socketAddress.Size, out bytesTransferred);
+
+            // Throw an appropriate SocketException if the native call fails.
+            if (errorCode != SocketError.Success)
+            {
+                UpdateSendSocketErrorForDisposed(ref errorCode);
+
+                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+            }
+            else if (SocketsTelemetry.Log.IsEnabled())
+            {
+                SocketsTelemetry.Log.BytesSent(bytesTransferred);
+                if (SocketType == SocketType.Dgram) SocketsTelemetry.Log.DatagramSent();
+            }
+
+            // Save a copy of the EndPoint so we can use it for Create().
+            _rightEndPoint ??= remoteEP;
+
+            return bytesTransferred;
         }
 
         // Receives data from a connected socket.
@@ -1459,11 +1487,7 @@ namespace System.Net.Sockets
         public int Receive(IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, out SocketError errorCode)
         {
             ThrowIfDisposed();
-
-            if (buffers == null)
-            {
-                throw new ArgumentNullException(nameof(buffers));
-            }
+            ArgumentNullException.ThrowIfNull(buffers);
 
             if (buffers.Count == 0)
             {
@@ -1501,20 +1525,9 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
             ValidateBufferArguments(buffer, offset, size);
-            if (remoteEP == null)
-            {
-                throw new ArgumentNullException(nameof(remoteEP));
-            }
-            if (!CanTryAddressFamily(remoteEP.AddressFamily))
-            {
-                throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, remoteEP.AddressFamily, _addressFamily), nameof(remoteEP));
-            }
-            if (_rightEndPoint == null)
-            {
-                throw new InvalidOperationException(SR.net_sockets_mustbind);
-            }
+            ValidateReceiveFromEndpointAndState(remoteEP, nameof(remoteEP));
 
-            SocketPal.CheckDualModeReceiveSupport(this);
+            SocketPal.CheckDualModePacketInfoSupport(this);
             ValidateBlockingMode();
 
             // We don't do a CAS demand here because the contents of remoteEP aren't used by
@@ -1553,11 +1566,96 @@ namespace System.Net.Sockets
                 catch
                 {
                 }
-                if (_rightEndPoint == null)
+                // Save a copy of the EndPoint so we can use it for Create().
+                _rightEndPoint ??= endPointSnapshot;
+            }
+
+            if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, errorCode);
+            return bytesTransferred;
+        }
+
+        /// <summary>
+        /// Receives the specified number of bytes of data into the specified location of the data buffer,
+        /// using the specified <paramref name="socketFlags"/>, and stores the endpoint and packet information.
+        /// </summary>
+        /// <param name="buffer">
+        /// An <see cref="Span{T}"/> of type <see cref="byte"/> that is the storage location for received data.
+        /// </param>
+        /// <param name="socketFlags">
+        /// A bitwise combination of the <see cref="SocketFlags"/> values.
+        /// </param>
+        /// <param name="remoteEP">
+        /// An <see cref="EndPoint"/>, passed by reference, that represents the remote server.
+        /// </param>
+        /// <param name="ipPacketInformation">
+        /// An <see cref="IPPacketInformation"/> holding address and interface information.
+        /// </param>
+        /// <returns>
+        /// The number of bytes received.
+        /// </returns>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> object has been closed.</exception>
+        /// <exception cref="ArgumentNullException">The <see cref="EndPoint"/> remoteEP is null.</exception>
+        /// <exception cref="ArgumentException">The <see cref="AddressFamily"/> of the <see cref="EndPoint"/> used in
+        /// <see cref="Socket.ReceiveMessageFrom(Span{byte}, ref SocketFlags, ref EndPoint, out IPPacketInformation)"/>
+        /// needs to match the <see cref="AddressFamily"/> of the <see cref="EndPoint"/> used in SendTo.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// <para>The <see cref="Socket"/> object is not in blocking mode and cannot accept this synchronous call.</para>
+        /// <para>You must call the Bind method before performing this operation.</para></exception>
+        public int ReceiveMessageFrom(Span<byte> buffer, ref SocketFlags socketFlags, ref EndPoint remoteEP, out IPPacketInformation ipPacketInformation)
+        {
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(remoteEP);
+
+            if (!CanTryAddressFamily(remoteEP.AddressFamily))
+            {
+                throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, remoteEP.AddressFamily, _addressFamily), nameof(remoteEP));
+            }
+            if (_rightEndPoint == null)
+            {
+                throw new InvalidOperationException(SR.net_sockets_mustbind);
+            }
+
+            SocketPal.CheckDualModePacketInfoSupport(this);
+            ValidateBlockingMode();
+
+            // We don't do a CAS demand here because the contents of remoteEP aren't used by
+            // WSARecvMsg; all that matters is that we generate a unique-to-this-call SocketAddress
+            // with the right address family.
+            EndPoint endPointSnapshot = remoteEP;
+            Internals.SocketAddress socketAddress = Serialize(ref endPointSnapshot);
+
+            // Save a copy of the original EndPoint.
+            Internals.SocketAddress socketAddressOriginal = IPEndPointExtensions.Serialize(endPointSnapshot);
+
+            SetReceivingPacketInformation();
+
+            Internals.SocketAddress receiveAddress;
+            int bytesTransferred;
+            SocketError errorCode = SocketPal.ReceiveMessageFrom(this, _handle, buffer, ref socketFlags, socketAddress, out receiveAddress, out ipPacketInformation, out bytesTransferred);
+
+            UpdateReceiveSocketErrorForDisposed(ref errorCode, bytesTransferred);
+            // Throw an appropriate SocketException if the native call fails.
+            if (errorCode != SocketError.Success && errorCode != SocketError.MessageSize)
+            {
+                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+            }
+            else if (SocketsTelemetry.Log.IsEnabled())
+            {
+                SocketsTelemetry.Log.BytesReceived(bytesTransferred);
+                if (errorCode == SocketError.Success && SocketType == SocketType.Dgram) SocketsTelemetry.Log.DatagramReceived();
+            }
+
+            if (!socketAddressOriginal.Equals(receiveAddress))
+            {
+                try
                 {
-                    // Save a copy of the EndPoint so we can use it for Create().
-                    _rightEndPoint = endPointSnapshot;
+                    remoteEP = endPointSnapshot.Create(receiveAddress);
                 }
+                catch
+                {
+                }
+                // Save a copy of the EndPoint so we can use it for Create().
+                _rightEndPoint ??= endPointSnapshot;
             }
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, errorCode);
@@ -1570,21 +1668,7 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
             ValidateBufferArguments(buffer, offset, size);
-            if (remoteEP == null)
-            {
-                throw new ArgumentNullException(nameof(remoteEP));
-            }
-            if (!CanTryAddressFamily(remoteEP.AddressFamily))
-            {
-                throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily,
-                    remoteEP.AddressFamily, _addressFamily), nameof(remoteEP));
-            }
-            if (_rightEndPoint == null)
-            {
-                throw new InvalidOperationException(SR.net_sockets_mustbind);
-            }
-
-            SocketPal.CheckDualModeReceiveSupport(this);
+            ValidateReceiveFromEndpointAndState(remoteEP, nameof(remoteEP));
 
             ValidateBlockingMode();
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"SRC{LocalEndPoint} size:{size} remoteEP:{remoteEP}");
@@ -1623,16 +1707,21 @@ namespace System.Net.Sockets
             {
                 try
                 {
-                    remoteEP = endPointSnapshot.Create(socketAddress);
+                    if (endPointSnapshot.AddressFamily == socketAddress.Family)
+                    {
+                        remoteEP = _remoteEndPoint != null ? _remoteEndPoint.Create(socketAddress) : socketAddress.GetIPEndPoint();
+                    }
+                    else if (endPointSnapshot.AddressFamily == AddressFamily.InterNetworkV6 && socketAddress.Family == AddressFamily.InterNetwork)
+                    {
+                        // We expect IPv6 on DualMode sockets but we can also get plain old IPv4
+                        remoteEP = new IPEndPoint(socketAddress.GetIPAddress().MapToIPv6(), socketAddress.GetPort());
+                    }
                 }
                 catch
                 {
                 }
-                if (_rightEndPoint == null)
-                {
-                    // Save a copy of the EndPoint so we can use it for Create().
-                    _rightEndPoint = endPointSnapshot;
-                }
+                // Save a copy of the EndPoint so we can use it for Create().
+                _rightEndPoint ??= endPointSnapshot;
             }
 
             if (socketException != null)
@@ -1660,11 +1749,102 @@ namespace System.Net.Sockets
             return ReceiveFrom(buffer, 0, buffer != null ? buffer.Length : 0, SocketFlags.None, ref remoteEP);
         }
 
+        /// <summary>
+        /// Receives a datagram into the data buffer and stores the endpoint.
+        /// </summary>
+        /// <param name="buffer">A span of bytes that is the storage location for received data.</param>
+        /// <param name="remoteEP">An <see cref="EndPoint"/>, passed by reference, that represents the remote server.</param>
+        /// <returns>The number of bytes received.</returns>
+        /// <exception cref="ArgumentNullException"><c>remoteEP</c> is <see langword="null" />.</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> has been closed.</exception>
+        public int ReceiveFrom(Span<byte> buffer, ref EndPoint remoteEP)
+        {
+            return ReceiveFrom(buffer, SocketFlags.None, ref remoteEP);
+        }
+
+        /// <summary>
+        /// Receives a datagram into the data buffer, using the specified <see cref="SocketFlags"/>, and stores the endpoint.
+        /// </summary>
+        /// <param name="buffer">A span of bytes that is the storage location for received data.</param>
+        /// <param name="socketFlags">A bitwise combination of the <see cref="SocketFlags"/> values.</param>
+        /// <param name="remoteEP">An <see cref="EndPoint"/>, passed by reference, that represents the remote server.</param>
+        /// <returns>The number of bytes received.</returns>
+        /// <exception cref="ArgumentNullException"><c>remoteEP</c> is <see langword="null" />.</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> has been closed.</exception>
+        public int ReceiveFrom(Span<byte> buffer, SocketFlags socketFlags, ref EndPoint remoteEP)
+        {
+            ThrowIfDisposed();
+            ValidateReceiveFromEndpointAndState(remoteEP, nameof(remoteEP));
+
+            ValidateBlockingMode();
+
+            // We don't do a CAS demand here because the contents of remoteEP aren't used by
+            // WSARecvFrom; all that matters is that we generate a unique-to-this-call SocketAddress
+            // with the right address family.
+            EndPoint endPointSnapshot = remoteEP;
+            Internals.SocketAddress socketAddress = Serialize(ref endPointSnapshot);
+            Internals.SocketAddress socketAddressOriginal = IPEndPointExtensions.Serialize(endPointSnapshot);
+
+            int bytesTransferred;
+            SocketError errorCode = SocketPal.ReceiveFrom(_handle, buffer, socketFlags, socketAddress.Buffer, ref socketAddress.InternalSize, out bytesTransferred);
+
+            UpdateReceiveSocketErrorForDisposed(ref errorCode, bytesTransferred);
+            // If the native call fails we'll throw a SocketException.
+            SocketException? socketException = null;
+            if (errorCode != SocketError.Success)
+            {
+                socketException = new SocketException((int)errorCode);
+                UpdateStatusAfterSocketError(socketException);
+                if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, socketException);
+
+                if (socketException.SocketErrorCode != SocketError.MessageSize)
+                {
+                    throw socketException;
+                }
+            }
+            else if (SocketsTelemetry.Log.IsEnabled())
+            {
+                SocketsTelemetry.Log.BytesReceived(bytesTransferred);
+                if (SocketType == SocketType.Dgram) SocketsTelemetry.Log.DatagramReceived();
+            }
+
+            if (!socketAddressOriginal.Equals(socketAddress))
+            {
+                try
+                {
+                    if (endPointSnapshot.AddressFamily == socketAddress.Family)
+                    {
+                        remoteEP = _remoteEndPoint != null ? _remoteEndPoint.Create(socketAddress) : socketAddress.GetIPEndPoint();
+                    }
+                    else if (endPointSnapshot.AddressFamily == AddressFamily.InterNetworkV6 && socketAddress.Family == AddressFamily.InterNetwork)
+                    {
+                        // We expect IPv6 on DalMode sockets but we can also get plain old IPv4
+                        remoteEP = new IPEndPoint(socketAddress.GetIPAddress().MapToIPv6(), socketAddress.GetPort());
+                    }
+                }
+                catch
+                {
+                }
+
+                // Save a copy of the EndPoint so we can use it for Create().
+                _rightEndPoint ??= endPointSnapshot;
+            }
+
+            if (socketException != null)
+            {
+                throw socketException;
+            }
+
+            return bytesTransferred;
+        }
+
         public int IOControl(int ioControlCode, byte[]? optionInValue, byte[]? optionOutValue)
         {
             ThrowIfDisposed();
 
-            int realOptionLength = 0;
+            int realOptionLength;
 
             // IOControl is used for Windows-specific IOCTL operations.  If we need to add support for IOCTLs specific
             // to other platforms, we will likely need to add a new API, as the control codes may overlap with those
@@ -1711,7 +1891,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
         }
 
@@ -1725,12 +1905,7 @@ namespace System.Net.Sockets
         public void SetSocketOption(SocketOptionLevel optionLevel, SocketOptionName optionName, object optionValue)
         {
             ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (optionValue == null)
-            {
-                throw new ArgumentNullException(nameof(optionValue));
-            }
+            ArgumentNullException.ThrowIfNull(optionValue);
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"optionLevel:{optionLevel} optionName:{optionName} optionValue:{optionValue}");
 
@@ -1793,7 +1968,7 @@ namespace System.Net.Sockets
 
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
         }
 
@@ -1815,7 +1990,7 @@ namespace System.Net.Sockets
                 return GetIPv6MulticastOpt(optionName);
             }
 
-            int optionValue = 0;
+            int optionValue;
 
             // This can throw ObjectDisposedException.
             SocketError errorCode = SocketPal.GetSockOpt(
@@ -1829,7 +2004,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
 
             return optionValue;
@@ -1854,7 +2029,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
         }
 
@@ -1878,7 +2053,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
 
             if (optionLength != realOptionLength)
@@ -1914,7 +2089,7 @@ namespace System.Net.Sockets
 
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
 
             return realOptionLength;
@@ -1942,7 +2117,21 @@ namespace System.Net.Sockets
             }
         }
 
-        // Determines the status of the socket.
+        /// <summary>Determines the status of the <see cref="Socket"/>.</summary>
+        /// <param name="microSeconds">The time to wait for a response, in microseconds.</param>
+        /// <param name="mode">One of the <see cref="SelectMode"/> values.</param>
+        /// <returns>
+        /// The status of the <see cref="Socket"/> based on the polling mode value passed in the <paramref name="mode"/> parameter.
+        /// For <see cref="SelectMode.SelectRead"/>, it returns <see langword="true"/> if <see cref="M:Listen"/> has been called and
+        /// a connection is pending, if data is available for reading, or if the connection has been closed, reset, or terminated.
+        /// For <see cref="SelectMode.SelectWrite"/>, it returns <see langword="true"/> if processing a <see cref="M:Connect"/> and
+        /// the connection has succeeded or if data can be sent.
+        /// For <see cref="SelectMode.SelectError"/>, it returns <see langword="true"/> if processing a <see cref="M:Connect"/> that
+        /// does not block and the connection has failed, or if OutOfBandInline is not set and out-of-band data is available.
+        /// Otherwise, it returns <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> has been closed.</exception>
         public bool Poll(int microSeconds, SelectMode mode)
         {
             ThrowIfDisposed();
@@ -1960,11 +2149,39 @@ namespace System.Net.Sockets
             return status;
         }
 
-        // Determines the status of a socket.
+        /// <summary>Determines the status of the <see cref="Socket"/>.</summary>
+        /// <param name="timeout">The time to wait for a response. <see cref="Timeout.InfiniteTimeSpan"/> indicates an infinite timeout.</param>
+        /// <param name="mode">One of the <see cref="SelectMode"/> values.</param>
+        /// <returns>
+        /// The status of the <see cref="Socket"/> based on the polling mode value passed in the <paramref name="mode"/> parameter.
+        /// For <see cref="SelectMode.SelectRead"/>, it returns <see langword="true"/> if <see cref="M:Listen"/> has been called and
+        /// a connection is pending, if data is available for reading, or if the connection has been closed, reset, or terminated.
+        /// For <see cref="SelectMode.SelectWrite"/>, it returns <see langword="true"/> if processing a <see cref="M:Connect"/> and
+        /// the connection has succeeded or if data can be sent.
+        /// For <see cref="SelectMode.SelectError"/>, it returns <see langword="true"/> if processing a <see cref="M:Connect"/> that
+        /// does not block and the connection has failed, or if OutOfBandInline is not set and out-of-band data is available.
+        /// Otherwise, it returns <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="timeout"/> was negative or greater than TimeSpan.FromMicroseconds(int.MaxValue).</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">The <see cref="Socket"/> has been closed.</exception>
+        public bool Poll(TimeSpan timeout, SelectMode mode) =>
+            Poll(ToTimeoutMicroseconds(timeout), mode);
+
+        /// <summary>Determines the status of one or more sockets.</summary>
+        /// <param name="checkRead">An <see cref="IList"/> of <see cref="Socket"/> instances to check for readability.</param>
+        /// <param name="checkWrite">An <see cref="IList"/> of <see cref="Socket"/> instances to check for writability.</param>
+        /// <param name="checkError">An <see cref="IList"/> of <see cref="Socket"/> instances to check for errors.</param>
+        /// <param name="microSeconds">The timeout value, in microseconds. A -1 value indicates an infinite timeout.</param>
+        /// <exception cref="ArgumentNullException">The <paramref name="checkRead"/>, <paramref name="checkWrite"/>, or <paramref name="checkError"/> parameter is <see langword="null"/> or empty.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The <paramref name="checkRead"/>, <paramref name="checkWrite"/>, or <paramref name="checkError"/> parameter contains too many sockets.</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">One or more sockets was disposed.</exception>
         public static void Select(IList? checkRead, IList? checkWrite, IList? checkError, int microSeconds)
         {
-            // Validate input parameters.
-            if ((checkRead == null || checkRead.Count == 0) && (checkWrite == null || checkWrite.Count == 0) && (checkError == null || checkError.Count == 0))
+            if ((checkRead == null || checkRead.Count == 0) &&
+                (checkWrite == null || checkWrite.Count == 0) &&
+                (checkError == null || checkError.Count == 0))
             {
                 throw new ArgumentNullException(null, SR.net_sockets_empty_select);
             }
@@ -1991,61 +2208,55 @@ namespace System.Net.Sockets
             }
         }
 
+        /// <summary>Determines the status of one or more sockets.</summary>
+        /// <param name="checkRead">An <see cref="IList"/> of <see cref="Socket"/> instances to check for readability.</param>
+        /// <param name="checkWrite">An <see cref="IList"/> of <see cref="Socket"/> instances to check for writability.</param>
+        /// <param name="checkError">An <see cref="IList"/> of <see cref="Socket"/> instances to check for errors.</param>
+        /// <param name="timeout">The timeout value. A value equal to <see cref="Timeout.InfiniteTimeSpan"/> indicates an infinite timeout.</param>
+        /// <exception cref="ArgumentNullException">The <paramref name="checkRead"/>, <paramref name="checkWrite"/>, or <paramref name="checkError"/> parameter is <see langword="null"/> or empty.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The <paramref name="checkRead"/>, <paramref name="checkWrite"/>, or <paramref name="checkError"/> parameter contains too many sockets.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The <paramref name="timeout"/> was negative or greater than TimeSpan.FromMicroseconds(int.MaxValue).</exception>
+        /// <exception cref="SocketException">An error occurred when attempting to access the socket.</exception>
+        /// <exception cref="ObjectDisposedException">One or more sockets was disposed.</exception>
+        public static void Select(IList? checkRead, IList? checkWrite, IList? checkError, TimeSpan timeout) =>
+            Select(checkRead, checkWrite, checkError, ToTimeoutMicroseconds(timeout));
+
+        private static int ToTimeoutMicroseconds(TimeSpan timeout)
+        {
+            if (timeout == Timeout.InfiniteTimeSpan)
+            {
+                return -1;
+            }
+
+            ArgumentOutOfRangeException.ThrowIfLessThan(timeout, TimeSpan.Zero);
+            long totalMicroseconds = (long)timeout.TotalMicroseconds;
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(totalMicroseconds, int.MaxValue, nameof(timeout));
+
+            return (int)totalMicroseconds;
+        }
+
         public IAsyncResult BeginConnect(EndPoint remoteEP, AsyncCallback? callback, object? state) =>
-            TaskToApm.Begin(ConnectAsync(remoteEP), callback, state);
+            TaskToAsyncResult.Begin(ConnectAsync(remoteEP), callback, state);
 
         public IAsyncResult BeginConnect(string host, int port, AsyncCallback? requestCallback, object? state) =>
-            TaskToApm.Begin(ConnectAsync(host, port), requestCallback, state);
+            TaskToAsyncResult.Begin(ConnectAsync(host, port), requestCallback, state);
 
         public IAsyncResult BeginConnect(IPAddress address, int port, AsyncCallback? requestCallback, object? state) =>
-            TaskToApm.Begin(ConnectAsync(address, port), requestCallback, state);
+            TaskToAsyncResult.Begin(ConnectAsync(address, port), requestCallback, state);
 
         public IAsyncResult BeginConnect(IPAddress[] addresses, int port, AsyncCallback? requestCallback, object? state) =>
-            TaskToApm.Begin(ConnectAsync(addresses, port), requestCallback, state);
+            TaskToAsyncResult.Begin(ConnectAsync(addresses, port), requestCallback, state);
 
-        public IAsyncResult BeginDisconnect(bool reuseSocket, AsyncCallback? callback, object? state)
-        {
-            ThrowIfDisposed();
+        public void EndConnect(IAsyncResult asyncResult) => TaskToAsyncResult.End(asyncResult);
 
-            // Start context-flowing op.  No need to lock - we don't use the context till the callback.
-            DisconnectOverlappedAsyncResult asyncResult = new DisconnectOverlappedAsyncResult(this, state, callback);
-            asyncResult.StartPostingAsyncOp(false);
-
-            // Post the disconnect.
-            DoBeginDisconnect(reuseSocket, asyncResult);
-
-            // Finish flowing (or call the callback), and return.
-            asyncResult.FinishPostingAsyncOp();
-            return asyncResult;
-        }
-
-        private void DoBeginDisconnect(bool reuseSocket, DisconnectOverlappedAsyncResult asyncResult)
-        {
-            SocketError errorCode = SocketError.Success;
-
-            errorCode = SocketPal.DisconnectAsync(this, _handle, reuseSocket, asyncResult);
-
-            if (errorCode == SocketError.Success)
-            {
-                SetToDisconnected();
-                _remoteEndPoint = null;
-                _localEndPoint = null;
-            }
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"UnsafeNclNativeMethods.OSSOCK.DisConnectEx returns:{errorCode}");
-
-            // If the call failed, update our status and throw
-            if (!CheckErrorAndUpdateStatus(errorCode))
-            {
-                throw new SocketException((int)errorCode);
-            }
-        }
+        public IAsyncResult BeginDisconnect(bool reuseSocket, AsyncCallback? callback, object? state) =>
+            TaskToAsyncResult.Begin(DisconnectAsync(reuseSocket).AsTask(), callback, state);
 
         public void Disconnect(bool reuseSocket)
         {
             ThrowIfDisposed();
 
-            SocketError errorCode = SocketError.Success;
+            SocketError errorCode;
 
             // This can throw ObjectDisposedException (handle, and retrieving the delegate).
             errorCode = SocketPal.Disconnect(this, _handle, reuseSocket);
@@ -2062,54 +2273,14 @@ namespace System.Net.Sockets
             _localEndPoint = null;
         }
 
-        public void EndConnect(IAsyncResult asyncResult)
-        {
-            ThrowIfDisposed();
-            TaskToApm.End(asyncResult);
-        }
-
-        public void EndDisconnect(IAsyncResult asyncResult)
-        {
-            ThrowIfDisposed();
-
-            if (asyncResult == null)
-            {
-                throw new ArgumentNullException(nameof(asyncResult));
-            }
-
-            //get async result and check for errors
-            LazyAsyncResult? castedAsyncResult = asyncResult as LazyAsyncResult;
-            if (castedAsyncResult == null || castedAsyncResult.AsyncObject != this)
-            {
-                throw new ArgumentException(SR.net_io_invalidasyncresult, nameof(asyncResult));
-            }
-            if (castedAsyncResult.EndCalled)
-            {
-                throw new InvalidOperationException(SR.Format(SR.net_io_invalidendcall, nameof(EndDisconnect)));
-            }
-
-            //wait for completion if it hasn't occurred
-            castedAsyncResult.InternalWaitForCompletion();
-            castedAsyncResult.EndCalled = true;
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this);
-
-            //
-            // if the asynchronous native call failed asynchronously
-            // we'll throw a SocketException
-            //
-            if ((SocketError)castedAsyncResult.ErrorCode != SocketError.Success)
-            {
-                UpdateStatusAfterSocketErrorAndThrowException((SocketError)castedAsyncResult.ErrorCode);
-            }
-        }
+        public void EndDisconnect(IAsyncResult asyncResult) => TaskToAsyncResult.End(asyncResult);
 
         public IAsyncResult BeginSend(byte[] buffer, int offset, int size, SocketFlags socketFlags, AsyncCallback? callback, object? state)
         {
             ThrowIfDisposed();
             ValidateBufferArguments(buffer, offset, size);
 
-            return TaskToApm.Begin(SendAsync(new ReadOnlyMemory<byte>(buffer, offset, size), socketFlags, default).AsTask(), callback, state);
+            return TaskToAsyncResult.Begin(SendAsync(new ReadOnlyMemory<byte>(buffer, offset, size), socketFlags, default).AsTask(), callback, state);
         }
 
         public IAsyncResult? BeginSend(byte[] buffer, int offset, int size, SocketFlags socketFlags, out SocketError errorCode, AsyncCallback? callback, object? state)
@@ -2125,14 +2296,14 @@ namespace System.Net.Sockets
             }
 
             errorCode = SocketError.Success;
-            return TaskToApm.Begin(t, callback, state);
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
         public IAsyncResult BeginSend(IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, AsyncCallback? callback, object? state)
         {
             ThrowIfDisposed();
 
-            return TaskToApm.Begin(SendAsync(buffers, socketFlags), callback, state);
+            return TaskToAsyncResult.Begin(SendAsync(buffers, socketFlags), callback, state);
         }
 
         public IAsyncResult? BeginSend(IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, out SocketError errorCode, AsyncCallback? callback, object? state)
@@ -2147,15 +2318,10 @@ namespace System.Net.Sockets
             }
 
             errorCode = SocketError.Success;
-            return TaskToApm.Begin(t, callback, state);
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
-        public int EndSend(IAsyncResult asyncResult)
-        {
-            ThrowIfDisposed();
-
-            return TaskToApm.End<int>(asyncResult);
-        }
+        public int EndSend(IAsyncResult asyncResult) => TaskToAsyncResult.End<int>(asyncResult);
 
         public int EndSend(IAsyncResult asyncResult, out SocketError errorCode) =>
             EndSendReceive(asyncResult, out errorCode);
@@ -2176,164 +2342,28 @@ namespace System.Net.Sockets
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"::DoBeginSendFile() SRC:{LocalEndPoint} DST:{RemoteEndPoint} fileName:{fileName}");
 
-            return BeginSendFileInternal(fileName, preBuffer, postBuffer, flags, callback, state);
+            return TaskToAsyncResult.Begin(SendFileAsync(fileName, preBuffer, postBuffer, flags).AsTask(), callback, state);
         }
 
-        public void EndSendFile(IAsyncResult asyncResult)
-        {
-            ThrowIfDisposed();
+        public void EndSendFile(IAsyncResult asyncResult) => TaskToAsyncResult.End(asyncResult);
 
-            if (asyncResult == null)
-            {
-                throw new ArgumentNullException(nameof(asyncResult));
-            }
-
-            EndSendFileInternal(asyncResult);
-        }
-
-        // Routine Description:
-        //
-        //    BeginSendTo - Async implementation of SendTo,
-        //
-        //    This routine may go pending at which time,
-        //    but any case the callback Delegate will be called upon completion
-        //
-        // Arguments:
-        //
-        //    WriteBuffer - Buffer to transmit
-        //    Index - Offset into WriteBuffer to begin sending from
-        //    Size - Size of Buffer to transmit
-        //    Flags - Specific Socket flags to pass to winsock
-        //    remoteEP - EndPoint to transmit To
-        //    Callback - Delegate function that holds callback, called on completion of I/O
-        //    State - State used to track callback, set by caller, not required
-        //
-        // Return Value:
-        //
-        //    IAsyncResult - Async result used to retrieve result
         public IAsyncResult BeginSendTo(byte[] buffer, int offset, int size, SocketFlags socketFlags, EndPoint remoteEP, AsyncCallback? callback, object? state)
         {
             ThrowIfDisposed();
             ValidateBufferArguments(buffer, offset, size);
-            if (remoteEP == null)
-            {
-                throw new ArgumentNullException(nameof(remoteEP));
-            }
+            ArgumentNullException.ThrowIfNull(remoteEP);
 
-            Internals.SocketAddress socketAddress = Serialize(ref remoteEP);
-
-            // Set up the async result and indicate to flow the context.
-            OverlappedAsyncResult asyncResult = new OverlappedAsyncResult(this, state, callback);
-            asyncResult.StartPostingAsyncOp(false);
-
-            // Post the send.
-            DoBeginSendTo(buffer, offset, size, socketFlags, remoteEP, socketAddress, asyncResult);
-
-            // Finish, possibly posting the callback.  The callback won't be posted before this point is reached.
-            asyncResult.FinishPostingAsyncOp(ref Caches.SendClosureCache);
-
-            return asyncResult;
+            Task<int> t = SendToAsync(buffer.AsMemory(offset, size), socketFlags, remoteEP).AsTask();
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
-        private void DoBeginSendTo(byte[] buffer, int offset, int size, SocketFlags socketFlags, EndPoint endPointSnapshot, Internals.SocketAddress socketAddress, OverlappedAsyncResult asyncResult)
-        {
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"size:{size}");
-
-            EndPoint? oldEndPoint = _rightEndPoint;
-
-            // Guarantee to call CheckAsyncCallOverlappedResult if we call SetUnamangedStructures with a cache in order to
-            // avoid a Socket leak in case of error.
-            SocketError errorCode = SocketError.SocketError;
-            try
-            {
-                if (_rightEndPoint == null)
-                {
-                    _rightEndPoint = endPointSnapshot;
-                }
-
-                errorCode = SocketPal.SendToAsync(_handle, buffer, offset, size, socketFlags, socketAddress, asyncResult);
-
-                if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"SendToAsync returns:{errorCode} size:{size} returning AsyncResult:{asyncResult}");
-            }
-            catch (ObjectDisposedException)
-            {
-                _rightEndPoint = oldEndPoint;
-                _localEndPoint = null;
-                throw;
-            }
-
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            if (!CheckErrorAndUpdateStatus(errorCode))
-            {
-                UpdateSendSocketErrorForDisposed(ref errorCode);
-                // Update the internal state of this socket according to the error before throwing.
-                _rightEndPoint = oldEndPoint;
-                _localEndPoint = null;
-
-                throw new SocketException((int)errorCode);
-            }
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"size:{size} returning AsyncResult:{asyncResult}");
-        }
-
-        // Routine Description:
-        //
-        //    EndSendTo -  Called by user code after I/O is done or the user wants to wait.
-        //                 until Async completion, needed to retrieve error result from call
-        //
-        // Arguments:
-        //
-        //    AsyncResult - the AsyncResult Returned from BeginSend call
-        //
-        // Return Value:
-        //
-        //    int - Number of bytes transferred
-        public int EndSendTo(IAsyncResult asyncResult)
-        {
-            ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (asyncResult == null)
-            {
-                throw new ArgumentNullException(nameof(asyncResult));
-            }
-
-            OverlappedAsyncResult? castedAsyncResult = asyncResult as OverlappedAsyncResult;
-            if (castedAsyncResult == null || castedAsyncResult.AsyncObject != this)
-            {
-                throw new ArgumentException(SR.net_io_invalidasyncresult, nameof(asyncResult));
-            }
-            if (castedAsyncResult.EndCalled)
-            {
-                throw new InvalidOperationException(SR.Format(SR.net_io_invalidendcall, "EndSendTo"));
-            }
-
-            int bytesTransferred = castedAsyncResult.InternalWaitForCompletionInt32Result();
-            castedAsyncResult.EndCalled = true;
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"bytesTransferred:{bytesTransferred}");
-
-            // Throw an appropriate SocketException if the native call failed asynchronously.
-            SocketError errorCode = (SocketError)castedAsyncResult.ErrorCode;
-            if (errorCode != SocketError.Success)
-            {
-                UpdateSendSocketErrorForDisposed(ref errorCode);
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
-            }
-            else if (SocketsTelemetry.Log.IsEnabled())
-            {
-                SocketsTelemetry.Log.BytesSent(bytesTransferred);
-                if (SocketType == SocketType.Dgram) SocketsTelemetry.Log.DatagramSent();
-            }
-
-            return bytesTransferred;
-        }
+        public int EndSendTo(IAsyncResult asyncResult) => TaskToAsyncResult.End<int>(asyncResult);
 
         public IAsyncResult BeginReceive(byte[] buffer, int offset, int size, SocketFlags socketFlags, AsyncCallback? callback, object? state)
         {
             ThrowIfDisposed();
             ValidateBufferArguments(buffer, offset, size);
-            return TaskToApm.Begin(ReceiveAsync(new ArraySegment<byte>(buffer, offset, size), socketFlags, fromNetworkStream: false, default).AsTask(), callback, state);
+            return TaskToAsyncResult.Begin(ReceiveAsync(new ArraySegment<byte>(buffer, offset, size), socketFlags, fromNetworkStream: false, default).AsTask(), callback, state);
         }
 
         public IAsyncResult? BeginReceive(byte[] buffer, int offset, int size, SocketFlags socketFlags, out SocketError errorCode, AsyncCallback? callback, object? state)
@@ -2349,13 +2379,13 @@ namespace System.Net.Sockets
             }
 
             errorCode = SocketError.Success;
-            return TaskToApm.Begin(t, callback, state);
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
         public IAsyncResult BeginReceive(IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, AsyncCallback? callback, object? state)
         {
             ThrowIfDisposed();
-            return TaskToApm.Begin(ReceiveAsync(buffers, socketFlags), callback, state);
+            return TaskToAsyncResult.Begin(ReceiveAsync(buffers, socketFlags), callback, state);
         }
 
         public IAsyncResult? BeginReceive(IList<ArraySegment<byte>> buffers, SocketFlags socketFlags, out SocketError errorCode, AsyncCallback? callback, object? state)
@@ -2370,26 +2400,17 @@ namespace System.Net.Sockets
             }
 
             errorCode = SocketError.Success;
-            return TaskToApm.Begin(t, callback, state);
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
-        public int EndReceive(IAsyncResult asyncResult)
-        {
-            ThrowIfDisposed();
-            return TaskToApm.End<int>(asyncResult);
-        }
+        public int EndReceive(IAsyncResult asyncResult) => TaskToAsyncResult.End<int>(asyncResult);
 
         public int EndReceive(IAsyncResult asyncResult, out SocketError errorCode) =>
             EndSendReceive(asyncResult, out errorCode);
 
-        private int EndSendReceive(IAsyncResult asyncResult, out SocketError errorCode)
+        private static int EndSendReceive(IAsyncResult asyncResult, out SocketError errorCode)
         {
-            ThrowIfDisposed();
-
-            if (TaskToApm.GetTask(asyncResult) is not Task<int> ti)
-            {
-                throw new ArgumentException(null, nameof(asyncResult));
-            }
+            Task<int> ti = TaskToAsyncResult.Unwrap<int>(asyncResult);
 
             if (!ti.IsCompleted)
             {
@@ -2413,520 +2434,130 @@ namespace System.Net.Sockets
 
             ThrowIfDisposed();
             ValidateBufferArguments(buffer, offset, size);
-            if (remoteEP == null)
+            ValidateReceiveFromEndpointAndState(remoteEP, nameof(remoteEP));
+
+            Task<SocketReceiveMessageFromResult> t = ReceiveMessageFromAsync(buffer.AsMemory(offset, size), socketFlags, remoteEP).AsTask();
+            // In case of synchronous completion, ReceiveMessageFromAsync() returns a completed task.
+            // When this happens, we need to update 'remoteEP' in order to conform to the historical behavior of BeginReceiveMessageFrom().
+            if (t.IsCompletedSuccessfully)
             {
-                throw new ArgumentNullException(nameof(remoteEP));
+                EndPoint resultEp = t.Result.RemoteEndPoint;
+                if (!remoteEP.Equals(resultEp)) remoteEP = resultEp;
             }
-            if (!CanTryAddressFamily(remoteEP.AddressFamily))
-            {
-                throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, remoteEP.AddressFamily, _addressFamily), nameof(remoteEP));
-            }
-            if (_rightEndPoint == null)
-            {
-                throw new InvalidOperationException(SR.net_sockets_mustbind);
-            }
-
-            SocketPal.CheckDualModeReceiveSupport(this);
-
-            // Set up the result and set it to collect the context.
-            ReceiveMessageOverlappedAsyncResult asyncResult = new ReceiveMessageOverlappedAsyncResult(this, state, callback);
-            asyncResult.StartPostingAsyncOp(false);
-
-            // Start the ReceiveFrom.
-            EndPoint oldEndPoint = _rightEndPoint;
-
-            // We don't do a CAS demand here because the contents of remoteEP aren't used by
-            // WSARecvMsg; all that matters is that we generate a unique-to-this-call SocketAddress
-            // with the right address family
-            Internals.SocketAddress socketAddress = Serialize(ref remoteEP);
-
-            // Guarantee to call CheckAsyncCallOverlappedResult if we call SetUnamangedStructures with a cache in order to
-            // avoid a Socket leak in case of error.
-            SocketError errorCode = SocketError.SocketError;
-            try
-            {
-                // Save a copy of the original EndPoint in the asyncResult.
-                asyncResult.SocketAddressOriginal = IPEndPointExtensions.Serialize(remoteEP);
-
-                SetReceivingPacketInformation();
-
-                if (_rightEndPoint == null)
-                {
-                    _rightEndPoint = remoteEP;
-                }
-
-                errorCode = SocketPal.ReceiveMessageFromAsync(this, _handle, buffer, offset, size, socketFlags, socketAddress, asyncResult);
-
-                if (errorCode != SocketError.Success)
-                {
-                    // WSARecvMsg() will never return WSAEMSGSIZE directly, since a completion is queued in this case.  We wouldn't be able
-                    // to handle this easily because of assumptions OverlappedAsyncResult makes about whether there would be a completion
-                    // or not depending on the error code.  If WSAEMSGSIZE would have been normally returned, it returns WSA_IO_PENDING instead.
-                    // That same map is implemented here just in case.
-                    if (errorCode == SocketError.MessageSize)
-                    {
-                        Debug.Fail("Returned WSAEMSGSIZE!");
-                        errorCode = SocketError.IOPending;
-                    }
-                }
-
-                if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"ReceiveMessageFromAsync returns:{errorCode} size:{size} returning AsyncResult:{asyncResult}");
-            }
-            catch (ObjectDisposedException)
-            {
-                _rightEndPoint = oldEndPoint;
-                _localEndPoint = null;
-                throw;
-            }
-
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            UpdateReceiveSocketErrorForDisposed(ref errorCode, bytesTransferred: 0);
-            if (!CheckErrorAndUpdateStatus(errorCode))
-            {
-                // Update the internal state of this socket according to the error before throwing.
-                _rightEndPoint = oldEndPoint;
-                _localEndPoint = null;
-
-                throw new SocketException((int)errorCode);
-            }
-
-            // Capture the context, maybe call the callback, and return.
-            asyncResult.FinishPostingAsyncOp(ref Caches.ReceiveClosureCache);
-
-            if (asyncResult.CompletedSynchronously && !asyncResult.SocketAddressOriginal.Equals(asyncResult.SocketAddress))
-            {
-                try
-                {
-                    remoteEP = remoteEP.Create(asyncResult.SocketAddress!);
-                }
-                catch
-                {
-                }
-            }
-
+            IAsyncResult asyncResult = TaskToAsyncResult.Begin(t, callback, state);
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"size:{size} returning AsyncResult:{asyncResult}");
             return asyncResult;
         }
 
         public int EndReceiveMessageFrom(IAsyncResult asyncResult, ref SocketFlags socketFlags, ref EndPoint endPoint, out IPPacketInformation ipPacketInformation)
         {
-            ThrowIfDisposed();
-            if (endPoint == null)
-            {
-                throw new ArgumentNullException(nameof(endPoint));
-            }
+            ArgumentNullException.ThrowIfNull(endPoint);
             if (!CanTryAddressFamily(endPoint.AddressFamily))
             {
                 throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, endPoint.AddressFamily, _addressFamily), nameof(endPoint));
             }
-            if (asyncResult == null)
+
+            SocketReceiveMessageFromResult result = TaskToAsyncResult.End<SocketReceiveMessageFromResult>(asyncResult);
+            if (!endPoint.Equals(result.RemoteEndPoint))
             {
-                throw new ArgumentNullException(nameof(asyncResult));
+                endPoint = result.RemoteEndPoint;
             }
-
-            ReceiveMessageOverlappedAsyncResult? castedAsyncResult = asyncResult as ReceiveMessageOverlappedAsyncResult;
-            if (castedAsyncResult == null || castedAsyncResult.AsyncObject != this)
-            {
-                throw new ArgumentException(SR.net_io_invalidasyncresult, nameof(asyncResult));
-            }
-            if (castedAsyncResult.EndCalled)
-            {
-                throw new InvalidOperationException(SR.Format(SR.net_io_invalidendcall, "EndReceiveMessageFrom"));
-            }
-
-            Internals.SocketAddress socketAddressOriginal = Serialize(ref endPoint);
-
-            int bytesTransferred = castedAsyncResult.InternalWaitForCompletionInt32Result();
-            castedAsyncResult.EndCalled = true;
-
-            // Update socket address size.
-            castedAsyncResult.SocketAddress!.InternalSize = castedAsyncResult.GetSocketAddressSize();
-
-            if (!socketAddressOriginal.Equals(castedAsyncResult.SocketAddress))
-            {
-                try
-                {
-                    endPoint = endPoint.Create(castedAsyncResult.SocketAddress);
-                }
-                catch
-                {
-                }
-            }
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"bytesTransferred:{bytesTransferred}");
-
-            SocketError errorCode = (SocketError)castedAsyncResult.ErrorCode;
-            UpdateReceiveSocketErrorForDisposed(ref errorCode, bytesTransferred);
-            // Throw an appropriate SocketException if the native call failed asynchronously.
-            if (errorCode != SocketError.Success && errorCode != SocketError.MessageSize)
-            {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
-            }
-            else if (SocketsTelemetry.Log.IsEnabled())
-            {
-                SocketsTelemetry.Log.BytesReceived(bytesTransferred);
-                if (errorCode == SocketError.Success && SocketType == SocketType.Dgram) SocketsTelemetry.Log.DatagramReceived();
-            }
-
-            socketFlags = castedAsyncResult.SocketFlags;
-            ipPacketInformation = castedAsyncResult.IPPacketInformation;
-
-            return bytesTransferred;
+            socketFlags = result.SocketFlags;
+            ipPacketInformation = result.PacketInformation;
+            return result.ReceivedBytes;
         }
 
-        // Routine Description:
-        //
-        //    BeginReceiveFrom - Async implementation of RecvFrom call,
-        //
-        //    Called when we want to start an async receive.
-        //    We kick off the receive, and if it completes synchronously we'll
-        //    call the callback. Otherwise we'll return an IASyncResult, which
-        //    the caller can use to wait on or retrieve the final status, as needed.
-        //
-        //    Uses Winsock 2 overlapped I/O.
-        //
-        // Arguments:
-        //
-        //    ReadBuffer - status line that we wish to parse
-        //    Index - Offset into ReadBuffer to begin reading from
-        //    Request - Size of Buffer to recv
-        //    Flags - Additional Flags that may be passed to the underlying winsock call
-        //    remoteEP - EndPoint that are to receive from
-        //    Callback - Delegate function that holds callback, called on completion of I/O
-        //    State - State used to track callback, set by caller, not required
-        //
-        // Return Value:
-        //
-        //    IAsyncResult - Async result used to retrieve result
         public IAsyncResult BeginReceiveFrom(byte[] buffer, int offset, int size, SocketFlags socketFlags, ref EndPoint remoteEP, AsyncCallback? callback, object? state)
         {
             ThrowIfDisposed();
             ValidateBufferArguments(buffer, offset, size);
-            if (remoteEP == null)
+            ValidateReceiveFromEndpointAndState(remoteEP, nameof(remoteEP));
+
+            Task<SocketReceiveFromResult> t = ReceiveFromAsync(buffer.AsMemory(offset, size), socketFlags, remoteEP).AsTask();
+            // In case of synchronous completion, ReceiveFromAsync() returns a completed task.
+            // When this happens, we need to update 'remoteEP' in order to conform to the historical behavior of BeginReceiveFrom().
+            if (t.IsCompletedSuccessfully)
             {
-                throw new ArgumentNullException(nameof(remoteEP));
-            }
-            if (!CanTryAddressFamily(remoteEP.AddressFamily))
-            {
-                throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, remoteEP.AddressFamily, _addressFamily), nameof(remoteEP));
-            }
-            if (_rightEndPoint == null)
-            {
-                throw new InvalidOperationException(SR.net_sockets_mustbind);
+                EndPoint resultEp = t.Result.RemoteEndPoint;
+                if (!remoteEP.Equals(resultEp)) remoteEP = resultEp;
             }
 
-            SocketPal.CheckDualModeReceiveSupport(this);
-
-            // We don't do a CAS demand here because the contents of remoteEP aren't used by
-            // WSARecvFrom; all that matters is that we generate a unique-to-this-call SocketAddress
-            // with the right address family
-            Internals.SocketAddress socketAddress = Serialize(ref remoteEP);
-
-            // Set up the result and set it to collect the context.
-            var asyncResult = new OriginalAddressOverlappedAsyncResult(this, state, callback);
-            asyncResult.StartPostingAsyncOp(false);
-
-            // Start the ReceiveFrom.
-            DoBeginReceiveFrom(buffer, offset, size, socketFlags, remoteEP, socketAddress, asyncResult);
-
-            // Capture the context, maybe call the callback, and return.
-            asyncResult.FinishPostingAsyncOp(ref Caches.ReceiveClosureCache);
-
-            if (asyncResult.CompletedSynchronously && !asyncResult.SocketAddressOriginal!.Equals(asyncResult.SocketAddress))
-            {
-                try
-                {
-                    remoteEP = remoteEP.Create(asyncResult.SocketAddress!);
-                }
-                catch
-                {
-                }
-            }
-
-            return asyncResult;
+            return TaskToAsyncResult.Begin(t, callback, state);
         }
 
-        private void DoBeginReceiveFrom(byte[] buffer, int offset, int size, SocketFlags socketFlags, EndPoint endPointSnapshot, Internals.SocketAddress socketAddress, OriginalAddressOverlappedAsyncResult asyncResult)
-        {
-            EndPoint? oldEndPoint = _rightEndPoint;
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"size:{size}");
-
-            // Guarantee to call CheckAsyncCallOverlappedResult if we call SetUnamangedStructures with a cache in order to
-            // avoid a Socket leak in case of error.
-            SocketError errorCode = SocketError.SocketError;
-            try
-            {
-                // Save a copy of the original EndPoint in the asyncResult.
-                asyncResult.SocketAddressOriginal = IPEndPointExtensions.Serialize(endPointSnapshot);
-
-                if (_rightEndPoint == null)
-                {
-                    _rightEndPoint = endPointSnapshot;
-                }
-
-                errorCode = SocketPal.ReceiveFromAsync(_handle, buffer, offset, size, socketFlags, socketAddress, asyncResult);
-
-                if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"ReceiveFromAsync returns:{errorCode} size:{size} returning AsyncResult:{asyncResult}");
-            }
-            catch (ObjectDisposedException)
-            {
-                _rightEndPoint = oldEndPoint;
-                _localEndPoint = null;
-                throw;
-            }
-
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            UpdateReceiveSocketErrorForDisposed(ref errorCode, bytesTransferred: 0);
-            if (!CheckErrorAndUpdateStatus(errorCode))
-            {
-                // Update the internal state of this socket according to the error before throwing.
-                _rightEndPoint = oldEndPoint;
-                _localEndPoint = null;
-
-                throw new SocketException((int)errorCode);
-            }
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"size:{size} return AsyncResult:{asyncResult}");
-        }
-
-        // Routine Description:
-        //
-        //    EndReceiveFrom -  Called when I/O is done or the user wants to wait. If
-        //              the I/O isn't done, we'll wait for it to complete, and then we'll return
-        //              the bytes of I/O done.
-        //
-        // Arguments:
-        //
-        //    AsyncResult - the AsyncResult Returned from BeginReceiveFrom call
-        //
-        // Return Value:
-        //
-        //    int - Number of bytes transferred
         public int EndReceiveFrom(IAsyncResult asyncResult, ref EndPoint endPoint)
         {
-            ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (endPoint == null)
-            {
-                throw new ArgumentNullException(nameof(endPoint));
-            }
+            ArgumentNullException.ThrowIfNull(endPoint);
             if (!CanTryAddressFamily(endPoint.AddressFamily))
             {
                 throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, endPoint.AddressFamily, _addressFamily), nameof(endPoint));
             }
-            if (asyncResult == null)
+
+            SocketReceiveFromResult result = TaskToAsyncResult.End<SocketReceiveFromResult>(asyncResult);
+            if (!endPoint.Equals(result.RemoteEndPoint))
             {
-                throw new ArgumentNullException(nameof(asyncResult));
+                endPoint = result.RemoteEndPoint;
             }
+            return result.ReceivedBytes;
+        }
 
-            OverlappedAsyncResult? castedAsyncResult = asyncResult as OverlappedAsyncResult;
-            if (castedAsyncResult == null || castedAsyncResult.AsyncObject != this)
+        public IAsyncResult BeginAccept(AsyncCallback? callback, object? state) =>
+            TaskToAsyncResult.Begin(AcceptAsync(), callback, state);
+
+        public Socket EndAccept(IAsyncResult asyncResult) => TaskToAsyncResult.End<Socket>(asyncResult);
+
+        // This method provides support for legacy BeginAccept methods that take a "receiveSize" argument and
+        // allow data to be received as part of the accept operation.
+        // There's no direct equivalent of this in the Task APIs, so we mimic it here.
+        private async Task<(Socket s, byte[] buffer, int bytesReceived)> AcceptAndReceiveHelperAsync(Socket? acceptSocket, int receiveSize)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(receiveSize);
+
+            Socket s = await AcceptAsync(acceptSocket).ConfigureAwait(false);
+
+            byte[] buffer;
+            int bytesReceived;
+            if (receiveSize == 0)
             {
-                throw new ArgumentException(SR.net_io_invalidasyncresult, nameof(asyncResult));
+                buffer = Array.Empty<byte>();
+                bytesReceived = 0;
             }
-            if (castedAsyncResult.EndCalled)
+            else
             {
-                throw new InvalidOperationException(SR.Format(SR.net_io_invalidendcall, "EndReceiveFrom"));
-            }
-
-            Internals.SocketAddress socketAddressOriginal = Serialize(ref endPoint);
-
-            int bytesTransferred = castedAsyncResult.InternalWaitForCompletionInt32Result();
-            castedAsyncResult.EndCalled = true;
-
-            // Update socket address size.
-            castedAsyncResult.SocketAddress!.InternalSize = castedAsyncResult.GetSocketAddressSize();
-
-            if (!socketAddressOriginal.Equals(castedAsyncResult.SocketAddress))
-            {
+                buffer = new byte[receiveSize];
                 try
                 {
-                    endPoint = endPoint.Create(castedAsyncResult.SocketAddress);
+                    bytesReceived = await s.ReceiveAsync(buffer, SocketFlags.None).ConfigureAwait(false);
                 }
                 catch
                 {
+                    s.Dispose();
+                    throw;
                 }
             }
 
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"bytesTransferred:{bytesTransferred}");
-
-            // Throw an appropriate SocketException if the native call failed asynchronously.
-            SocketError errorCode = (SocketError)castedAsyncResult.ErrorCode;
-            UpdateReceiveSocketErrorForDisposed(ref errorCode, bytesTransferred);
-            if (errorCode != SocketError.Success)
-            {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
-            }
-            else if (SocketsTelemetry.Log.IsEnabled())
-            {
-                SocketsTelemetry.Log.BytesReceived(bytesTransferred);
-                if (SocketType == SocketType.Dgram) SocketsTelemetry.Log.DatagramReceived();
-            }
-            return bytesTransferred;
+            return (s, buffer, bytesReceived);
         }
 
-        // Routine Description:
-        //
-        //    BeginAccept - Does an async winsock accept, creating a new socket on success
-        //
-        //     Works by creating a pending accept request the first time,
-        //     and subsequent calls are queued so that when the first accept completes,
-        //     the next accept can be resubmitted in the callback.
-        //     this routine may go pending at which time,
-        //     but any case the callback Delegate will be called upon completion
-        //
-        // Arguments:
-        //
-        //    Callback - Async Callback Delegate that is called upon Async Completion
-        //    State - State used to track callback, set by caller, not required
-        //
-        // Return Value:
-        //
-        //    IAsyncResult - Async result used to retrieve resultant new socket
-        public IAsyncResult BeginAccept(AsyncCallback? callback, object? state)
+        public IAsyncResult BeginAccept(int receiveSize, AsyncCallback? callback, object? state) =>
+            BeginAccept(acceptSocket: null, receiveSize, callback, state);
+
+        public IAsyncResult BeginAccept(Socket? acceptSocket, int receiveSize, AsyncCallback? callback, object? state) =>
+            TaskToAsyncResult.Begin(AcceptAndReceiveHelperAsync(acceptSocket, receiveSize), callback, state);
+
+        public Socket EndAccept(out byte[] buffer, IAsyncResult asyncResult)
         {
-            if (!_isDisconnected)
-            {
-                return BeginAcceptCommon(acceptSocket: null, receiveSize: 0, callback, state);
-            }
-
-            Debug.Assert(Disposed);
-            ThrowObjectDisposedException();
-            return null; // unreachable
-        }
-
-        private IAsyncResult BeginAcceptCommon(Socket? acceptSocket, int receiveSize, AsyncCallback? callback, object? state)
-        {
-            ThrowIfDisposed();
-
-            // Validate input parameters.
-            if (receiveSize < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(receiveSize));
-            }
-
-            // Set up the async result with flowing.
-            AcceptOverlappedAsyncResult asyncResult = new AcceptOverlappedAsyncResult(this, state, callback);
-            asyncResult.StartPostingAsyncOp(false);
-
-            // Start the accept.
-            if (_rightEndPoint == null)
-            {
-                throw new InvalidOperationException(SR.net_sockets_mustbind);
-            }
-
-            if (!_isListening)
-            {
-                throw new InvalidOperationException(SR.net_sockets_mustlisten);
-            }
-
-            SafeSocketHandle? acceptHandle;
-            asyncResult.AcceptSocket = GetOrCreateAcceptSocket(acceptSocket, false, nameof(acceptSocket), out acceptHandle);
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"AcceptSocket:{acceptSocket}");
-            if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AcceptStart(_rightEndPoint);
-
-            int socketAddressSize = GetAddressSize(_rightEndPoint);
-            SocketError errorCode;
-            try
-            {
-                errorCode = SocketPal.AcceptAsync(this, _handle, acceptHandle, receiveSize, socketAddressSize, asyncResult);
-            }
-            catch (Exception ex)
-            {
-                if (SocketsTelemetry.Log.IsEnabled())
-                {
-                    SocketsTelemetry.Log.AfterAccept(SocketError.Interrupted, ex.Message);
-                }
-
-                throw;
-            }
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"AcceptAsync returns:{errorCode} {asyncResult}");
-
-            // Throw an appropriate SocketException if the native call fails synchronously.
-            if (!CheckErrorAndUpdateStatus(errorCode))
-            {
-                UpdateAcceptSocketErrorForDisposed(ref errorCode);
-
-                if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterAccept(errorCode);
-
-                throw new SocketException((int)errorCode);
-            }
-
-            // Finish the flow capture, maybe complete here.
-            asyncResult.FinishPostingAsyncOp(ref Caches.AcceptClosureCache);
-
-            return asyncResult;
-        }
-
-        // Routine Description:
-        //
-        //    EndAccept -  Called by user code after I/O is done or the user wants to wait.
-        //                 until Async completion, so it provides End handling for async Accept calls,
-        //                 and retrieves new Socket object
-        //
-        // Arguments:
-        //
-        //    AsyncResult - the AsyncResult Returned from BeginAccept call
-        //
-        // Return Value:
-        //
-        //    Socket - a valid socket if successful
-        public Socket EndAccept(IAsyncResult asyncResult)
-        {
-            return EndAcceptCommon(out _, out _, asyncResult);
-        }
-        private Socket EndAcceptCommon(out byte[]? buffer, out int bytesTransferred, IAsyncResult asyncResult)
-        {
-            if (Disposed)
-            {
-                if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterAccept(SocketError.Interrupted);
-
-                ThrowObjectDisposedException();
-            }
-
-            // Validate input parameters.
-            if (asyncResult == null)
-            {
-                throw new ArgumentNullException(nameof(asyncResult));
-            }
-            AcceptOverlappedAsyncResult? castedAsyncResult = asyncResult as AcceptOverlappedAsyncResult;
-            if (castedAsyncResult == null || castedAsyncResult.AsyncObject != this)
-            {
-                throw new ArgumentException(SR.net_io_invalidasyncresult, nameof(asyncResult));
-            }
-            if (castedAsyncResult.EndCalled)
-            {
-                throw new InvalidOperationException(SR.Format(SR.net_io_invalidendcall, "EndAccept"));
-            }
-
-            Socket socket = (Socket)castedAsyncResult.InternalWaitForCompletion()!;
-            bytesTransferred = (int)castedAsyncResult.BytesTransferred;
-            buffer = castedAsyncResult.Buffer;
-
-            if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.BytesReceived(bytesTransferred);
-
-            castedAsyncResult.EndCalled = true;
-
-            // Throw an appropriate SocketException if the native call failed asynchronously.
-            SocketError errorCode = (SocketError)castedAsyncResult.ErrorCode;
-
-            if (errorCode != SocketError.Success)
-            {
-                UpdateAcceptSocketErrorForDisposed(ref errorCode);
-
-                if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterAccept(errorCode);
-
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
-            }
-
-            if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterAccept(SocketError.Success);
-
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Accepted(socket, socket.RemoteEndPoint, socket.LocalEndPoint);
+            Socket socket = EndAccept(out byte[] innerBuffer, out int bytesTransferred, asyncResult);
+            buffer = new byte[bytesTransferred];
+            Buffer.BlockCopy(innerBuffer, 0, buffer, 0, bytesTransferred);
             return socket;
+        }
+
+        public Socket EndAccept(out byte[] buffer, out int bytesTransferred, IAsyncResult asyncResult)
+        {
+            Socket s;
+            (s, buffer, bytesTransferred) = TaskToAsyncResult.End<(Socket, byte[], int)>(asyncResult);
+            return s;
         }
 
         // Disables sends and receives on a socket.
@@ -2951,15 +2582,17 @@ namespace System.Net.Sockets
             InternalSetBlocking(_willBlockInternal);
         }
 
-        #region Async methods
-        public bool AcceptAsync(SocketAsyncEventArgs e)
+        //
+        // Async methods
+        //
+
+        public bool AcceptAsync(SocketAsyncEventArgs e) => AcceptAsync(e, CancellationToken.None);
+
+        private bool AcceptAsync(SocketAsyncEventArgs e, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
             if (e.HasMultipleBuffers)
             {
                 throw new ArgumentException(SR.net_multibuffernotsupported, nameof(e));
@@ -2985,14 +2618,11 @@ namespace System.Net.Sockets
             SocketError socketError;
             try
             {
-                socketError = e.DoOperationAccept(this, _handle, acceptHandle);
+                socketError = e.DoOperationAccept(this, _handle, acceptHandle, cancellationToken);
             }
             catch (Exception ex)
             {
-                if (SocketsTelemetry.Log.IsEnabled())
-                {
-                    SocketsTelemetry.Log.AfterAccept(SocketError.Interrupted, ex.Message);
-                }
+                SocketsTelemetry.Log.AfterAccept(SocketError.Interrupted, ex.Message);
 
                 // Clear in-use flag on event args object.
                 e.Complete();
@@ -3011,18 +2641,12 @@ namespace System.Net.Sockets
 
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
             if (e.HasMultipleBuffers)
             {
                 throw new ArgumentException(SR.net_multibuffernotsupported, "BufferList");
             }
-            if (e.RemoteEndPoint == null)
-            {
-                throw new ArgumentNullException("remoteEP");
-            }
+            ArgumentNullException.ThrowIfNull(e.RemoteEndPoint, "remoteEP");
             if (_isListening)
             {
                 throw new InvalidOperationException(SR.net_sockets_mustnotlisten);
@@ -3071,21 +2695,24 @@ namespace System.Net.Sockets
                 }
 
                 e._socketAddress = Serialize(ref endPointSnapshot);
+                _pendingConnectRightEndPoint = endPointSnapshot;
+                _nonBlockingConnectInProgress = false;
 
                 WildcardBindForConnectIfNecessary(endPointSnapshot.AddressFamily);
 
-                // Save the old RightEndPoint and prep new RightEndPoint.
-                EndPoint? oldEndPoint = _rightEndPoint;
-                _rightEndPoint ??= endPointSnapshot;
-
-                if (SocketsTelemetry.Log.IsEnabled())
-                {
-                    SocketsTelemetry.Log.ConnectStart(e._socketAddress!);
-                }
+                SocketsTelemetry.Log.ConnectStart(e._socketAddress!);
 
                 // Prepare for the native call.
-                e.StartOperationCommon(this, SocketAsyncOperation.Connect);
-                e.StartOperationConnect(saeaMultiConnectCancelable: false, userSocket);
+                try
+                {
+                    e.StartOperationCommon(this, SocketAsyncOperation.Connect);
+                    e.StartOperationConnect(saeaMultiConnectCancelable: false, userSocket);
+                }
+                catch (Exception ex)
+                {
+                    SocketsTelemetry.Log.AfterConnect(SocketError.NotSocket, ex.Message);
+                    throw;
+                }
 
                 // Make the native call.
                 try
@@ -3094,17 +2721,13 @@ namespace System.Net.Sockets
                     bool canUseConnectEx = _socketType == SocketType.Stream && endPointSnapshot.AddressFamily != AddressFamily.Unix;
                     SocketError socketError = canUseConnectEx ?
                         e.DoOperationConnectEx(this, _handle) :
-                        e.DoOperationConnect(this, _handle); // For connectionless protocols, Connect is not an I/O call.
+                        e.DoOperationConnect(_handle); // For connectionless protocols, Connect is not an I/O call.
                     pending = socketError == SocketError.IOPending;
                 }
                 catch (Exception ex)
                 {
-                    if (SocketsTelemetry.Log.IsEnabled())
-                    {
-                        SocketsTelemetry.Log.AfterConnect(SocketError.NotSocket, ex.Message);
-                    }
+                    SocketsTelemetry.Log.AfterConnect(SocketError.NotSocket, ex.Message);
 
-                    _rightEndPoint = oldEndPoint;
                     _localEndPoint = null;
 
                     // Clear in-use flag on event args object.
@@ -3118,12 +2741,8 @@ namespace System.Net.Sockets
 
         public static bool ConnectAsync(SocketType socketType, ProtocolType protocolType, SocketAsyncEventArgs e)
         {
-            bool pending;
+            ArgumentNullException.ThrowIfNull(e);
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
             if (e.HasMultipleBuffers)
             {
                 throw new ArgumentException(SR.net_multibuffernotsupported, nameof(e));
@@ -3136,6 +2755,7 @@ namespace System.Net.Sockets
             EndPoint endPointSnapshot = e.RemoteEndPoint;
             DnsEndPoint? dnsEP = endPointSnapshot as DnsEndPoint;
 
+            bool pending;
             if (dnsEP != null)
             {
                 Socket? attemptSocket = dnsEP.AddressFamily != AddressFamily.Unspecified ? new Socket(dnsEP.AddressFamily, socketType, protocolType) : null;
@@ -3165,29 +2785,26 @@ namespace System.Net.Sockets
 
         public static void CancelConnectAsync(SocketAsyncEventArgs e)
         {
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
+
             e.CancelConnectAsync();
         }
 
-        public bool DisconnectAsync(SocketAsyncEventArgs e)
+        public bool DisconnectAsync(SocketAsyncEventArgs e) => DisconnectAsync(e, default);
+
+        private bool DisconnectAsync(SocketAsyncEventArgs e, CancellationToken cancellationToken)
         {
             // Throw if socket disposed
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
 
             // Prepare for and make the native call.
             e.StartOperationCommon(this, SocketAsyncOperation.Disconnect);
-            SocketError socketError = SocketError.Success;
+            SocketError socketError;
             try
             {
-                socketError = e.DoOperationDisconnect(this, _handle);
+                socketError = e.DoOperationDisconnect(this, _handle, cancellationToken);
             }
             catch
             {
@@ -3205,10 +2822,7 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
 
             // Prepare for and make the native call.
             e.StartOperationCommon(this, SocketAsyncOperation.Receive);
@@ -3227,14 +2841,13 @@ namespace System.Net.Sockets
             return socketError == SocketError.IOPending;
         }
 
-        public bool ReceiveFromAsync(SocketAsyncEventArgs e)
+        public bool ReceiveFromAsync(SocketAsyncEventArgs e) => ReceiveFromAsync(e, default);
+
+        private bool ReceiveFromAsync(SocketAsyncEventArgs e, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
             if (e.RemoteEndPoint == null)
             {
                 throw new ArgumentException(SR.Format(SR.InvalidNullArgument, "e.RemoteEndPoint"), nameof(e));
@@ -3243,8 +2856,6 @@ namespace System.Net.Sockets
             {
                 throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, e.RemoteEndPoint.AddressFamily, _addressFamily), nameof(e));
             }
-
-            SocketPal.CheckDualModeReceiveSupport(this);
 
             // We don't do a CAS demand here because the contents of remoteEP aren't used by
             // WSARecvFrom; all that matters is that we generate a unique-to-this-call SocketAddress
@@ -3261,7 +2872,7 @@ namespace System.Net.Sockets
             SocketError socketError;
             try
             {
-                socketError = e.DoOperationReceiveFrom(_handle);
+                socketError = e.DoOperationReceiveFrom(_handle, cancellationToken);
             }
             catch
             {
@@ -3274,14 +2885,13 @@ namespace System.Net.Sockets
             return pending;
         }
 
-        public bool ReceiveMessageFromAsync(SocketAsyncEventArgs e)
+        public bool ReceiveMessageFromAsync(SocketAsyncEventArgs e) => ReceiveMessageFromAsync(e, default);
+
+        private bool ReceiveMessageFromAsync(SocketAsyncEventArgs e, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
             if (e.RemoteEndPoint == null)
             {
                 throw new ArgumentException(SR.Format(SR.InvalidNullArgument, "e.RemoteEndPoint"), nameof(e));
@@ -3291,7 +2901,7 @@ namespace System.Net.Sockets
                 throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, e.RemoteEndPoint.AddressFamily, _addressFamily), nameof(e));
             }
 
-            SocketPal.CheckDualModeReceiveSupport(this);
+            SocketPal.CheckDualModePacketInfoSupport(this);
 
             // We don't do a CAS demand here because the contents of remoteEP aren't used by
             // WSARecvMsg; all that matters is that we generate a unique-to-this-call SocketAddress
@@ -3310,7 +2920,7 @@ namespace System.Net.Sockets
             SocketError socketError;
             try
             {
-                socketError = e.DoOperationReceiveMessageFrom(this, _handle);
+                socketError = e.DoOperationReceiveMessageFrom(this, _handle, cancellationToken);
             }
             catch
             {
@@ -3328,10 +2938,7 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
 
             // Prepare for and make the native call.
             e.StartOperationCommon(this, SocketAsyncOperation.Send);
@@ -3350,14 +2957,13 @@ namespace System.Net.Sockets
             return socketError == SocketError.IOPending;
         }
 
-        public bool SendPacketsAsync(SocketAsyncEventArgs e)
+        public bool SendPacketsAsync(SocketAsyncEventArgs e) => SendPacketsAsync(e, default(CancellationToken));
+
+        private bool SendPacketsAsync(SocketAsyncEventArgs e, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
             if (e.SendPacketsElements == null)
             {
                 throw new ArgumentException(SR.Format(SR.InvalidNullArgument, "e.SendPacketsElements"), nameof(e));
@@ -3372,7 +2978,7 @@ namespace System.Net.Sockets
             SocketError socketError;
             try
             {
-                socketError = e.DoOperationSendPackets(this, _handle);
+                socketError = e.DoOperationSendPackets(this, _handle, cancellationToken);
             }
             catch (Exception)
             {
@@ -3384,14 +2990,13 @@ namespace System.Net.Sockets
             return socketError == SocketError.IOPending;
         }
 
-        public bool SendToAsync(SocketAsyncEventArgs e)
+        public bool SendToAsync(SocketAsyncEventArgs e) => SendToAsync(e, default);
+
+        private bool SendToAsync(SocketAsyncEventArgs e, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
 
-            if (e == null)
-            {
-                throw new ArgumentNullException(nameof(e));
-            }
+            ArgumentNullException.ThrowIfNull(e);
             if (e.RemoteEndPoint == null)
             {
                 throw new ArgumentException(SR.Format(SR.InvalidNullArgument, "e.RemoteEndPoint"), nameof(e));
@@ -3405,19 +3010,16 @@ namespace System.Net.Sockets
             e.StartOperationCommon(this, SocketAsyncOperation.SendTo);
 
             EndPoint? oldEndPoint = _rightEndPoint;
-            if (_rightEndPoint == null)
-            {
-                _rightEndPoint = endPointSnapshot;
-            }
+            _rightEndPoint ??= endPointSnapshot;
 
             SocketError socketError;
             try
             {
-                socketError = e.DoOperationSendTo(_handle);
+                socketError = e.DoOperationSendTo(_handle, cancellationToken);
             }
             catch
             {
-                _rightEndPoint = null;
+                _rightEndPoint = oldEndPoint;
                 _localEndPoint = null;
                 // Clear in-use flag on event args object.
                 e.Complete();
@@ -3432,28 +3034,16 @@ namespace System.Net.Sockets
 
             return socketError == SocketError.IOPending;
         }
-        #endregion
-        #endregion
 
-        #region Internal and private properties
-
-        private CacheSet Caches
-        {
-            get
-            {
-                if (_caches == null)
-                {
-                    // It's not too bad if extra of these are created and lost.
-                    _caches = new CacheSet();
-                }
-                return _caches;
-            }
-        }
+        //
+        // Internal and private properties
+        //
 
         internal bool Disposed => _disposed != 0;
-        #endregion
 
-        #region Internal and private methods
+        //
+        // Internal and private methods
+        //
 
         internal static void GetIPProtocolInformation(AddressFamily addressFamily, Internals.SocketAddress socketAddress, out bool isIPv4, out bool isIPv6)
         {
@@ -3492,8 +3082,7 @@ namespace System.Net.Sockets
 
         private void DoConnect(EndPoint endPointSnapshot, Internals.SocketAddress socketAddress)
         {
-            if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.ConnectStart(socketAddress);
-
+            SocketsTelemetry.Log.ConnectStart(socketAddress);
             SocketError errorCode;
             try
             {
@@ -3501,11 +3090,7 @@ namespace System.Net.Sockets
             }
             catch (Exception ex)
             {
-                if (SocketsTelemetry.Log.IsEnabled())
-                {
-                    SocketsTelemetry.Log.AfterConnect(SocketError.NotSocket, ex.Message);
-                }
-
+                SocketsTelemetry.Log.AfterConnect(SocketError.NotSocket, ex.Message);
                 throw;
             }
 
@@ -3518,22 +3103,18 @@ namespace System.Net.Sockets
                 UpdateStatusAfterSocketError(socketException);
                 if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, socketException);
 
-                if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterConnect(errorCode);
+                SocketsTelemetry.Log.AfterConnect(errorCode);
 
                 throw socketException;
             }
 
-            if (SocketsTelemetry.Log.IsEnabled()) SocketsTelemetry.Log.AfterConnect(SocketError.Success);
-
-            if (_rightEndPoint == null)
-            {
-                // Save a copy of the EndPoint so we can use it for Create().
-                _rightEndPoint = endPointSnapshot;
-            }
+            SocketsTelemetry.Log.AfterConnect(SocketError.Success);
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"connection to:{endPointSnapshot}");
 
             // Update state and performance counters.
+            _pendingConnectRightEndPoint = endPointSnapshot;
+            _nonBlockingConnectInProgress = false;
             SetToConnected();
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Connected(this, LocalEndPoint, RemoteEndPoint);
         }
@@ -3558,8 +3139,7 @@ namespace System.Net.Sockets
             SetToDisconnected();
 
             SafeSocketHandle? handle = _handle;
-            // Avoid side effects when we don't own the handle.
-            if (handle?.OwnsHandle == true)
+            if (handle is not null)
             {
                 if (!disposing)
                 {
@@ -3569,7 +3149,7 @@ namespace System.Net.Sockets
                     if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, "Calling _handle.Dispose()");
                     handle.Dispose();
                 }
-                else
+                else if (handle.OwnsHandle)
                 {
                     // Close the handle in one of several ways depending on the timeout.
                     // Ignore ObjectDisposedException just in case the handle somehow gets disposed elsewhere.
@@ -3657,6 +3237,23 @@ namespace System.Net.Sockets
                     {
                     }
                 }
+                else
+                {
+                    if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, "Calling _handle.CloseAsIs() for non-owned handle");
+                    handle.CloseAsIs(abortive: false);
+                }
+
+                // Delete file of bound UnixDomainSocketEndPoint.
+                if (_rightEndPoint is UnixDomainSocketEndPoint unixEndPoint &&
+                    unixEndPoint.BoundFileName is not null)
+                {
+                    try
+                    {
+                        File.Delete(unixEndPoint.BoundFileName);
+                    }
+                    catch
+                    { }
+                }
             }
 
             // Clean up any cached data
@@ -3700,7 +3297,7 @@ namespace System.Net.Sockets
                 // DualMode: When bound to IPv6Any you must enable both socket options.
                 // When bound to an IPv4 mapped IPv6 address you must enable the IPv4 socket option.
                 IPEndPoint? ipEndPoint = _rightEndPoint as IPEndPoint;
-                IPAddress? boundAddress = (ipEndPoint != null ? ipEndPoint.Address : null);
+                IPAddress? boundAddress = ipEndPoint?.Address;
                 Debug.Assert(boundAddress != null, "Not Bound");
                 if (_addressFamily == AddressFamily.InterNetwork)
                 {
@@ -3729,7 +3326,7 @@ namespace System.Net.Sockets
                 if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, "skipping the call");
                 return;
             }
-            SocketError errorCode = SocketError.Success;
+            SocketError errorCode;
             try
             {
                 errorCode = SocketPal.SetSockOpt(_handle, optionLevel, optionName, optionValue);
@@ -3759,7 +3356,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
         }
 
@@ -3772,7 +3369,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
         }
 
@@ -3799,7 +3396,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
         }
 
@@ -3813,7 +3410,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
 
             return lingerOption;
@@ -3829,7 +3426,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
 
             return multicastOption;
@@ -3846,7 +3443,7 @@ namespace System.Net.Sockets
             // Throw an appropriate SocketException if the native call fails.
             if (errorCode != SocketError.Success)
             {
-                UpdateStatusAfterSocketErrorAndThrowException(errorCode);
+                UpdateStatusAfterSocketOptionErrorAndThrowException(errorCode);
             }
 
             return multicastOption;
@@ -3892,8 +3489,7 @@ namespace System.Net.Sockets
         // This method ignores all failures.
         internal void InternalSetBlocking(bool desired)
         {
-            bool current;
-            InternalSetBlocking(desired, out current);
+            InternalSetBlocking(desired, out _);
         }
 
         // CreateAcceptSocket - pulls unmanaged results and assembles them into a new Socket object.
@@ -3911,8 +3507,19 @@ namespace System.Net.Sockets
             socket._addressFamily = _addressFamily;
             socket._socketType = _socketType;
             socket._protocolType = _protocolType;
-            socket._rightEndPoint = _rightEndPoint;
             socket._remoteEndPoint = remoteEP;
+
+            // If the _rightEndpoint tracks a UnixDomainSocketEndPoint to delete
+            // then create a new EndPoint.
+            if (_rightEndPoint is UnixDomainSocketEndPoint unixEndPoint &&
+                     unixEndPoint.BoundFileName is not null)
+            {
+                socket._rightEndPoint = unixEndPoint.CreateUnboundEndPoint();
+            }
+            else
+            {
+                socket._rightEndPoint = _rightEndPoint;
+            }
 
             // If the listener socket was bound to a wildcard address, then the `accept` system call
             // will assign a specific address to the accept socket's local endpoint instead of a
@@ -3947,10 +3554,14 @@ namespace System.Net.Sockets
                 return;
             }
 
+            Debug.Assert(_nonBlockingConnectInProgress == false);
+
             // Update the status: this socket was indeed connected at
             // some point in time update the perf counter as well.
             _isConnected = true;
             _isDisconnected = false;
+            _rightEndPoint ??= _pendingConnectRightEndPoint;
+            _pendingConnectRightEndPoint = null;
             UpdateLocalEndPointOnConnect();
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, "now connected");
         }
@@ -3967,7 +3578,7 @@ namespace System.Net.Sockets
             }
         }
 
-        private bool IsWildcardEndPoint(EndPoint? endPoint)
+        private static bool IsWildcardEndPoint(EndPoint? endPoint)
         {
             if (endPoint == null)
             {
@@ -4002,11 +3613,19 @@ namespace System.Net.Sockets
             }
         }
 
-        private void UpdateStatusAfterSocketErrorAndThrowException(SocketError error, [CallerMemberName] string? callerName = null)
+        private void UpdateStatusAfterSocketOptionErrorAndThrowException(SocketError error, [CallerMemberName] string? callerName = null)
+        {
+            // Don't disconnect socket for unknown options.
+            bool disconnectOnFailure = error != SocketError.ProtocolOption &&
+                                       error != SocketError.OperationNotSupported;
+            UpdateStatusAfterSocketErrorAndThrowException(error, disconnectOnFailure, callerName);
+        }
+
+        private void UpdateStatusAfterSocketErrorAndThrowException(SocketError error, bool disconnectOnFailure = true, [CallerMemberName] string? callerName = null)
         {
             // Update the internal state of this socket according to the error before throwing.
             var socketException = new SocketException((int)error);
-            UpdateStatusAfterSocketError(socketException);
+            UpdateStatusAfterSocketError(socketException, disconnectOnFailure);
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, socketException, memberName: callerName);
             throw socketException;
         }
@@ -4014,18 +3633,18 @@ namespace System.Net.Sockets
         // UpdateStatusAfterSocketError(socketException) - updates the status of a connected socket
         // on which a failure occurred. it'll go to winsock and check if the connection
         // is still open and if it needs to update our internal state.
-        internal void UpdateStatusAfterSocketError(SocketException socketException)
+        internal void UpdateStatusAfterSocketError(SocketException socketException, bool disconnectOnFailure = true)
         {
-            UpdateStatusAfterSocketError(socketException.SocketErrorCode);
+            UpdateStatusAfterSocketError(socketException.SocketErrorCode, disconnectOnFailure);
         }
 
-        internal void UpdateStatusAfterSocketError(SocketError errorCode)
+        internal void UpdateStatusAfterSocketError(SocketError errorCode, bool disconnectOnFailure = true)
         {
             // If we already know the socket is disconnected
             // we don't need to do anything else.
-            if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, $"errorCode:{errorCode}");
+            if (NetEventSource.Log.IsEnabled()) NetEventSource.Error(this, $"errorCode:{errorCode}, disconnectOnFailure:{disconnectOnFailure}");
 
-            if (_isConnected && (_handle.IsInvalid || (errorCode != SocketError.WouldBlock &&
+            if (disconnectOnFailure && _isConnected && (_handle.IsInvalid || (errorCode != SocketError.WouldBlock &&
                     errorCode != SocketError.IOPending && errorCode != SocketError.NoBufferSpaceAvailable &&
                     errorCode != SocketError.TimedOut)))
             {
@@ -4046,6 +3665,21 @@ namespace System.Net.Sockets
             return false;
         }
 
+        // Called in Receive(Message)From variants to validate 'remoteEndPoint',
+        // and check whether the socket is bound.
+        private void ValidateReceiveFromEndpointAndState(EndPoint remoteEndPoint, string remoteEndPointArgumentName)
+        {
+            ArgumentNullException.ThrowIfNull(remoteEndPoint, remoteEndPointArgumentName);
+            if (!CanTryAddressFamily(remoteEndPoint.AddressFamily))
+            {
+                throw new ArgumentException(SR.Format(SR.net_InvalidEndPointAddressFamily, remoteEndPoint.AddressFamily, _addressFamily), remoteEndPointArgumentName);
+            }
+            if (_rightEndPoint == null)
+            {
+                throw new InvalidOperationException(SR.net_sockets_mustbind);
+            }
+        }
+
         // ValidateBlockingMode - called before synchronous calls to validate
         // the fact that we are in blocking mode (not in non-blocking mode) so the
         // call will actually be synchronous.
@@ -4064,7 +3698,7 @@ namespace System.Net.Sockets
         partial void ValidateForMultiConnect(bool isMultiEndpoint);
 
         // Helper for SendFile implementations
-        private static FileStream? OpenFile(string? name) => string.IsNullOrEmpty(name) ? null : File.OpenRead(name);
+        private static SafeFileHandle? OpenFileHandle(string? name) => string.IsNullOrEmpty(name) ? null : File.OpenHandle(name, FileMode.Open, FileAccess.Read);
 
         private void UpdateReceiveSocketErrorForDisposed(ref SocketError socketError, int bytesTransferred)
         {
@@ -4103,14 +3737,8 @@ namespace System.Net.Sockets
 
         private void ThrowIfDisposed()
         {
-            if (Disposed)
-            {
-                ThrowObjectDisposedException();
-            }
+            ObjectDisposedException.ThrowIf(Disposed, this);
         }
-
-        [DoesNotReturn]
-        private void ThrowObjectDisposedException() => throw new ObjectDisposedException(GetType().FullName);
 
         private bool IsConnectionOriented => _socketType == SocketType.Stream;
 
@@ -4148,6 +3776,17 @@ namespace System.Net.Sockets
             };
         }
 
-        #endregion
+        private void CheckNonBlockingConnectCompleted()
+        {
+            if (_nonBlockingConnectInProgress && SocketPal.HasNonBlockingConnectCompleted(_handle, out bool success))
+            {
+                _nonBlockingConnectInProgress = false;
+
+                if (success)
+                {
+                    SetToConnected();
+                }
+            }
+        }
     }
 }

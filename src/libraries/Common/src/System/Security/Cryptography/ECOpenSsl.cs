@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Diagnostics;
 using Microsoft.Win32.SafeHandles;
 
@@ -33,7 +32,7 @@ namespace System.Security.Cryptography
 
         internal SafeEcKeyHandle Value => _key.Value;
 
-        private SafeEcKeyHandle GenerateKeyLazy(AsymmetricAlgorithm owner) =>
+        private static SafeEcKeyHandle GenerateKeyLazy(AsymmetricAlgorithm owner) =>
             GenerateKeyByKeySize(owner.KeySize);
 
         public void Dispose()
@@ -94,6 +93,7 @@ namespace System.Security.Cryptography
 
                 if (key == null || key.IsInvalid)
                 {
+                    key?.Dispose();
                     throw new PlatformNotSupportedException(SR.Format(SR.Cryptography_CurveNotSupported, oid));
                 }
 

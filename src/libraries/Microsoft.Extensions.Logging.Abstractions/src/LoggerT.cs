@@ -21,16 +21,13 @@ namespace Microsoft.Extensions.Logging
         /// <param name="factory">The factory.</param>
         public Logger(ILoggerFactory factory)
         {
-            if (factory == null)
-            {
-                throw new ArgumentNullException(nameof(factory));
-            }
+            ThrowHelper.ThrowIfNull(factory);
 
             _logger = factory.CreateLogger(TypeNameHelper.GetTypeDisplayName(typeof(T), includeGenericParameters: false, nestedTypeDelimiter: '.'));
         }
 
         /// <inheritdoc />
-        IDisposable ILogger.BeginScope<TState>(TState state)
+        IDisposable? ILogger.BeginScope<TState>(TState state)
         {
             return _logger.BeginScope(state);
         }
@@ -42,7 +39,7 @@ namespace Microsoft.Extensions.Logging
         }
 
         /// <inheritdoc />
-        void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+        void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             _logger.Log(logLevel, eventId, state, exception, formatter);
         }

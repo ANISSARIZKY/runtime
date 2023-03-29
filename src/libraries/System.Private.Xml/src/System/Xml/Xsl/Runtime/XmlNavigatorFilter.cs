@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable disable
 using System.Xml;
 using System.Xml.XPath;
 using System.Diagnostics;
@@ -46,7 +45,7 @@ namespace System.Xml.Xsl.Runtime
         /// Reposition the navigator to the next following node (inc. descendants); skip over filtered nodes.
         /// If there are no matching nodes, then return false.
         /// </summary>
-        public abstract bool MoveToFollowing(XPathNavigator navigator, XPathNavigator navigatorEnd);
+        public abstract bool MoveToFollowing(XPathNavigator navigator, XPathNavigator? navigatorEnd);
 
         /// <summary>
         /// Return true if the navigator's current node matches the filter condition.
@@ -58,7 +57,7 @@ namespace System.Xml.Xsl.Runtime
     /// <summary>
     /// Filters any non-element and any element with a non-matching local name or namespace uri.
     /// </summary>
-    internal class XmlNavNameFilter : XmlNavigatorFilter
+    internal sealed class XmlNavNameFilter : XmlNavigatorFilter
     {
         private readonly string _localName;
         private readonly string _namespaceUri;
@@ -115,7 +114,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Reposition the navigator on the next following element with a matching name.
         /// </summary>
-        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator navEnd)
+        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator? navEnd)
         {
             return navigator.MoveToFollowing(_localName, _namespaceUri, navEnd);
         }
@@ -133,7 +132,7 @@ namespace System.Xml.Xsl.Runtime
     /// <summary>
     /// Filters any node not of the specified type (type may not be attribute or namespace).
     /// </summary>
-    internal class XmlNavTypeFilter : XmlNavigatorFilter
+    internal sealed class XmlNavTypeFilter : XmlNavigatorFilter
     {
         private static readonly XmlNavigatorFilter[] s_typeFilters = CreateTypeFilters();
         private readonly XPathNodeType _nodeType;
@@ -206,7 +205,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Reposition the navigator on the next following element with a matching kind.
         /// </summary>
-        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator navEnd)
+        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator? navEnd)
         {
             return navigator.MoveToFollowing(_nodeType, navEnd);
         }
@@ -224,7 +223,7 @@ namespace System.Xml.Xsl.Runtime
     /// <summary>
     /// Filters all attribute nodes.
     /// </summary>
-    internal class XmlNavAttrFilter : XmlNavigatorFilter
+    internal sealed class XmlNavAttrFilter : XmlNavigatorFilter
     {
         private static readonly XmlNavigatorFilter s_singleton = new XmlNavAttrFilter();
 
@@ -278,7 +277,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Reposition the navigator on the next following non-attribute.
         /// </summary>
-        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator navEnd)
+        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator? navEnd)
         {
             return navigator.MoveToFollowing(XPathNodeType.All, navEnd);
         }
@@ -296,7 +295,7 @@ namespace System.Xml.Xsl.Runtime
     /// <summary>
     /// Never filter nodes.
     /// </summary>
-    internal class XmlNavNeverFilter : XmlNavigatorFilter
+    internal sealed class XmlNavNeverFilter : XmlNavigatorFilter
     {
         private static readonly XmlNavigatorFilter s_singleton = new XmlNavNeverFilter();
 
@@ -350,7 +349,7 @@ namespace System.Xml.Xsl.Runtime
         /// <summary>
         /// Reposition the navigator on the next following node.
         /// </summary>
-        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator navEnd)
+        public override bool MoveToFollowing(XPathNavigator navigator, XPathNavigator? navEnd)
         {
             return navigator.MoveToFollowing(XPathNodeType.All, navEnd);
         }

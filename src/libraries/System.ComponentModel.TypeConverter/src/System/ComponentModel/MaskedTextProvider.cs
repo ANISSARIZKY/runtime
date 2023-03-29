@@ -1,10 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.Versioning;
 using System.Text;
@@ -19,6 +19,7 @@ namespace System.ComponentModel
     /// to the test string itself, since mask literals cannot be modified (i.e: replacing on a literal position
     /// will actually replace on the nearest edit position forward).
     /// </summary>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] // needed by Clone() to preserve derived ctors
     public class MaskedTextProvider : ICloneable
     {
         ///
@@ -65,7 +66,7 @@ namespace System.ComponentModel
         /// This structure describes some constraints and properties of a character in the test string, as specified
         /// in the mask.
         /// </summary>
-        private class CharDescriptor
+        private sealed class CharDescriptor
         {
             // The position the character holds in the mask string. Required for testing the character against the mask.
             public int MaskPosition;
@@ -73,7 +74,7 @@ namespace System.ComponentModel
             // The char case conversion specified in the mask. Required for formatting the string when requested.
             public CaseConversion CaseConversion;
 
-            // The char type according to the mask language indentifiers. (Separator, Editable char...).
+            // The char type according to the mask language identifiers. (Separator, Editable char...).
             // Required for validating the input char.
             public CharType CharType;
 
@@ -87,17 +88,11 @@ namespace System.ComponentModel
                 CharType = charType;
             }
 
-            public override string ToString()
-            {
-                return string.Format(
-                                        CultureInfo.InvariantCulture,
-                                        "MaskPosition[{0}] <CaseConversion.{1}><CharType.{2}><IsAssigned: {3}",
-                                        MaskPosition,
-                                        CaseConversion,
-                                        CharType,
-                                        IsAssigned
-                                     );
-            }
+            public override string ToString() =>
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    stackalloc char[256],
+                    $"MaskPosition[{MaskPosition}] <CaseConversion.{CaseConversion}><CharType.{CharType}><IsAssigned: {IsAssigned}");
         }
 
         //// class data.
@@ -179,7 +174,7 @@ namespace System.ComponentModel
         /// 'culture' is used to set the separator characters to the corresponding locale character; if null, the current
         ///      culture is used.
         /// </summary>
-        public MaskedTextProvider(string mask, CultureInfo culture)
+        public MaskedTextProvider(string mask, CultureInfo? culture)
             : this(mask, culture, DEFAULT_ALLOW_PROMPT, DEFAULT_PROMPT_CHAR, NULL_PASSWORD_CHAR, false)
         {
         }
@@ -190,7 +185,7 @@ namespace System.ComponentModel
         ///      culture is used.
         /// 'restrictToAscii' specifies whether the input characters should be restricted to ASCII characters only.
         /// </summary>
-        public MaskedTextProvider(string mask, CultureInfo culture, bool restrictToAscii)
+        public MaskedTextProvider(string mask, CultureInfo? culture, bool restrictToAscii)
             : this(mask, culture, DEFAULT_ALLOW_PROMPT, DEFAULT_PROMPT_CHAR, NULL_PASSWORD_CHAR, restrictToAscii)
         {
         }
@@ -210,7 +205,7 @@ namespace System.ComponentModel
         /// 'passwordChar' specifies the character to be used in the password string.
         /// 'allowPromptAsInput' specifies whether the prompt character should be accepted as a valid input or not.
         /// </summary>
-        public MaskedTextProvider(string mask, CultureInfo culture, char passwordChar, bool allowPromptAsInput)
+        public MaskedTextProvider(string mask, CultureInfo? culture, char passwordChar, bool allowPromptAsInput)
             : this(mask, culture, allowPromptAsInput, DEFAULT_PROMPT_CHAR, passwordChar, false)
         {
         }
@@ -224,12 +219,9 @@ namespace System.ComponentModel
         /// 'passwordChar' specifies the character to be used in the password string.
         /// 'restrictToAscii' specifies whether the input characters should be restricted to ASCII characters only.
         /// </summary>
-        public MaskedTextProvider(string mask, CultureInfo culture, bool allowPromptAsInput, char promptChar, char passwordChar, bool restrictToAscii)
+        public MaskedTextProvider(string mask, CultureInfo? culture, bool allowPromptAsInput, char promptChar, char passwordChar, bool restrictToAscii)
         {
-            if (string.IsNullOrEmpty(mask))
-            {
-                throw new ArgumentException(SR.MaskedTextProviderMaskNullOrEmpty, nameof(mask));
-            }
+            ArgumentException.ThrowIfNullOrEmpty(mask);
 
             foreach (char c in mask)
             {
@@ -239,10 +231,7 @@ namespace System.ComponentModel
                 }
             }
 
-            if (culture == null)
-            {
-                culture = CultureInfo.CurrentCulture;
-            }
+            culture ??= CultureInfo.CurrentCulture;
 
             _flagState = default;
 
@@ -266,10 +255,7 @@ namespace System.ComponentModel
                 }
 
                 // Last resort use invariant culture.
-                if (Culture == null)
-                {
-                    Culture = CultureInfo.InvariantCulture;
-                }
+                Culture ??= CultureInfo.InvariantCulture;
             }
             else
             {
@@ -299,6 +285,8 @@ namespace System.ComponentModel
         /// Initializes the test string according to the mask and populates the character descriptor table
         /// (stringDescriptor).
         /// </summary>
+        [MemberNotNull(nameof(_testString))]
+        [MemberNotNull(nameof(_stringDescriptor))]
         private void Initialize()
         {
             _testString = new StringBuilder();
@@ -367,7 +355,7 @@ namespace System.ComponentModel
                             caseConversion = CaseConversion.ToUpper;
                             continue;
 
-                        case '|':   // no convertion performed on the chars that follow.
+                        case '|':   // no conversion performed on the chars that follow.
                             caseConversion = CaseConversion.None;
                             continue;
 
@@ -496,7 +484,7 @@ namespace System.ComponentModel
                     AsciiOnly
                 };
 
-                clonedProvider = Activator.CreateInstance(providerType, parameters) as MaskedTextProvider;
+                clonedProvider = (Activator.CreateInstance(providerType, parameters) as MaskedTextProvider)!;
             }
 
             clonedProvider.ResetOnPrompt = false;
@@ -823,9 +811,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool Add(char input)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return Add(input, out dummyVar, out dummyVar2);
+            return Add(input, out _, out _);
         }
 
         /// <summary>
@@ -873,9 +859,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool Add(string input)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return Add(input, out dummyVar, out dummyVar2);
+            return Add(input, out _, out _);
         }
 
         /// <summary>
@@ -888,10 +872,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool Add(string input, out int testPosition, out MaskedTextResultHint resultHint)
         {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
+            ArgumentNullException.ThrowIfNull(input);
 
             testPosition = LastAssignedPosition + 1;
 
@@ -910,8 +891,7 @@ namespace System.ComponentModel
         /// </summary>
         public void Clear()
         {
-            MaskedTextResultHint dummyHint;
-            Clear(out dummyHint);
+            Clear(out _);
         }
 
         /// <summary>
@@ -1226,7 +1206,6 @@ namespace System.ComponentModel
             if (position < 0 || position >= _testString.Length)
             {
                 return false;
-                //throw new ArgumentOutOfRangeException("position");
             }
 
             return InsertAt(input.ToString(), position);
@@ -1252,9 +1231,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool InsertAt(string input, int position)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return InsertAt(input, position, out dummyVar, out dummyVar2);
+            return InsertAt(input, position, out _, out _);
         }
 
         /// <summary>
@@ -1267,17 +1244,13 @@ namespace System.ComponentModel
         /// </summary>
         public bool InsertAt(string input, int position, out int testPosition, out MaskedTextResultHint resultHint)
         {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
+            ArgumentNullException.ThrowIfNull(input);
 
             if (position < 0 || position >= _testString.Length)
             {
                 testPosition = position;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("position");
             }
 
             return InsertAtInt(input, position, out testPosition, out resultHint, false);
@@ -1409,27 +1382,11 @@ namespace System.ComponentModel
         }
 
         /// <summary>
-        /// Helper function for alphanumeric char in ascii mode.
-        /// </summary>
-        private static bool IsAciiAlphanumeric(char c)
-        {
-            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
-        }
-
-        /// <summary>
         /// Helper function for testing mask language alphanumeric identifiers.
         /// </summary>
         private static bool IsAlphanumeric(char c)
         {
             return char.IsLetter(c) || char.IsDigit(c);
-        }
-
-        /// <summary>
-        /// Helper function for testing letter char in ascii mode.
-        /// </summary>
-        private static bool IsAsciiLetter(char c)
-        {
-            return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
         }
 
         /// <summary>
@@ -1441,7 +1398,6 @@ namespace System.ComponentModel
             if (position < 0 || position >= _testString.Length)
             {
                 return false;
-                //throw new ArgumentOutOfRangeException("position");
             }
 
             CharDescriptor chDex = _stringDescriptor[position];
@@ -1456,7 +1412,6 @@ namespace System.ComponentModel
             if (position < 0 || position >= _testString.Length)
             {
                 return false;
-                //throw new ArgumentOutOfRangeException("position");
             }
 
             CharDescriptor chDex = _stringDescriptor[position];
@@ -1513,9 +1468,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool Remove()
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return Remove(out dummyVar, out dummyVar2);
+            return Remove(out _, out _);
         }
 
         /// <summary>
@@ -1561,9 +1514,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool RemoveAt(int startPosition, int endPosition)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return RemoveAt(startPosition, endPosition, out dummyVar, out dummyVar2);
+            return RemoveAt(startPosition, endPosition, out _, out _);
         }
 
         /// <summary>
@@ -1581,7 +1532,6 @@ namespace System.ComponentModel
                 testPosition = endPosition;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("endPosition");
             }
 
             if (startPosition < 0 || startPosition > endPosition)
@@ -1589,7 +1539,6 @@ namespace System.ComponentModel
                 testPosition = startPosition;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("startPosition");
             }
 
             return RemoveAtInt(startPosition, endPosition, out testPosition, out resultHint, /*testOnly*/ false);
@@ -1727,9 +1676,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool Replace(char input, int position)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return Replace(input, position, out dummyVar, out dummyVar2);
+            return Replace(input, position, out _, out _);
         }
 
         /// <summary>
@@ -1747,7 +1694,6 @@ namespace System.ComponentModel
                 testPosition = position;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("position");
             }
 
             testPosition = position;
@@ -1792,7 +1738,6 @@ namespace System.ComponentModel
                 testPosition = endPosition;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("endPosition");
             }
 
             if (startPosition < 0 || startPosition > endPosition)
@@ -1800,7 +1745,6 @@ namespace System.ComponentModel
                 testPosition = startPosition;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("startPosition");
             }
 
             if (startPosition == endPosition)
@@ -1820,9 +1764,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool Replace(string input, int position)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return Replace(input, position, out dummyVar, out dummyVar2);
+            return Replace(input, position, out _, out _);
         }
 
         /// <summary>
@@ -1836,17 +1778,13 @@ namespace System.ComponentModel
         /// </summary>
         public bool Replace(string input, int position, out int testPosition, out MaskedTextResultHint resultHint)
         {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
+            ArgumentNullException.ThrowIfNull(input);
 
             if (position < 0 || position >= _testString.Length)
             {
                 testPosition = position;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("position");
             }
 
             if (input.Length == 0) // remove the character at position.
@@ -1875,17 +1813,13 @@ namespace System.ComponentModel
         /// </summary>
         public bool Replace(string input, int startPosition, int endPosition, out int testPosition, out MaskedTextResultHint resultHint)
         {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
+            ArgumentNullException.ThrowIfNull(input);
 
             if (endPosition >= _testString.Length)
             {
                 testPosition = endPosition;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("endPosition");
             }
 
             if (startPosition < 0 || startPosition > endPosition)
@@ -1893,7 +1827,6 @@ namespace System.ComponentModel
                 testPosition = startPosition;
                 resultHint = MaskedTextResultHint.PositionOutOfRange;
                 return false;
-                //throw new ArgumentOutOfRangeException("startPosition");
             }
 
             if (input.Length == 0) // remove character at position.
@@ -1901,7 +1834,7 @@ namespace System.ComponentModel
                 return RemoveAt(startPosition, endPosition, out testPosition, out resultHint);
             }
 
-            // If replacing the entire text with a same-lenght text, we are just setting (not replacing) the test string to the new value;
+            // If replacing the entire text with a same-length text, we are just setting (not replacing) the test string to the new value;
             // in this case we just call SetString.
             // If the text length is different than the specified range we would need to remove or insert characters; there are three possible
             // cases as follows:
@@ -2048,10 +1981,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool Set(string input)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-
-            return Set(input, out dummyVar, out dummyVar2);
+            return Set(input, out _, out _);
         }
 
         /// <summary>
@@ -2064,12 +1994,8 @@ namespace System.ComponentModel
         /// </summary>
         public bool Set(string input, out int testPosition, out MaskedTextResultHint resultHint)
         {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
+            ArgumentNullException.ThrowIfNull(input);
 
-            resultHint = MaskedTextResultHint.Unknown;
             testPosition = 0;
 
             if (input.Length == 0) // Clearing the input text.
@@ -2336,7 +2262,7 @@ namespace System.ComponentModel
                         resultHint = MaskedTextResultHint.LetterExpected;
                         return false;
                     }
-                    if (!IsAsciiLetter(input) && AsciiOnly)
+                    if (!char.IsAsciiLetter(input) && AsciiOnly)
                     {
                         resultHint = MaskedTextResultHint.AsciiCharacterExpected;
                         return false;
@@ -2349,7 +2275,7 @@ namespace System.ComponentModel
                         resultHint = MaskedTextResultHint.LetterExpected;
                         return false;
                     }
-                    if (!IsAsciiLetter(input) && AsciiOnly)
+                    if (!char.IsAsciiLetter(input) && AsciiOnly)
                     {
                         resultHint = MaskedTextResultHint.AsciiCharacterExpected;
                         return false;
@@ -2378,7 +2304,7 @@ namespace System.ComponentModel
                         resultHint = MaskedTextResultHint.AlphanumericCharacterExpected;
                         return false;
                     }
-                    if (!IsAciiAlphanumeric(input) && AsciiOnly)
+                    if (!char.IsAsciiLetterOrDigit(input) && AsciiOnly)
                     {
                         resultHint = MaskedTextResultHint.AsciiCharacterExpected;
                         return false;
@@ -2391,7 +2317,7 @@ namespace System.ComponentModel
                         resultHint = MaskedTextResultHint.AlphanumericCharacterExpected;
                         return false;
                     }
-                    if (!IsAciiAlphanumeric(input) && AsciiOnly)
+                    if (!char.IsAsciiLetterOrDigit(input) && AsciiOnly)
                     {
                         resultHint = MaskedTextResultHint.AsciiCharacterExpected;
                         return false;
@@ -2508,7 +2434,7 @@ namespace System.ComponentModel
 
             // If any char is actually accepted, then the hint is success, otherwise whatever the last character result is.
             // Need a temp variable for
-            MaskedTextResultHint tempHint = resultHint;
+            MaskedTextResultHint tempHint;
 
             foreach (char ch in input)
             {
@@ -2648,13 +2574,11 @@ namespace System.ComponentModel
             if (startPosition < 0)
             {
                 startPosition = 0;
-                //throw new ArgumentOutOfRangeException("startPosition");
             }
 
             if (startPosition >= _testString.Length)
             {
                 return string.Empty;
-                //throw new ArgumentOutOfRangeException("startPosition");
             }
 
             int maxLength = _testString.Length - startPosition;
@@ -2662,7 +2586,6 @@ namespace System.ComponentModel
             if (length > maxLength)
             {
                 length = maxLength;
-                //throw new ArgumentOutOfRangeException("length");
             }
 
             if (!IsPassword || ignorePasswordChar) // we may not need to format the text...
@@ -2750,8 +2673,6 @@ namespace System.ComponentModel
         /// </summary>
         public bool VerifyChar(char input, int position, out MaskedTextResultHint hint)
         {
-            hint = MaskedTextResultHint.NoEffect;
-
             if (position < 0 || position >= _testString.Length)
             {
                 hint = MaskedTextResultHint.PositionOutOfRange;
@@ -2779,9 +2700,7 @@ namespace System.ComponentModel
         /// </summary>
         public bool VerifyString(string input)
         {
-            int dummyVar;
-            MaskedTextResultHint dummyVar2;
-            return VerifyString(input, out dummyVar, out dummyVar2);
+            return VerifyString(input, out _, out _);
         }
 
         /// <summary>

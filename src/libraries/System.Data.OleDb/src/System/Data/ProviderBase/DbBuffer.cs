@@ -12,17 +12,13 @@ namespace System.Data.ProviderBase
     // so that when debugging, we can tell the difference between one DbBuffer and another
     internal abstract class DbBuffer : SafeHandle
     {
-        internal const int LMEM_FIXED = 0x0000;
-        internal const int LMEM_MOVEABLE = 0x0002;
-        internal const int LMEM_ZEROINIT = 0x0040;
-
         private readonly int _bufferLength;
 
         private DbBuffer(int initialSize, bool zeroBuffer) : base(IntPtr.Zero, true)
         {
             if (0 < initialSize)
             {
-                int flags = ((zeroBuffer) ? LMEM_ZEROINIT : LMEM_FIXED);
+                uint flags = ((zeroBuffer) ? Interop.Kernel32.LMEM_ZEROINIT : Interop.Kernel32.LMEM_FIXED);
 
                 _bufferLength = initialSize;
                 RuntimeHelpers.PrepareConstrainedRegions();
@@ -30,7 +26,7 @@ namespace System.Data.ProviderBase
                 { }
                 finally
                 {
-                    base.handle = SafeNativeMethods.LocalAlloc(flags, (IntPtr)initialSize);
+                    base.handle = Interop.Kernel32.LocalAlloc(flags, (nuint)initialSize);
                 }
                 if (IntPtr.Zero == base.handle)
                 {
@@ -47,7 +43,7 @@ namespace System.Data.ProviderBase
         {
         }
 
-        private int BaseOffset { get { return 0; } }
+        private const int BaseOffset = 0;
 
         public override bool IsInvalid
         {
@@ -69,7 +65,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, 2 * length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
 
             string? value = null;
             bool mustRelease = false;
@@ -127,7 +123,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != destination, "null destination");
             Debug.Assert(startIndex + length <= destination.Length, "destination too small");
 
@@ -160,7 +156,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, 2 * length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != destination, "null destination");
             Debug.Assert(startIndex + length <= destination.Length, "destination too small");
 
@@ -219,7 +215,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, 2 * length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != destination, "null destination");
             Debug.Assert(startIndex + length <= destination.Length, "destination too small");
 
@@ -271,7 +267,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, 4 * length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != destination, "null destination");
             Debug.Assert(startIndex + length <= destination.Length, "destination too small");
 
@@ -323,7 +319,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             ValidateCheck(offset, IntPtr.Size);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
 
             IntPtr value;
             bool mustRelease = false;
@@ -348,7 +344,7 @@ namespace System.Data.ProviderBase
         internal unsafe float ReadSingle(int offset)
         {
             int value = ReadInt32(offset);
-            return *(float*)&value;
+            return BitConverter.Int32BitsToSingle(value);
         }
 
         protected override bool ReleaseHandle()
@@ -358,7 +354,7 @@ namespace System.Data.ProviderBase
             base.handle = IntPtr.Zero;
             if (IntPtr.Zero != ptr)
             {
-                SafeNativeMethods.LocalFree(ptr);
+                Interop.Kernel32.LocalFree(ptr);
             }
             return true;
         }
@@ -368,7 +364,7 @@ namespace System.Data.ProviderBase
             Debug.Assert(null != structure, "null structure");
             offset += BaseOffset;
             ValidateCheck(offset, Marshal.SizeOf(structure.GetType()));
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
 
             bool mustRelease = false;
             RuntimeHelpers.PrepareConstrainedRegions();
@@ -416,7 +412,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != source, "null source");
             Debug.Assert(startIndex + length <= source.Length, "source too small");
 
@@ -442,7 +438,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, 2 * length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != source, "null source");
             Debug.Assert(startIndex + length <= source.Length, "source too small");
 
@@ -497,7 +493,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, 2 * length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != source, "null source");
             Debug.Assert(startIndex + length <= source.Length, "source too small");
 
@@ -547,7 +543,7 @@ namespace System.Data.ProviderBase
         {
             offset += BaseOffset;
             Validate(offset, 4 * length);
-            Debug.Assert(0 == offset % ADP.PtrSize, "invalid alignment");
+            Debug.Assert(0 == offset % IntPtr.Size, "invalid alignment");
             Debug.Assert(null != source, "null source");
             Debug.Assert(startIndex + length <= source.Length, "source too small");
 
@@ -619,7 +615,7 @@ namespace System.Data.ProviderBase
 
         internal unsafe void WriteSingle(int offset, float value)
         {
-            WriteInt32(offset, *(int*)&value);
+            WriteInt32(offset, BitConverter.SingleToInt32Bits(value));
         }
 
         internal Guid ReadGuid(int offset)

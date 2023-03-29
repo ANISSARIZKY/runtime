@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Encodings.Web;
 
 namespace System.Text.Json
@@ -15,13 +16,18 @@ namespace System.Text.Json
     /// </remarks>
     public readonly struct JsonEncodedText : IEquatable<JsonEncodedText>
     {
-        private readonly byte[] _utf8Value;
-        private readonly string _value;
+        internal readonly byte[] _utf8Value;
+        internal readonly string _value;
 
         /// <summary>
         /// Returns the UTF-8 encoded representation of the pre-encoded JSON text.
         /// </summary>
         public ReadOnlySpan<byte> EncodedUtf8Bytes => _utf8Value;
+
+        /// <summary>
+        /// Returns the UTF-16 encoded representation of the pre-encoded JSON text as a <see cref="string"/>.
+        /// </summary>
+        public string Value => _value ?? string.Empty;
 
         private JsonEncodedText(byte[] utf8Value)
         {
@@ -44,8 +50,10 @@ namespace System.Text.Json
         /// </exception>
         public static JsonEncodedText Encode(string value, JavaScriptEncoder? encoder = null)
         {
-            if (value == null)
-                throw new ArgumentNullException(nameof(value));
+            if (value is null)
+            {
+                ThrowHelper.ThrowArgumentNullException(nameof(value));
+            }
 
             return Encode(value.AsSpan(), encoder);
         }
@@ -148,7 +156,7 @@ namespace System.Text.Json
         /// <remarks>
         /// If <paramref name="obj"/> is null, the method returns false.
         /// </remarks>
-        public override bool Equals(object? obj)
+        public override bool Equals([NotNullWhen(true)] object? obj)
         {
             if (obj is JsonEncodedText encodedText)
             {

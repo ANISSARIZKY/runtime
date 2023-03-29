@@ -15,7 +15,6 @@ namespace System.ComponentModel.Composition.AttributedModel
     public class AttributedModelDiscoveryTests
     {
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void CreatePartDefinition_TypeWithExports_ShouldHaveMultipleExports()
         {
             var definition = CreateDefinition(typeof(PublicComponentWithPublicExports));
@@ -34,7 +33,6 @@ namespace System.ComponentModel.Composition.AttributedModel
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void CreatePartDefinition_TypeWithImports_ShouldHaveMultipleImports()
         {
             var definition = CreateDefinition(typeof(PublicImportsExpectingPublicExports));
@@ -118,14 +116,14 @@ namespace System.ComponentModel.Composition.AttributedModel
 
         [PartMetadata("BaseOnlyName", 1)]
         [PartMetadata("OverrideName", 2)]
-        public class BasePartWithMetdata
+        public class BasePartWithMetadata
         {
 
         }
 
         [PartMetadata("DerivedOnlyName", 3)]
         [PartMetadata("OverrideName", 4)]
-        public class DerivedPartWithMetadata : BasePartWithMetdata
+        public class DerivedPartWithMetadata : BasePartWithMetadata
         {
 
         }
@@ -157,7 +155,6 @@ namespace System.ComponentModel.Composition.AttributedModel
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void CreatePartDefinition_OneMarkedConstructorsAsPartTypeArgument_ShouldSetConstructorToMarked()
         {
             var definition = CreateDefinition(typeof(SimpleConstructorInjectedObject));
@@ -169,7 +166,6 @@ namespace System.ComponentModel.Composition.AttributedModel
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void CreatePartDefinition_OneDefaultConstructorAsPartTypeArgument_ShouldSetConstructorToDefault()
         {
             var definition = CreateDefinition(typeof(PublicComponentWithPublicExports));
@@ -182,7 +178,6 @@ namespace System.ComponentModel.Composition.AttributedModel
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void CreatePartDefinition_OneMarkedAndOneDefaultConstructorsAsPartTypeArgument_ShouldSetConstructorToMarked()
         {
             var definition = CreateDefinition(typeof(ClassWithOneMarkedAndOneDefaultConstructor));

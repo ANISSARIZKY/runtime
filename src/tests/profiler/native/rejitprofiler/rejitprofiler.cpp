@@ -120,6 +120,8 @@ HRESULT ReJITProfiler::Shutdown()
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::JITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock)
 {
+    SHUTDOWNGUARD();
+
     return S_OK;
 }
 
@@ -235,12 +237,16 @@ bool ReJITProfiler::FunctionSeen(FunctionID functionId)
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::JITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock)
 {
+    SHUTDOWNGUARD();
+
     FunctionSeen(functionId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL* pfShouldInline)
 {
+    SHUTDOWNGUARD();
+
     AddInlining(callerId, calleeId);
     *pfShouldInline = TRUE;
 
@@ -250,6 +256,8 @@ HRESULT STDMETHODCALLTYPE ReJITProfiler::JITInlining(FunctionID callerId, Functi
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::JITCachedFunctionSearchFinished(FunctionID functionId, COR_PRF_JIT_CACHE result)
 {
+    SHUTDOWNGUARD();
+
     if (result == COR_PRF_CACHED_FUNCTION_FOUND)
     {
         // FunctionSeen will return true if it's a method we're tracking, and false otherwise
@@ -279,12 +287,19 @@ HRESULT STDMETHODCALLTYPE ReJITProfiler::JITCachedFunctionSearchFinished(Functio
         COR_PRF_METHOD method;
         while (pEnum->Next(1, &method, NULL) == S_OK)
         {
-            FunctionID inlinerFuncId = GetFunctionIDFromToken(method.moduleId, method.methodId);
+            FunctionID inlinerFuncId = GetFunctionIDFromToken(method.moduleId, method.methodId, true);
 
-            // GetFunctionIDFromToken doesn't handle generics, will return NULL
+            // GetFunctionIDFromToken doesn't handle generics or not yet loaded methods, will return NULL
             if (inlinerFuncId != mdTokenNil)
             {
                 AddInlining(inlinerFuncId, functionId);
+            }
+            else
+            {
+                String calleeName = GetFunctionIDName(functionId);
+                String moduleName = GetModuleIDName(GetModuleIDForFunction(functionId));
+                String inlinerModuleId = GetModuleIDName(method.moduleId);
+                INFO(L"Inlining occurred, but name could not be resolved! Inliner=ModuleId=" << inlinerModuleId << L" Token=" << std::hex << method.methodId << L",  Inlinee=" << calleeName << L" Inlinee module name=" << moduleName);
             }
         }
     }
@@ -294,6 +309,8 @@ HRESULT STDMETHODCALLTYPE ReJITProfiler::JITCachedFunctionSearchFinished(Functio
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::ReJITCompilationStarted(FunctionID functionId, ReJITID rejitId, BOOL fIsSafeToBlock)
 {
+    SHUTDOWNGUARD();
+
     INFO(L"Saw a ReJIT for function " << GetFunctionIDName(functionId));
     _rejits++;
     return S_OK;
@@ -301,7 +318,9 @@ HRESULT STDMETHODCALLTYPE ReJITProfiler::ReJITCompilationStarted(FunctionID func
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::GetReJITParameters(ModuleID moduleId, mdMethodDef methodId, ICorProfilerFunctionControl* pFunctionControl)
 {
-    INFO(L"Starting to build IL for method " << GetFunctionIDName(GetFunctionIDFromToken(moduleId, methodId)));
+    SHUTDOWNGUARD();
+
+    INFO(L"Starting to build IL for method " << GetFunctionIDName(GetFunctionIDFromToken(moduleId, methodId, false)));
     COMPtrHolder<IUnknown> pUnk;
     HRESULT hr = _profInfo10->GetModuleMetaData(moduleId, ofWrite, IID_IMetaDataEmit2, &pUnk);
     if (FAILED(hr))
@@ -367,12 +386,14 @@ HRESULT STDMETHODCALLTYPE ReJITProfiler::GetReJITParameters(ModuleID moduleId, m
         return hr;
     }
 
-    INFO(L"IL build sucessful for methodDef=" << std::hex << methodId);
+    INFO(L"IL build successful for methodDef=" << std::hex << methodId);
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::ReJITCompilationFinished(FunctionID functionId, ReJITID rejitId, HRESULT hrStatus, BOOL fIsSafeToBlock)
 {
+    SHUTDOWNGUARD();
+
     ULONG rejitIDsCount;
     HRESULT hr = pCorProfilerInfo->GetReJITIDs(functionId, 0, &rejitIDsCount, NULL);
     if (FAILED(hr))
@@ -394,6 +415,8 @@ HRESULT STDMETHODCALLTYPE ReJITProfiler::ReJITCompilationFinished(FunctionID fun
 
 HRESULT STDMETHODCALLTYPE ReJITProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, FunctionID functionId, HRESULT hrStatus)
 {
+    SHUTDOWNGUARD();
+
     _failures++;
 
     FAIL(L"ReJIT error reported hr=" << std::hex << hrStatus);
@@ -428,13 +451,21 @@ void ReJITProfiler::AddInlining(FunctionID inliner, FunctionID inlinee)
     INFO(L"Inlining occurred! Inliner=" << GetFunctionIDName(inliner) << L" Inlinee=" << calleeName << L" Inlinee module name=" << moduleName);
 }
 
-FunctionID ReJITProfiler::GetFunctionIDFromToken(ModuleID module, mdMethodDef token)
+FunctionID ReJITProfiler::GetFunctionIDFromToken(ModuleID module, mdMethodDef token, bool invalidArgNotFailure)
 {
     HRESULT hr = S_OK;
     FunctionID functionId;
-    if (FAILED(hr = pCorProfilerInfo->GetFunctionFromToken(module,
-                                                           token,
-                                                           &functionId)))
+    hr = pCorProfilerInfo->GetFunctionFromToken(module,
+                                                token,
+                                                &functionId);
+
+    if (invalidArgNotFailure && hr == E_INVALIDARG)
+    {
+        printf("Call to GetFunctionFromToken failed with E_INVALIDARG, this may be caused by the method not yet being loaded\n");
+        return mdTokenNil;
+    }
+
+    if (FAILED(hr))
     {
         printf("Call to GetFunctionFromToken failed with hr=0x%x\n", hr);
         _failures++;

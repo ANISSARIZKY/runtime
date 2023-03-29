@@ -5,13 +5,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Xunit;
 
 namespace System.Net.Test.Common
 {
@@ -91,13 +87,13 @@ namespace System.Net.Test.Common
                     if (sslStream.NegotiatedApplicationProtocol == SslApplicationProtocol.Http2)
                     {
                         // Do not pass original options so the CreateConnectionAsync won't try to do ALPN again.
-                        return connection = await Http2LoopbackServerFactory.Singleton.CreateConnectionAsync(socket, stream, options).ConfigureAwait(false);
+                        return connection = await Http2LoopbackServerFactory.Singleton.CreateConnectionAsync(new SocketWrapper(socket), stream, options).ConfigureAwait(false);
                     }
                     if (sslStream.NegotiatedApplicationProtocol == SslApplicationProtocol.Http11 ||
                         sslStream.NegotiatedApplicationProtocol == default)
                     {
                         // Do not pass original options so the CreateConnectionAsync won't try to do ALPN again.
-                        return connection = await Http11LoopbackServerFactory.Singleton.CreateConnectionAsync(socket, stream, options).ConfigureAwait(false);
+                        return connection = await Http11LoopbackServerFactory.Singleton.CreateConnectionAsync(new SocketWrapper(socket), stream, options).ConfigureAwait(false);
                     }
                     else
                     {
@@ -105,48 +101,26 @@ namespace System.Net.Test.Common
                     }
                 }
 
-                if (_options.ClearTextVersion is null)
+                if (_options.ClearTextVersion == HttpVersion.Version11)
                 {
-                    throw new Exception($"HTTP server does not accept clear text connections, either set '{nameof(HttpAgnosticOptions.UseSsl)}' or set up '{nameof(HttpAgnosticOptions.ClearTextVersion)}' in server options.");
+                    return connection = await Http11LoopbackServerFactory.Singleton.CreateConnectionAsync(new SocketWrapper(socket), stream, options).ConfigureAwait(false);
                 }
-
-                var buffer = new byte[24];
-                var position = 0;
-                while (position < buffer.Length)
+                else if (_options.ClearTextVersion == HttpVersion.Version20)
                 {
-                    var readBytes = await stream.ReadAsync(buffer, position, buffer.Length - position).ConfigureAwait(false);
-                    if (readBytes == 0)
-                    {
-                        break;
-                    }
-                    position += readBytes;
-                }
-                
-                var memory = new Memory<byte>(buffer, 0, position);
-                stream = new ReturnBufferStream(stream, memory);
-
-                var prefix = Text.Encoding.ASCII.GetString(memory.Span);
-                if (prefix == Http2LoopbackConnection.Http2Prefix)
-                {
-                    if (_options.ClearTextVersion == HttpVersion.Version20 || _options.ClearTextVersion == HttpVersion.Unknown)
-                    {
-                        return connection = await Http2LoopbackServerFactory.Singleton.CreateConnectionAsync(socket, stream, options).ConfigureAwait(false);
-                    }
+                    return connection = await Http2LoopbackServerFactory.Singleton.CreateConnectionAsync(new SocketWrapper(socket), stream, options).ConfigureAwait(false);
                 }
                 else
                 {
-                    if (_options.ClearTextVersion == HttpVersion.Version11 || _options.ClearTextVersion == HttpVersion.Unknown)
-                    {
-                        return connection = await Http11LoopbackServerFactory.Singleton.CreateConnectionAsync(socket, stream, options).ConfigureAwait(false);
-                    }
+                    throw new Exception($"Invalid ClearTextVersion={_options.ClearTextVersion} specified");
                 }
-
-                throw new Exception($"HTTP/{_options.ClearTextVersion} server cannot establish connection due to unexpected data: '{prefix}'");
             }
             catch
-            {            
-                connection?.Dispose();
-                connection = null;
+            {
+                if (connection is not null)
+                {
+                    await connection.DisposeAsync();
+                    connection = null;
+                }
                 stream.Dispose();
                 throw;
             }
@@ -161,7 +135,7 @@ namespace System.Net.Test.Common
 
         public override async Task<HttpRequestData> HandleRequestAsync(HttpStatusCode statusCode = HttpStatusCode.OK, IList<HttpHeaderData> headers = null, string content = "")
         {
-            using (GenericLoopbackConnection connection = await EstablishGenericConnectionAsync().ConfigureAwait(false))
+            await using (GenericLoopbackConnection connection = await EstablishGenericConnectionAsync().ConfigureAwait(false))
             {
                 return await connection.HandleRequestAsync(statusCode, headers, content).ConfigureAwait(false);
             }
@@ -169,7 +143,7 @@ namespace System.Net.Test.Common
 
         public override async Task AcceptConnectionAsync(Func<GenericLoopbackConnection, Task> funcAsync)
         {
-            using (GenericLoopbackConnection connection = await EstablishGenericConnectionAsync().ConfigureAwait(false))
+            await using (GenericLoopbackConnection connection = await EstablishGenericConnectionAsync().ConfigureAwait(false))
             {
                 await funcAsync(connection).ConfigureAwait(false);
             }
@@ -194,8 +168,7 @@ namespace System.Net.Test.Common
 
     public class HttpAgnosticOptions : GenericLoopbackOptions
     {
-        // Default null will raise an exception for any clear text protocol version
-        // Use HttpVersion.Unknown to use protocol version detection for clear text.
+        // Must specify either HttpVersion.Version11 or HttpVersion.Version20.
         public Version ClearTextVersion { get; set; }
         public List<SslApplicationProtocol> SslApplicationProtocols { get; set; }
     }
@@ -208,7 +181,7 @@ namespace System.Net.Test.Common
         {
             using (var server = HttpAgnosticLoopbackServer.CreateServer())
             {
-                await funcAsync(server, server.Address).TimeoutAfter(millisecondsTimeout).ConfigureAwait(false);
+                await funcAsync(server, server.Address).WaitAsync(TimeSpan.FromMilliseconds(millisecondsTimeout));
             }
         }
 
@@ -217,7 +190,7 @@ namespace System.Net.Test.Common
             return HttpAgnosticLoopbackServer.CreateServer(CreateOptions(options));
         }
 
-        public override Task<GenericLoopbackConnection> CreateConnectionAsync(Socket socket, Stream stream, GenericLoopbackOptions options = null)
+        public override Task<GenericLoopbackConnection> CreateConnectionAsync(SocketWrapper socket, Stream stream, GenericLoopbackOptions options = null)
         {
             // This method is always unacceptable to call for an agnostic server.
             throw new NotImplementedException("HttpAgnosticLoopbackServerFactory cannot create connection.");
@@ -229,6 +202,7 @@ namespace System.Net.Test.Common
             if (options != null)
             {
                 httpOptions.Address = options.Address;
+                httpOptions.Certificate = options.Certificate;
                 httpOptions.UseSsl = options.UseSsl;
                 httpOptions.SslProtocols = options.SslProtocols;
                 httpOptions.ListenBacklog = options.ListenBacklog;
@@ -240,7 +214,7 @@ namespace System.Net.Test.Common
         {
             using (var server = CreateServer(options))
             {
-                await funcAsync(server, server.Address).TimeoutAfter(millisecondsTimeout).ConfigureAwait(false);
+                await funcAsync(server, server.Address).WaitAsync(TimeSpan.FromMilliseconds(millisecondsTimeout));
             }
         }
 

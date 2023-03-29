@@ -10,7 +10,7 @@ namespace Microsoft.Win32.SafeHandles
 {
     internal sealed class SafeDsaHandle : SafeHandle
     {
-        private SafeDsaHandle() :
+        public SafeDsaHandle() :
             base(IntPtr.Zero, ownsHandle: true)
         {
         }
@@ -37,7 +37,9 @@ namespace Microsoft.Win32.SafeHandles
 
             if (!Interop.Crypto.DsaUpRef(handle))
             {
-                throw Interop.Crypto.CreateOpenSslCryptographicException();
+                Exception e = Interop.Crypto.CreateOpenSslCryptographicException();
+                safeHandle.Dispose();
+                throw e;
             }
 
             safeHandle.SetHandle(handle);

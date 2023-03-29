@@ -1432,7 +1432,7 @@ namespace SerializationTestTypes
 
         public bool Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         public IEnumerator<DC> GetEnumerator()
@@ -1518,7 +1518,7 @@ namespace SerializationTestTypes
 
         public bool Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         public IEnumerator<DC> GetEnumerator()
@@ -1604,7 +1604,7 @@ namespace SerializationTestTypes
 
         public bool Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         public IEnumerator<DC> GetEnumerator()
@@ -1690,7 +1690,7 @@ namespace SerializationTestTypes
 
         bool ICollection<DC>.Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<DC> IEnumerable<DC>.GetEnumerator()
@@ -1776,7 +1776,7 @@ namespace SerializationTestTypes
 
         bool ICollection<DC>.Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<DC> IEnumerable<DC>.GetEnumerator()
@@ -1862,7 +1862,7 @@ namespace SerializationTestTypes
 
         bool ICollection<DC>.Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<DC> IEnumerable<DC>.GetEnumerator()
@@ -1948,7 +1948,7 @@ namespace SerializationTestTypes
 
         bool ICollection<PublicDCClassPrivateDM>.Remove(PublicDCClassPrivateDM item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<PublicDCClassPrivateDM> IEnumerable<PublicDCClassPrivateDM>.GetEnumerator()
@@ -2034,7 +2034,7 @@ namespace SerializationTestTypes
 
         bool ICollection<PrivateDC>.Remove(PrivateDC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<PrivateDC> IEnumerable<PrivateDC>.GetEnumerator()
@@ -2094,7 +2094,7 @@ namespace SerializationTestTypes
 
         public bool Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         public IEnumerator<DC> GetEnumerator()
@@ -2153,7 +2153,7 @@ namespace SerializationTestTypes
 
         public bool Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         public IEnumerator<DC> GetEnumerator()
@@ -2212,7 +2212,7 @@ namespace SerializationTestTypes
 
         public bool Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         public IEnumerator<DC> GetEnumerator()
@@ -2271,7 +2271,7 @@ namespace SerializationTestTypes
 
         bool ICollection<DC>.Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<DC> IEnumerable<DC>.GetEnumerator()
@@ -2330,7 +2330,7 @@ namespace SerializationTestTypes
 
         bool ICollection<DC>.Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<DC> IEnumerable<DC>.GetEnumerator()
@@ -2389,7 +2389,7 @@ namespace SerializationTestTypes
 
         bool ICollection<DC>.Remove(DC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<DC> IEnumerable<DC>.GetEnumerator()
@@ -2448,7 +2448,7 @@ namespace SerializationTestTypes
 
         bool ICollection<PrivateDC>.Remove(PrivateDC item)
         {
-            return _internalList.Remove(item); ;
+            return _internalList.Remove(item);
         }
 
         IEnumerator<PrivateDC> IEnumerable<PrivateDC>.GetEnumerator()
@@ -3245,7 +3245,7 @@ namespace SerializationTestTypes
             }
             set
             {
-                _data[key] = value; ;
+                _data[key] = value;
             }
         }
 
@@ -3343,7 +3343,7 @@ namespace SerializationTestTypes
             }
             set
             {
-                _data[key] = value; ;
+                _data[key] = value;
             }
         }
 
@@ -3441,7 +3441,7 @@ namespace SerializationTestTypes
             }
             set
             {
-                _data[key] = value; ;
+                _data[key] = value;
             }
         }
 
@@ -3536,7 +3536,7 @@ namespace SerializationTestTypes
             }
             set
             {
-                _data[key] = value; ;
+                _data[key] = value;
             }
         }
 
@@ -3684,7 +3684,7 @@ namespace SerializationTestTypes
             }
             set
             {
-                _data[key] = value; ;
+                _data[key] = value;
             }
         }
 
@@ -3844,7 +3844,7 @@ namespace SerializationTestTypes
             }
             set
             {
-                _data[key] = value; ;
+                _data[key] = value;
             }
         }
 
@@ -4147,7 +4147,7 @@ namespace SerializationTestTypes
 
     public class IReadWriteXmlWriteBinHex_EqualityDefined : IXmlSerializable
     {
-        private byte[] _bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+        private byte[] _bits = "hello world"u8.ToArray();
 
         public System.Xml.Schema.XmlSchema GetSchema()
         {
@@ -4176,7 +4176,7 @@ namespace SerializationTestTypes
 
         public virtual void WriteXml(System.Xml.XmlWriter writer)
         {
-            byte[] bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+            byte[] bits = "hello world"u8.ToArray();
             writer.WriteBinHex(bits, 0, bits.Length);
         }
 
@@ -4202,7 +4202,7 @@ namespace SerializationTestTypes
 
     internal class PrivateIXmlSerializables : IXmlSerializable
     {
-        private byte[] _bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+        private byte[] _bits = "hello world"u8.ToArray();
 
         public System.Xml.Schema.XmlSchema GetSchema()
         {
@@ -4231,7 +4231,7 @@ namespace SerializationTestTypes
 
         public virtual void WriteXml(System.Xml.XmlWriter writer)
         {
-            byte[] bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+            byte[] bits = "hello world"u8.ToArray();
             writer.WriteBinHex(bits, 0, bits.Length);
         }
     }
@@ -4241,7 +4241,7 @@ namespace SerializationTestTypes
         private PrivateDefaultCtorIXmlSerializables() { }
         public PrivateDefaultCtorIXmlSerializables(bool init) { }
 
-        private byte[] _bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+        private byte[] _bits = "hello world"u8.ToArray();
 
         public System.Xml.Schema.XmlSchema GetSchema()
         {
@@ -4270,7 +4270,7 @@ namespace SerializationTestTypes
 
         public virtual void WriteXml(System.Xml.XmlWriter writer)
         {
-            byte[] bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+            byte[] bits = "hello world"u8.ToArray();
             writer.WriteBinHex(bits, 0, bits.Length);
         }
     }
@@ -4278,7 +4278,7 @@ namespace SerializationTestTypes
     [XmlSchemaProvider("MySchema")]
     public class PublicIXmlSerializablesWithPublicSchemaProvider : IXmlSerializable
     {
-        private byte[] _bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+        private byte[] _bits = "hello world"u8.ToArray();
 
         public System.Xml.Schema.XmlSchema GetSchema()
         {
@@ -4312,7 +4312,7 @@ namespace SerializationTestTypes
 
         public virtual void WriteXml(System.Xml.XmlWriter writer)
         {
-            byte[] bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+            byte[] bits = "hello world"u8.ToArray();
             writer.WriteBinHex(bits, 0, bits.Length);
         }
     }
@@ -4320,7 +4320,7 @@ namespace SerializationTestTypes
     [XmlSchemaProvider("MySchema")]
     public class PublicExplicitIXmlSerializablesWithPublicSchemaProvider : IXmlSerializable
     {
-        private byte[] _bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+        private byte[] _bits = "hello world"u8.ToArray();
 
         System.Xml.Schema.XmlSchema IXmlSerializable.GetSchema()
         {
@@ -4354,7 +4354,7 @@ namespace SerializationTestTypes
 
         void IXmlSerializable.WriteXml(System.Xml.XmlWriter writer)
         {
-            byte[] bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+            byte[] bits = "hello world"u8.ToArray();
             writer.WriteBinHex(bits, 0, bits.Length);
         }
     }
@@ -4362,7 +4362,7 @@ namespace SerializationTestTypes
     [XmlSchemaProvider("MySchema")]
     public class PublicIXmlSerializablesWithPrivateSchemaProvider : IXmlSerializable
     {
-        private byte[] _bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+        private byte[] _bits = "hello world"u8.ToArray();
 
         public System.Xml.Schema.XmlSchema GetSchema()
         {
@@ -4396,7 +4396,7 @@ namespace SerializationTestTypes
 
         public virtual void WriteXml(System.Xml.XmlWriter writer)
         {
-            byte[] bits = System.Text.Encoding.UTF8.GetBytes("hello world");
+            byte[] bits = "hello world"u8.ToArray();
             writer.WriteBinHex(bits, 0, bits.Length);
         }
     }
@@ -4995,7 +4995,7 @@ namespace SerializationTestTypes
     }
 
     [CollectionDataContract(IsReference = true)]
-    public class CDC_Possitive : IList<string>
+    public class CDC_Positive : IList<string>
     {
         private List<string> _innerList = new List<string>();
 
@@ -5071,9 +5071,9 @@ namespace SerializationTestTypes
             return _innerList.GetEnumerator();
         }
 
-        public static CDC_Possitive CreateInstance()
+        public static CDC_Positive CreateInstance()
         {
-            CDC_Possitive list = new CDC_Possitive();
+            CDC_Positive list = new CDC_Positive();
             list.Add("112");
             return list;
         }
@@ -5252,7 +5252,7 @@ namespace SerializationTestTypes
     }
 
     [CollectionDataContract(IsReference = true)]
-    public class Base_Possitive_VirtualAdd : IEnumerable<string>
+    public class Base_Positive_VirtualAdd : IEnumerable<string>
     {
         private List<string> _innerList = new List<string>();
 
@@ -5328,9 +5328,9 @@ namespace SerializationTestTypes
             return _innerList.GetEnumerator();
         }
 
-        public static Base_Possitive_VirtualAdd CreateInstance()
+        public static Base_Positive_VirtualAdd CreateInstance()
         {
-            Base_Possitive_VirtualAdd list = new Base_Possitive_VirtualAdd();
+            Base_Positive_VirtualAdd list = new Base_Positive_VirtualAdd();
             list.Insert(0, "222323");
             list.Insert(1, "222323");
             return list;
@@ -5338,7 +5338,7 @@ namespace SerializationTestTypes
     }
 
     [CollectionDataContract(IsReference = true)]
-    public class CDC_NewAddToPrivate : Base_Possitive_VirtualAdd
+    public class CDC_NewAddToPrivate : Base_Positive_VirtualAdd
     {
         private new void Add(string item)
         {

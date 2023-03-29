@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.XUnitExtensions;
 using Xunit;
@@ -15,6 +17,17 @@ namespace System.Threading.Channels.Tests
             var c = Channel.CreateBounded<T>(new BoundedChannelOptions(1) { AllowSynchronousContinuations = AllowSynchronousContinuations });
             c.Writer.WriteAsync(default).AsTask().Wait();
             return c;
+        }
+
+        public static IEnumerable<object[]> ChannelDropModes()
+        {
+            foreach (BoundedChannelFullMode mode in Enum.GetValues(typeof(BoundedChannelFullMode)))
+            {
+                if (mode != BoundedChannelFullMode.Wait)
+                {
+                    yield return new object[] { mode };
+                }
+            }
         }
 
         [Fact]
@@ -250,6 +263,216 @@ namespace System.Threading.Channels.Tests
         }
 
         [Fact]
+        public void DroppedDelegateNotCalledOnWaitMode_SyncWrites()
+        {
+            bool dropDelegateCalled = false;
+
+            Channel<int> c = Channel.CreateBounded<int>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.Wait },
+                item =>
+                {
+                    dropDelegateCalled = true;
+                });
+
+            Assert.True(c.Writer.TryWrite(1));
+            Assert.False(c.Writer.TryWrite(1));
+
+            Assert.False(dropDelegateCalled);
+        }
+
+        [Fact]
+        public async Task DroppedDelegateNotCalledOnWaitMode_AsyncWrites()
+        {
+            bool dropDelegateCalled = false;
+
+            Channel<int> c = Channel.CreateBounded<int>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.Wait },
+                item =>
+                {
+                    dropDelegateCalled = true;
+                });
+
+            // First async write should pass
+            await c.Writer.WriteAsync(1);
+
+            // Second write should wait
+            var secondWriteTask = c.Writer.WriteAsync(2);
+            Assert.False(secondWriteTask.IsCompleted);
+
+            // Read from channel to free up space
+            var readItem = await c.Reader.ReadAsync();
+            // Second write should complete
+            await secondWriteTask;
+
+            // No dropped delegate should be called
+            Assert.False(dropDelegateCalled);
+        }
+
+        [Theory]
+        [MemberData(nameof(ChannelDropModes))]
+        public void DroppedDelegateIsNull_SyncWrites(BoundedChannelFullMode boundedChannelFullMode)
+        {
+            Channel<int> c = Channel.CreateBounded<int>(new BoundedChannelOptions(1) { FullMode = boundedChannelFullMode }, itemDropped: null);
+
+            Assert.True(c.Writer.TryWrite(5));
+            Assert.True(c.Writer.TryWrite(5));
+        }
+
+        [Theory]
+        [MemberData(nameof(ChannelDropModes))]
+        public async Task DroppedDelegateIsNull_AsyncWrites(BoundedChannelFullMode boundedChannelFullMode)
+        {
+            Channel<int> c = Channel.CreateBounded<int>(new BoundedChannelOptions(1) { FullMode = boundedChannelFullMode }, itemDropped: null);
+
+            await c.Writer.WriteAsync(5);
+            await c.Writer.WriteAsync(5);
+        }
+
+        [Theory]
+        [MemberData(nameof(ChannelDropModes))]
+        public void DroppedDelegateCalledOnChannelFull_SyncWrites(BoundedChannelFullMode boundedChannelFullMode)
+        {
+            var droppedItems = new HashSet<int>();
+
+            void AddDroppedItem(int itemDropped)
+            {
+                Assert.True(droppedItems.Add(itemDropped));
+            }
+
+            const int channelCapacity = 10;
+            var c = Channel.CreateBounded<int>(new BoundedChannelOptions(channelCapacity)
+            {
+                FullMode = boundedChannelFullMode
+            }, AddDroppedItem);
+
+            for (int i = 0; i < channelCapacity; i++)
+            {
+                Assert.True(c.Writer.TryWrite(i));
+            }
+
+            // No dropped delegate should be called while channel is not full
+            Assert.Empty(droppedItems);
+
+            for (int i = channelCapacity; i < channelCapacity + 10; i++)
+            {
+                Assert.True(c.Writer.TryWrite(i));
+            }
+
+            // Assert expected number of dropped items delegate calls
+            Assert.Equal(10, droppedItems.Count);
+        }
+
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
+        [MemberData(nameof(ChannelDropModes))]
+        public void DroppedDelegateCalledAfterLockReleased_SyncWrites(BoundedChannelFullMode boundedChannelFullMode)
+        {
+            Channel<int> c = null;
+            bool dropDelegateCalled = false;
+
+            c = Channel.CreateBounded<int>(new BoundedChannelOptions(1)
+            {
+                FullMode = boundedChannelFullMode
+            }, (droppedItem) =>
+            {
+                if (dropDelegateCalled)
+                {
+                    // Prevent infinite callbacks being called
+                    return;
+                }
+
+                dropDelegateCalled = true;
+
+                // Dropped delegate should not be called while holding the channel lock.
+                // Verify this by trying to write into the channel from different thread.
+                // If lock is held during callback, this should effectively cause deadlock.
+                var mres = new ManualResetEventSlim();
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    c.Writer.TryWrite(3);
+                    mres.Set();
+                });
+
+                mres.Wait();
+            });
+
+            Assert.True(c.Writer.TryWrite(1));
+            Assert.True(c.Writer.TryWrite(2));
+
+            Assert.True(dropDelegateCalled);
+        }
+
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
+        [MemberData(nameof(ChannelDropModes))]
+        public async Task DroppedDelegateCalledAfterLockReleased_AsyncWrites(BoundedChannelFullMode boundedChannelFullMode)
+        {
+            Channel<int> c = null;
+            bool dropDelegateCalled = false;
+
+            c = Channel.CreateBounded<int>(new BoundedChannelOptions(1)
+            {
+                FullMode = boundedChannelFullMode
+            }, (droppedItem) =>
+            {
+                if (dropDelegateCalled)
+                {
+                    // Prevent infinite callbacks being called
+                    return;
+                }
+
+                dropDelegateCalled = true;
+
+                // Dropped delegate should not be called while holding the channel synchronisation lock.
+                // Verify this by trying to write into the channel from different thread.
+                // If lock is held during callback, this should effectively cause deadlock.
+                var mres = new ManualResetEventSlim();
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    c.Writer.TryWrite(11);
+                    mres.Set();
+                });
+
+                mres.Wait();
+            });
+
+            await c.Writer.WriteAsync(1);
+            await c.Writer.WriteAsync(2);
+
+            Assert.True(dropDelegateCalled);
+        }
+
+        [Theory]
+        [MemberData(nameof(ChannelDropModes))]
+        public async Task DroppedDelegateCalledOnChannelFull_AsyncWrites(BoundedChannelFullMode boundedChannelFullMode)
+        {
+            var droppedItems = new HashSet<int>();
+
+            void AddDroppedItem(int itemDropped)
+            {
+                Assert.True(droppedItems.Add(itemDropped));
+            }
+
+            const int channelCapacity = 10;
+            var c = Channel.CreateBounded<int>(new BoundedChannelOptions(channelCapacity)
+            {
+                FullMode = boundedChannelFullMode
+            }, AddDroppedItem);
+
+            for (int i = 0; i < channelCapacity; i++)
+            {
+                await c.Writer.WriteAsync(i);
+            }
+
+            // No dropped delegate should be called while channel is not full
+            Assert.Empty(droppedItems);
+
+            for (int i = channelCapacity; i < channelCapacity + 10; i++)
+            {
+                await c.Writer.WriteAsync(i);
+            }
+
+            // Assert expected number of dropped items delegate calls
+            Assert.Equal(10, droppedItems.Count);
+        }
+
+        [Fact]
         public async Task CancelPendingWrite_Reading_DataTransferredFromCorrectWriter()
         {
             var c = Channel.CreateBounded<int>(1);
@@ -257,8 +480,8 @@ namespace System.Threading.Channels.Tests
 
             var cts = new CancellationTokenSource();
 
-            Task write1 = c.Writer.WriteAsync(43, cts.Token).AsTask();
-            Assert.Equal(TaskStatus.WaitingForActivation, write1.Status);
+            ValueTask write1 = c.Writer.WriteAsync(43, cts.Token);
+            Assert.False(write1.IsCompleted);
 
             cts.Cancel();
 
@@ -267,7 +490,7 @@ namespace System.Threading.Channels.Tests
             Assert.Equal(42, await c.Reader.ReadAsync());
             Assert.Equal(44, await c.Reader.ReadAsync());
 
-            await AssertCanceled(write1, cts.Token);
+            await AssertExtensions.CanceledAsync(cts.Token, async () => await write1);
             await write2;
         }
 

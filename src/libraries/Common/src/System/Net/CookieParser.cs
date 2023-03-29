@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
@@ -648,7 +647,7 @@ namespace System.Net
                                         expiresSet = true;
 
                                         if (DateTime.TryParse(CheckQuoted(_tokenizer.Value),
-                                            CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out DateTime expires))
+                                            CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AdjustToUniversal, out DateTime expires))
                                         {
                                             cookie!.Expires = expires;
                                         }
@@ -776,10 +775,7 @@ namespace System.Net
 
                 if (first && (token == CookieToken.NameValuePair || token == CookieToken.Attribute))
                 {
-                    if (cookie == null)
-                    {
-                        cookie = new Cookie();
-                    }
+                    cookie ??= new Cookie();
                     InternalSetNameMethod(cookie, _tokenizer.Name);
                     cookie.Value = _tokenizer.Value;
                 }
@@ -856,10 +852,9 @@ namespace System.Net
 
         internal static string CheckQuoted(string value)
         {
-            if (value.Length < 2 || value[0] != '\"' || value[value.Length - 1] != '\"')
-                return value;
-
-            return value.Length == 2 ? string.Empty : value.Substring(1, value.Length - 2);
+            return (value.Length >= 2 && value.StartsWith('\"') && value.EndsWith('\"'))
+                ? value.Substring(1, value.Length - 2)
+                : value;
         }
 
         internal bool EndofHeader()

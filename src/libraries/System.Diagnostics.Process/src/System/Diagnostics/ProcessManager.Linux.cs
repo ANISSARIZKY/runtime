@@ -4,30 +4,27 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Text;
 
 namespace System.Diagnostics
 {
     internal static partial class ProcessManager
     {
         /// <summary>Gets the IDs of all processes on the current machine.</summary>
-        public static int[] GetProcessIds()
-        {
-            return EnumerateProcessIds().ToArray();
-        }
+        public static int[] GetProcessIds() => new List<int>(EnumerateProcessIds()).ToArray();
 
         /// <summary>Gets process infos for each process on the specified machine.</summary>
+        /// <param name="processNameFilter">Optional process name to use as an inclusion filter.</param>
         /// <param name="machineName">The target machine.</param>
         /// <returns>An array of process infos, one per found process.</returns>
-        public static ProcessInfo[] GetProcessInfos(string machineName)
+        public static ProcessInfo[] GetProcessInfos(string? processNameFilter, string machineName)
         {
+            Debug.Assert(processNameFilter is null, "Not used on Linux");
             ThrowIfRemoteMachine(machineName);
-            int[] procIds = GetProcessIds(machineName);
 
             // Iterate through all process IDs to load information about each process
-            var processes = new List<ProcessInfo>(procIds.Length);
-            foreach (int pid in procIds)
+            IEnumerable<int> pids = EnumerateProcessIds();
+            ArrayBuilder<ProcessInfo> processes = default;
+            foreach (int pid in pids)
             {
                 ProcessInfo? pi = CreateProcessInfo(pid);
                 if (pi != null)
@@ -44,54 +41,23 @@ namespace System.Diagnostics
         /// <returns>The array of modules.</returns>
         internal static ProcessModuleCollection GetModules(int processId)
         {
-            var modules = new ProcessModuleCollection(0);
-
-            // Process from the parsed maps file each entry representing a module
-            foreach (Interop.procfs.ParsedMapsModule entry in Interop.procfs.ParseMapsModules(processId))
-            {
-                int sizeOfImage = (int)(entry.AddressRange.Value - entry.AddressRange.Key);
-
-                // A single module may be split across multiple map entries; consolidate based on
-                // the name and address ranges of sequential entries.
-                if (modules.Count > 0)
-                {
-                    ProcessModule module = modules[modules.Count - 1];
-                    if (module.FileName == entry.FileName &&
-                        ((long)module.BaseAddress + module.ModuleMemorySize == entry.AddressRange.Key))
-                    {
-                        // Merge this entry with the previous one
-                        module.ModuleMemorySize += sizeOfImage;
-                        continue;
-                    }
-                }
-
-                // It's not a continuation of a previous entry but a new one: add it.
-                unsafe
-                {
-                    modules.Add(new ProcessModule()
-                    {
-                        FileName = entry.FileName,
-                        ModuleName = Path.GetFileName(entry.FileName),
-                        BaseAddress = new IntPtr(unchecked((void*)entry.AddressRange.Key)),
-                        ModuleMemorySize = sizeOfImage,
-                        EntryPointAddress = IntPtr.Zero // unknown
-                    });
-                }
-            }
+            ProcessModuleCollection modules = Interop.procfs.ParseMapsModules(processId) ?? new(capacity: 0);
 
             // Move the main executable module to be the first in the list if it's not already
-            string? exePath = Process.GetExePath(processId);
-            for (int i = 0; i < modules.Count; i++)
+            if (Process.GetExePath(processId) is string exePath)
             {
-                ProcessModule module = modules[i];
-                if (module.FileName == exePath)
+                for (int i = 0; i < modules.Count; i++)
                 {
-                    if (i > 0)
+                    ProcessModule module = modules[i];
+                    if (module.FileName == exePath)
                     {
-                        modules.RemoveAt(i);
-                        modules.Insert(0, module);
+                        if (i > 0)
+                        {
+                            modules.RemoveAt(i);
+                            modules.Insert(0, module);
+                        }
+                        break;
                     }
-                    break;
                 }
             }
 
@@ -157,7 +123,7 @@ namespace System.Diagnostics
                             _threadId = (ulong)tid,
                             _basePriority = pi.BasePriority,
                             _currentPriority = (int)stat.nice,
-                            _startAddress = IntPtr.Zero,
+                            _startAddress = null,
                             _threadState = ProcFsStateToThreadState(stat.state),
                             _threadWaitReason = ThreadWaitReason.Unknown
                         });

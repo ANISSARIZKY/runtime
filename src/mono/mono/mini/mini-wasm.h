@@ -12,8 +12,6 @@
 
 #define WASM_REG_0 0
 
-#define MONO_ARCH_USE_FPSTACK FALSE
-
 // Does the ABI have a volatile non-parameter register, so tailcall
 // can pass context to generics or interfaces?
 #define MONO_ARCH_HAVE_VOLATILE_NON_PARAM_REGISTER 0
@@ -24,6 +22,7 @@
 #define MONO_ARCH_GSHAREDVT_SUPPORTED 1
 #define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES 1
 #define MONO_ARCH_NEED_DIV_CHECK 1
+#define MONO_ARCH_NO_CODEMAN 1
 
 #define MONO_ARCH_EMULATE_FREM 1
 #define MONO_ARCH_EMULATE_FCONV_TO_U8 1
@@ -43,9 +42,8 @@
 #define MONO_ARCH_INST_REGPAIR_REG2(desc,hreg1) (-1)
 #define MONO_ARCH_INST_SREG2_MASK(ins) 0
 
-
 struct MonoLMF {
-	/* 
+	/*
 	 * If the second lowest bit is set to 1, then this is a MonoLMFExt structure, and
 	 * the other fields are not valid.
 	 */
@@ -78,8 +76,6 @@ typedef struct {
 /* must be at a power of 2 and >= 8 */
 #define MONO_ARCH_FRAME_ALIGNMENT 16
 
-#define MONO_ARCH_USE_FPSTACK FALSE
-
 // Does the ABI have a volatile non-parameter register, so tailcall
 // can pass context to generics or interfaces?
 #define MONO_ARCH_HAVE_VOLATILE_NON_PARAM_REGISTER 0
@@ -89,29 +85,25 @@ typedef struct {
 #define MONO_ARCH_GSHAREDVT_SUPPORTED 1
 #define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES 1
 
-#ifdef ENABLE_NETCORE
 #define MONO_ARCH_SIMD_INTRINSICS 1
-#endif
 
 #define MONO_ARCH_INTERPRETER_SUPPORTED 1
 #define MONO_ARCH_HAS_REGISTER_ICALL 1
-#define MONO_ARCH_HAVE_PATCH_CODE_NEW 1
 #define MONO_ARCH_HAVE_SDB_TRAMPOLINES 1
 #define MONO_ARCH_LLVM_TARGET_LAYOUT "e-m:e-p:32:32-i64:64-n32:64-S128"
 #define MONO_ARCH_LLVM_TARGET_TRIPLE "wasm32-unknown-emscripten"
 
-void mono_wasm_debugger_init (void);
-
 // sdks/wasm/driver.c is C and uses this
 G_EXTERN_C void mono_wasm_enable_debugging (int log_level);
 
-void mono_wasm_breakpoint_hit (void);
-void mono_wasm_set_timeout (int timeout, int id);
-
-void mono_wasm_single_step_hit (void);
-void mono_wasm_breakpoint_hit (void);
-void mono_wasm_user_break (void);
+void mono_wasm_set_timeout (int timeout);
 
 int mono_wasm_assembly_already_added (const char *assembly_name);
+const unsigned char *mono_wasm_get_assembly_bytes (const char *name, unsigned int *size);
 
-#endif /* __MONO_MINI_WASM_H__ */  
+void mono_wasm_print_stack_trace (void);
+
+gboolean
+mini_wasm_is_scalar_vtype (MonoType *type);
+
+#endif /* __MONO_MINI_WASM_H__ */

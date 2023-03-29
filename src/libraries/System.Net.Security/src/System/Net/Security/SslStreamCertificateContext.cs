@@ -1,16 +1,36 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.ComponentModel;
 using System.Security.Cryptography.X509Certificates;
 
 namespace System.Net.Security
 {
     public partial class SslStreamCertificateContext
     {
-        internal readonly X509Certificate2 Certificate;
-        internal readonly X509Certificate2[] IntermediateCertificates;
+        public readonly X509Certificate2 Certificate;
+        public ReadOnlySpan<X509Certificate2> IntermediateCertificates => _intermediateCertificates;
 
-        public static SslStreamCertificateContext Create(X509Certificate2 target, X509Certificate2Collection? additionalCertificates, bool offline = false)
+        private readonly X509Certificate2[] _intermediateCertificates;
+        internal readonly SslCertificateTrust? Trust;
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static SslStreamCertificateContext Create(X509Certificate2 target, X509Certificate2Collection? additionalCertificates, bool offline)
+        {
+            return Create(target, additionalCertificates, offline, null);
+        }
+
+        public static SslStreamCertificateContext Create(X509Certificate2 target, X509Certificate2Collection? additionalCertificates, bool offline = false, SslCertificateTrust? trust = null)
+        {
+            return Create(target, additionalCertificates, offline, trust, noOcspFetch: false);
+        }
+
+        internal static SslStreamCertificateContext Create(
+            X509Certificate2 target,
+            X509Certificate2Collection? additionalCertificates,
+            bool offline,
+            SslCertificateTrust? trust,
+            bool noOcspFetch)
         {
             if (!target.HasPrivateKey)
             {
@@ -18,6 +38,8 @@ namespace System.Net.Security
             }
 
             X509Certificate2[] intermediates = Array.Empty<X509Certificate2>();
+            X509Certificate2? root = null;
+
             using (X509Chain chain = new X509Chain())
             {
                 if (additionalCertificates != null)
@@ -33,49 +55,85 @@ namespace System.Net.Security
                 chain.ChainPolicy.DisableCertificateDownloads = offline;
                 bool chainStatus = chain.Build(target);
 
-                if (!chainStatus && NetEventSource.IsEnabled)
+                if (!chainStatus && NetEventSource.Log.IsEnabled())
                 {
                     NetEventSource.Error(null, $"Failed to build chain for {target.Subject}");
                 }
 
-                int count = chain.ChainElements.Count - (TrimRootCertificate ? 1 : 2);
-                foreach (X509ChainStatus status in chain.ChainStatus)
+                int count = chain.ChainElements.Count - 1;
+
+                // Some platforms (e.g. Android) can't ignore all verification and will return zero
+                // certificates on failure to build a chain. Treat this as not finding any intermediates.
+                if (count >= 0)
                 {
-                    if (status.Status.HasFlag(X509ChainStatusFlags.PartialChain))
+#pragma warning disable 0162 // Disable unreachable code warning. TrimRootCertificate is const bool = false on some platforms
+                    if (TrimRootCertificate)
                     {
-                        // The last cert isn't a root cert
-                        count++;
-                        break;
-                    }
-                }
+                        count--;
+                        root = chain.ChainElements[chain.ChainElements.Count - 1].Certificate;
 
-                // Count can be zero for a self-signed certificate, or a cert issued directly from a root.
-                if (count > 0 && chain.ChainElements.Count > 1)
-                {
-                    intermediates = new X509Certificate2[count];
-                    for (int i = 0; i < count; i++)
+                        foreach (X509ChainStatus status in chain.ChainStatus)
+                        {
+                            if (status.Status.HasFlag(X509ChainStatusFlags.PartialChain))
+                            {
+                                // The last cert isn't a root cert
+                                count++;
+                                root = null;
+                                break;
+                            }
+                        }
+                    }
+#pragma warning restore 0162
+
+                    // Count can be zero for a self-signed certificate, or a cert issued directly from a root.
+                    if (count > 0 && chain.ChainElements.Count > 1)
                     {
-                        intermediates[i] = chain.ChainElements[i + 1].Certificate;
+                        intermediates = new X509Certificate2[count];
+                        for (int i = 0; i < count; i++)
+                        {
+                            intermediates[i] = chain.ChainElements[i + 1].Certificate;
+                        }
                     }
-                }
 
-                // Dispose the copy of the target cert.
-                chain.ChainElements[0].Certificate.Dispose();
+                    // Dispose the copy of the target cert.
+                    chain.ChainElements[0].Certificate.Dispose();
 
-                // Dispose the last cert, if we didn't include it.
-                for (int i = count + 1; i < chain.ChainElements.Count; i++)
-                {
-                    chain.ChainElements[i].Certificate.Dispose();
+                    // Dispose of the certificates that we do not need. If we are holding on to the root,
+                    // don't dispose of it.
+                    int stopDisposingChainPosition = root is null ?
+                        chain.ChainElements.Count :
+                        chain.ChainElements.Count - 1;
+
+                    for (int i = count + 1; i < stopDisposingChainPosition; i++)
+                    {
+                        chain.ChainElements[i].Certificate.Dispose();
+                    }
                 }
             }
 
-            return new SslStreamCertificateContext(target, intermediates);
+            SslStreamCertificateContext ctx = new SslStreamCertificateContext(target, intermediates, trust);
+
+            // On Linux, AddRootCertificate will start a background download of an OCSP response,
+            // unless this context was built "offline", or this came from the internal Create(X509Certificate2)
+            ctx.SetNoOcspFetch(offline || noOcspFetch);
+
+            bool transferredOwnership = false;
+            ctx.AddRootCertificate(root, ref transferredOwnership);
+
+            if (!transferredOwnership)
+            {
+                root?.Dispose();
+            }
+
+            return ctx;
         }
+
+        partial void AddRootCertificate(X509Certificate2? rootCertificate, ref bool transferredOwnership);
+        partial void SetNoOcspFetch(bool noOcspFetch);
 
         internal SslStreamCertificateContext Duplicate()
         {
-            return new SslStreamCertificateContext(new X509Certificate2(Certificate), IntermediateCertificates);
-
+            return new SslStreamCertificateContext(new X509Certificate2(Certificate), _intermediateCertificates, Trust);
         }
     }
 }

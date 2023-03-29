@@ -14,12 +14,11 @@ namespace System.Drawing
     {
         public const string IsDrawingSupported = nameof(Helpers) + "." + nameof(GetIsDrawingSupported);
         public const string IsWindowsOrAtLeastLibgdiplus6 = nameof(Helpers) + "." + nameof(GetIsWindowsOrAtLeastLibgdiplus6);
-        public const string RecentGdiplusIsAvailable = nameof(Helpers) + "." + nameof(GetRecentGdiPlusIsAvailable);
-        public const string RecentGdiplusIsAvailable2 = nameof(Helpers) + "." + nameof(GetRecentGdiPlusIsAvailable2);
-        public const string GdiPlusIsAvailableNotRedhat73 = nameof(Helpers) + "." + nameof(GetGdiPlusIsAvailableNotRedhat73);
+        public const string RecentGdiplusIsAvailable = IsWindowsOrAtLeastLibgdiplus6;
         public const string GdiPlusIsAvailableNotWindows7 = nameof(Helpers) + "." + nameof(GetGdiPlusIsAvailableNotWindows7);
         public const string AnyInstalledPrinters = nameof(Helpers) + "." + nameof(IsAnyInstalledPrinters);
         public const string WindowsRS3OrEarlier = nameof(Helpers) + "." + nameof(IsWindowsRS3OrEarlier);
+        public const string IsWindows = nameof(Helpers) + "." + nameof(GetIsWindows);
 
         public static bool GetIsDrawingSupported() => PlatformDetection.IsDrawingSupported;
 
@@ -53,45 +52,15 @@ namespace System.Drawing
             return installedVersion.Major >= 6;
         }
 
+        public static bool GetIsWindows() => PlatformDetection.IsDrawingSupported && PlatformDetection.IsWindows;
+
         public static bool IsNotUnix => PlatformDetection.IsWindows;
 
         public static bool IsWindowsRS3OrEarlier => !PlatformDetection.IsWindows10Version1803OrGreater;
 
-        public static bool GetRecentGdiPlusIsAvailable2()
-        {
-            // RedHat as well as Fedora 25 and OpenSUSE 4.22 are running outdated versions of libgdiplus
-            if (PlatformDetection.IsRedHatFamily || PlatformDetection.IsFedora || PlatformDetection.IsOpenSUSE)
-            {
-                return false;
-            }
-
-            return GetIsDrawingSupported();
-        }
-
-        public static bool GetGdiPlusIsAvailableNotRedhat73()
-        {
-            if (PlatformDetection.IsRedHatFamily)
-            {
-                return false;
-            }
-
-            return GetIsDrawingSupported();
-        }
-
         public static bool GetGdiPlusIsAvailableNotWindows7()
         {
             if (PlatformDetection.IsWindows7)
-            {
-                return false;
-            }
-
-            return GetIsDrawingSupported();
-        }
-
-        public static bool GetRecentGdiPlusIsAvailable()
-        {
-            // RedHat is running outdated versions of libgdiplus
-            if (PlatformDetection.IsRedHatFamily)
             {
                 return false;
             }
@@ -181,6 +150,9 @@ namespace System.Drawing
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+        public static extern int GetGuiResources(IntPtr hProcess, uint flags);
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr GetDC(IntPtr hWnd);

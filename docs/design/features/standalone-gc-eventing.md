@@ -6,7 +6,7 @@ This document aims to provide a specification for how a standalone GC fires
 events that can be collected by trace collectors. Such a feature is highly desirable
 for a standalone GC since it is the primary way that is used to reason about
 GC performance. Since a standalone GC is not permitted to link against the rest of the runtime, all
-communication betwene the runtime and the GC most pass through dynamically-dispatched interfaces.
+communication between the runtime and the GC most pass through dynamically-dispatched interfaces.
 
 ## Definitions
 
@@ -147,7 +147,7 @@ It is useful for a standalone GC to be able to fire events that the EE was not p
 (the "CLR GC") to interopate seamlessly with future versions of the .NET Core EE, which implies that it should be possible
 for the GC within this repository to add new events without having to recompile the runtime.
 
-While it is possible for some eventing implementations to receive events that are created at runtime, not all eventing implementations (particularly LTTNG) are not flexible enough for this. In order to accomodate new events, another method is added to `IGCToCLREventSink`:
+While it is possible for some eventing implementations to receive events that are created at runtime, not all eventing implementations (particularly LTTNG) are not flexible enough for this. In order to accommodate new events, another method is added to `IGCToCLREventSink`:
 
 ```c++
 void IGCToCLREventSink::FireDynamicEvent(
@@ -186,7 +186,7 @@ Tools (specifically PerfView) will want to be enlightened about dynamic events f
 we want to make this experience nice is up to us, but we will most likely want to ship PerfView support for any dynamic event
 that we end up shipping with the CLR GC.
 
-[1]: https://github.com/dotnet/runtime/blob/master/src/coreclr/src/gc/env/etmdummy.h#L5-L57
+[1]: https://github.com/dotnet/runtime/blob/main/src/coreclr/gc/env/etmdummy.h#L5-L57
 
 ### Concrete Example: Porting a single known event to IGCToCLREventSink
 

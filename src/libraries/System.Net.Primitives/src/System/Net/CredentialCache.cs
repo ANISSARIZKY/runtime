@@ -4,6 +4,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace System.Net
@@ -22,14 +23,8 @@ namespace System.Net
 
         public void Add(Uri uriPrefix, string authType, NetworkCredential cred)
         {
-            if (uriPrefix == null)
-            {
-                throw new ArgumentNullException(nameof(uriPrefix));
-            }
-            if (authType == null)
-            {
-                throw new ArgumentNullException(nameof(authType));
-            }
+            ArgumentNullException.ThrowIfNull(uriPrefix);
+            ArgumentNullException.ThrowIfNull(authType);
 
             if ((cred is SystemNetworkCredential)
                 && !((string.Equals(authType, NegotiationInfoClass.NTLM, StringComparison.OrdinalIgnoreCase))
@@ -46,35 +41,16 @@ namespace System.Net
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"Adding key:[{key}], cred:[{cred.Domain}],[{cred.UserName}]");
 
-            if (_cache == null)
-            {
-                _cache = new Dictionary<CredentialKey, NetworkCredential>();
-            }
-
+            _cache ??= new Dictionary<CredentialKey, NetworkCredential>();
             _cache.Add(key, cred);
         }
 
         public void Add(string host, int port, string authenticationType, NetworkCredential credential)
         {
-            if (host == null)
-            {
-                throw new ArgumentNullException(nameof(host));
-            }
+            ArgumentException.ThrowIfNullOrEmpty(host);
+            ArgumentNullException.ThrowIfNull(authenticationType);
 
-            if (authenticationType == null)
-            {
-                throw new ArgumentNullException(nameof(authenticationType));
-            }
-
-            if (host.Length == 0)
-            {
-                throw new ArgumentException(SR.Format(SR.net_emptystringcall, nameof(host)), nameof(host));
-            }
-
-            if (port < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(port));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(port);
 
             if ((credential is SystemNetworkCredential)
                 && !((string.Equals(authenticationType, NegotiationInfoClass.NTLM, StringComparison.OrdinalIgnoreCase))
@@ -91,11 +67,7 @@ namespace System.Net
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"Adding key:[{key}], cred:[{credential.Domain}],[{credential.UserName}]");
 
-            if (_cacheForHosts == null)
-            {
-                _cacheForHosts = new Dictionary<CredentialHostKey, NetworkCredential>();
-            }
-
+            _cacheForHosts ??= new Dictionary<CredentialHostKey, NetworkCredential>();
             _cacheForHosts.Add(key, credential);
         }
 
@@ -154,14 +126,8 @@ namespace System.Net
 
         public NetworkCredential? GetCredential(Uri uriPrefix, string authType)
         {
-            if (uriPrefix == null)
-            {
-                throw new ArgumentNullException(nameof(uriPrefix));
-            }
-            if (authType == null)
-            {
-                throw new ArgumentNullException(nameof(authType));
-            }
+            ArgumentNullException.ThrowIfNull(uriPrefix);
+            ArgumentNullException.ThrowIfNull(authType);
 
             if (_cache == null)
             {
@@ -199,22 +165,9 @@ namespace System.Net
 
         public NetworkCredential? GetCredential(string host, int port, string authenticationType)
         {
-            if (host == null)
-            {
-                throw new ArgumentNullException(nameof(host));
-            }
-            if (authenticationType == null)
-            {
-                throw new ArgumentNullException(nameof(authenticationType));
-            }
-            if (host.Length == 0)
-            {
-                throw new ArgumentException(SR.Format(SR.net_emptystringcall, nameof(host)), nameof(host));
-            }
-            if (port < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(port));
-            }
+            ArgumentException.ThrowIfNullOrEmpty(host);
+            ArgumentNullException.ThrowIfNull(authenticationType);
+            ArgumentOutOfRangeException.ThrowIfNegative(port);
 
             if (_cacheForHosts == null)
             {
@@ -224,7 +177,7 @@ namespace System.Net
 
             var key = new CredentialHostKey(host, port, authenticationType);
 
-            NetworkCredential? match = null;
+            NetworkCredential? match;
             _cacheForHosts.TryGetValue(key, out match);
 
             if (NetEventSource.Log.IsEnabled()) NetEventSource.Info(this, $"Returning {((match == null) ? "null" : "(" + match.UserName + ":" + match.Domain + ")")}");
@@ -447,11 +400,11 @@ namespace System.Net
             return equals;
         }
 
-        public override bool Equals(object? obj) =>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
             obj is CredentialHostKey && Equals((CredentialHostKey)obj);
 
         public override string ToString() =>
-            Host + ":" + Port.ToString(NumberFormatInfo.InvariantInfo) + ":" + AuthenticationType;
+            string.Create(CultureInfo.InvariantCulture, $"{Host}:{Port}:{AuthenticationType}");
     }
 
     internal sealed class CredentialKey : IEquatable<CredentialKey?>
@@ -523,7 +476,7 @@ namespace System.Net
             StringComparer.OrdinalIgnoreCase.GetHashCode(AuthenticationType) ^
             UriPrefix.GetHashCode();
 
-        public bool Equals(CredentialKey? other)
+        public bool Equals([NotNullWhen(true)] CredentialKey? other)
         {
             if (other == null)
             {
@@ -539,9 +492,9 @@ namespace System.Net
             return equals;
         }
 
-        public override bool Equals(object? obj) => Equals(obj as CredentialKey);
+        public override bool Equals([NotNullWhen(true)] object? obj) => Equals(obj as CredentialKey);
 
         public override string ToString() =>
-            "[" + UriPrefixLength.ToString(NumberFormatInfo.InvariantInfo) + "]:" + UriPrefix + ":" + AuthenticationType;
+            string.Create(CultureInfo.InvariantCulture, $"[{UriPrefixLength}]:{UriPrefix}:{AuthenticationType}");
     }
 }

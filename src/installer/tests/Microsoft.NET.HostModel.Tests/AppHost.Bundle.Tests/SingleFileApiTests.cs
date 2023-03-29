@@ -8,11 +8,11 @@ using Xunit;
 
 namespace AppHost.Bundle.Tests
 {
-    public class SingleFileApiTests : BundleTestBase, IClassFixture<SingleFileApiTests.SharedTestState>
+    public class SingleFileApiTests : BundleTestBase, IClassFixture<SingleFileSharedState>
     {
-        private SharedTestState sharedTestState;
+        private SingleFileSharedState sharedTestState;
 
-        public SingleFileApiTests(SharedTestState fixture)
+        public SingleFileApiTests(SingleFileSharedState fixture)
         {
             sharedTestState = fixture;
         }
@@ -20,9 +20,7 @@ namespace AppHost.Bundle.Tests
         [Fact]
         public void SelfContained_SingleFile_APITests()
         {
-            var fixture = sharedTestState.TestFixture.Copy();
-            var singleFile = BundleSelfContainedApp(fixture);
-
+            string singleFile = BundleHelper.GetHostPath(sharedTestState.PublishedSingleFile);
             Command.Create(singleFile, "fullyqualifiedname codebase appcontext cmdlineargs executing_assembly_location basedirectory")
                 .CaptureStdErr()
                 .CaptureStdOut()
@@ -88,10 +86,9 @@ namespace AppHost.Bundle.Tests
         [Fact]
         public void AppContext_Native_Search_Dirs_Contains_Bundle_Dir()
         {
-            var fixture = sharedTestState.TestFixture.Copy();
-            Bundler bundler = BundleHelper.BundleApp(fixture, out string singleFile);
-            string extractionDir = BundleHelper.GetExtractionDir(fixture, bundler).Name;
-            string bundleDir = BundleHelper.GetBundleDir(fixture).FullName;
+            string singleFile = BundleHelper.GetHostPath(sharedTestState.PublishedSingleFile);
+            string extractionRoot = BundleHelper.GetExtractionRootPath(sharedTestState.PublishedSingleFile);
+            string bundleDir = BundleHelper.GetPublishPath(sharedTestState.PublishedSingleFile);
 
             // If we don't extract anything to disk, the extraction dir shouldn't
             // appear in the native search dirs.
@@ -101,14 +98,14 @@ namespace AppHost.Bundle.Tests
                 .Execute()
                 .Should().Pass()
                 .And.HaveStdOutContaining(bundleDir)
-                .And.NotHaveStdOutContaining(extractionDir);
+                .And.NotHaveStdOutContaining(extractionRoot);
         }
 
         [Fact]
         public void AppContext_Native_Search_Dirs_Contains_Bundle_And_Extraction_Dirs()
         {
             var fixture = sharedTestState.TestFixture.Copy();
-            Bundler bundler = BundleHelper.BundleApp(fixture, out string singleFile, BundleOptions.BundleNativeBinaries);
+            Bundler bundler = BundleSelfContainedApp(fixture, out string singleFile, BundleOptions.BundleNativeBinaries);
             string extractionDir = BundleHelper.GetExtractionDir(fixture, bundler).Name;
             string bundleDir = BundleHelper.GetBundleDir(fixture).FullName;
 
@@ -119,24 +116,6 @@ namespace AppHost.Bundle.Tests
                 .Should().Pass()
                 .And.HaveStdOutContaining(extractionDir)
                 .And.HaveStdOutContaining(bundleDir);
-        }
-
-        public class SharedTestState : SharedTestStateBase, IDisposable
-        {
-            public TestProjectFixture TestFixture { get; set; }
-
-            public SharedTestState()
-            {
-                // We include mockcoreclr in our project to test native binaries extraction.
-                string mockCoreClrPath = Path.Combine(RepoDirectories.Artifacts, "corehost_test",
-                    RuntimeInformationExtensions.GetSharedLibraryFileNameForCurrentPlatform("mockcoreclr"));
-                TestFixture = PreparePublishedSelfContainedTestProject("SingleFileApiTests", $"/p:AddFile={mockCoreClrPath}");
-            }
-
-            public void Dispose()
-            {
-                TestFixture.Dispose();
-            }
         }
     }
 }

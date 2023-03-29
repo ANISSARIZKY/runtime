@@ -2,15 +2,16 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Diagnostics.Tracing;
 
 namespace System.Threading
 {
-    internal partial class PortableThreadPool
+    internal sealed partial class PortableThreadPool
     {
         /// <summary>
         /// Hill climbing algorithm used for determining the number of threads needed for the thread pool.
         /// </summary>
-        private partial class HillClimbing
+        private sealed partial class HillClimbing
         {
             private const int LogCapacity = 200;
             private const int DefaultSampleIntervalMsLow = 10;
@@ -32,6 +33,7 @@ namespace System.Threading
                 Stabilizing,
                 Starvation,
                 ThreadTimedOut,
+                CooperativeBlocking,
             }
 
             // SOS's ThreadPool command depends on the names of all fields
@@ -70,7 +72,7 @@ namespace System.Threading
             private readonly double[] _threadCounts;
             private int _currentSampleMs;
 
-            private readonly Random _randomIntervalGenerator = new Random();
+            private readonly Random.XoshiroImpl _randomIntervalGenerator = new Random.XoshiroImpl();
 
             private readonly LogEntry[] _log = new LogEntry[LogCapacity]; // SOS's ThreadPool command depends on this name
             private int _logStart; // SOS's ThreadPool command depends on this name
@@ -169,9 +171,9 @@ namespace System.Threading
                 // Add the current thread count and throughput sample to our history
                 //
                 double throughput = numCompletions / sampleDurationSeconds;
-                if (PortableThreadPoolEventSource.Log.IsEnabled())
+                if (NativeRuntimeEventSource.Log.IsEnabled())
                 {
-                    PortableThreadPoolEventSource.Log.ThreadPoolWorkerThreadAdjustmentSample(throughput);
+                    NativeRuntimeEventSource.Log.ThreadPoolWorkerThreadAdjustmentSample(throughput);
                 }
 
                 int sampleIndex = (int)(_totalSamples % _samplesToMeasure);
@@ -222,7 +224,7 @@ namespace System.Threading
                         double adjacentPeriod2 = sampleCount / (((double)sampleCount / _wavePeriod) - 1);
 
                         //
-                        // Get the the three different frequency components of the throughput (scaled by average
+                        // Get the three different frequency components of the throughput (scaled by average
                         // throughput).  Our "error" estimate (the amount of noise that might be present in the
                         // frequency band we're really interested in) is the average of the adjacent bands.
                         //
@@ -320,10 +322,12 @@ namespace System.Threading
                 newThreadWaveMagnitude = Math.Max(newThreadWaveMagnitude, 1);
 
                 //
-                // Make sure our control setting is within the ThreadPool's limits
+                // Make sure our control setting is within the ThreadPool's limits. When some threads are blocked due to
+                // cooperative blocking, ensure that hill climbing does not decrease the thread count below the expected
+                // minimum.
                 //
                 int maxThreads = threadPoolInstance._maxThreads;
-                int minThreads = threadPoolInstance._minThreads;
+                int minThreads = threadPoolInstance.MinThreadsGoal;
 
                 _currentControlSetting = Math.Min(maxThreads - newThreadWaveMagnitude, _currentControlSetting);
                 _currentControlSetting = Math.Max(minThreads, _currentControlSetting);
@@ -343,9 +347,9 @@ namespace System.Threading
                 // Record these numbers for posterity
                 //
 
-                if (PortableThreadPoolEventSource.Log.IsEnabled())
+                if (NativeRuntimeEventSource.Log.IsEnabled())
                 {
-                    PortableThreadPoolEventSource.Log.ThreadPoolWorkerThreadAdjustmentStats(sampleDurationSeconds, throughput, threadWaveComponent.Real, throughputWaveComponent.Real,
+                    NativeRuntimeEventSource.Log.ThreadPoolWorkerThreadAdjustmentStats(sampleDurationSeconds, throughput, threadWaveComponent.Real, throughputWaveComponent.Real,
                         throughputErrorEstimate, _averageThroughputNoise, ratio.Real, confidence, _currentControlSetting, (ushort)newThreadWaveMagnitude);
                 }
 
@@ -354,7 +358,11 @@ namespace System.Threading
                 // If all of this caused an actual change in thread count, log that as well.
                 //
                 if (newThreadCount != currentThreadCount)
+                {
                     ChangeThreadCount(newThreadCount, state);
+                    _secondsElapsedSinceLastChange = 0;
+                    _completionsSinceLastChange = 0;
+                }
 
                 //
                 // Return the new thread count and sample interval.  This is randomized to prevent correlations with other periodic
@@ -376,11 +384,14 @@ namespace System.Threading
             private void ChangeThreadCount(int newThreadCount, StateOrTransition state)
             {
                 _lastThreadCount = newThreadCount;
-                _currentSampleMs = _randomIntervalGenerator.Next(_sampleIntervalMsLow, _sampleIntervalMsHigh + 1);
+
+                if (state != StateOrTransition.CooperativeBlocking) // this can be noisy
+                {
+                    _currentSampleMs = _randomIntervalGenerator.Next(_sampleIntervalMsLow, _sampleIntervalMsHigh + 1);
+                }
+
                 double throughput = _secondsElapsedSinceLastChange > 0 ? _completionsSinceLastChange / _secondsElapsedSinceLastChange : 0;
                 LogTransition(newThreadCount, throughput, state);
-                _secondsElapsedSinceLastChange = 0;
-                _completionsSinceLastChange = 0;
             }
 
             private void LogTransition(int newThreadCount, double throughput, StateOrTransition stateOrTransition)
@@ -404,12 +415,12 @@ namespace System.Threading
 
                 _logSize++;
 
-                if (PortableThreadPoolEventSource.Log.IsEnabled())
+                if (NativeRuntimeEventSource.Log.IsEnabled())
                 {
-                    PortableThreadPoolEventSource.Log.ThreadPoolWorkerThreadAdjustmentAdjustment(
+                    NativeRuntimeEventSource.Log.ThreadPoolWorkerThreadAdjustmentAdjustment(
                         throughput,
                         (uint)newThreadCount,
-                        (PortableThreadPoolEventSource.ThreadAdjustmentReasonMap)stateOrTransition);
+                        (NativeRuntimeEventSource.ThreadAdjustmentReasonMap)stateOrTransition);
                 }
             }
 
@@ -436,7 +447,7 @@ namespace System.Threading
                 double w = 2 * Math.PI / period;
                 double cos = Math.Cos(w);
                 double coeff = 2 * cos;
-                double q0 = 0, q1 = 0, q2 = 0;
+                double q0, q1 = 0, q2 = 0;
                 for (int i = 0; i < numSamples; ++i)
                 {
                     q0 = coeff * q1 - q2 + samples[(_totalSamples - numSamples + i) % _samplesToMeasure];

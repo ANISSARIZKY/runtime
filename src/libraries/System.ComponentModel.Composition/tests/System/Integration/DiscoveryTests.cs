@@ -71,7 +71,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Import_PrivateOnClass_ShouldSetImport()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(BaseWithNonPublicImportAndExport));
@@ -82,7 +81,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Import_PrivateOnBase_ShouldSetImport()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(DerivedBaseWithNonPublicImportAndExport));
@@ -121,7 +119,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Import_InheritImportFromInterface_ShouldExposeImport()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -170,7 +167,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Export_BaseAndDerivedShouldAmountInTwoExports()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -306,7 +302,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Export_Plugin1()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -331,7 +326,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Export_Plugin2()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -359,7 +353,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Export_Plugin3()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -392,7 +385,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Export_Plugin4()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -413,7 +405,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Export_MyPlugin()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -449,7 +440,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void TestInterfaces()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(
@@ -491,7 +481,7 @@ namespace Tests.Integration
             }
         }
 
-        public class ImportOnOverridenPropertyWithSameContract : ImportOnVirtualProperty
+        public class ImportOnOverriddenPropertyWithSameContract : ImportOnVirtualProperty
         {
             [Import("VirtualImport")]
             public override int VirtualImport
@@ -508,18 +498,17 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Import_VirtualPropertyOverrideWithSameContract_ShouldSucceed()
         {
             var container = ContainerFactory.Create();
             container.AddAndComposeExportedValue<int>("VirtualImport", 21);
 
-            var import = new ImportOnOverridenPropertyWithSameContract();
+            var import = new ImportOnOverriddenPropertyWithSameContract();
 
             container.SatisfyImportsOnce(import);
 
             // Import will get set twice because there are 2 imports on the same property.
-            // We would really like to either elminate it getting set twice or error in this case
+            // We would really like to either eliminate it getting set twice or error in this case
             // but we figure it is a rare enough corner case that it doesn't warrented the run time cost
             // and can be covered by an FxCop rule.
 
@@ -527,7 +516,7 @@ namespace Tests.Integration
             Assert.Equal(21, import.VirtualImport);
         }
 
-        public class ImportOnOverridenPropertyWithDifferentContract : ImportOnVirtualProperty
+        public class ImportOnOverriddenPropertyWithDifferentContract : ImportOnVirtualProperty
         {
             [Import("OverriddenImport")]
             public override int VirtualImport
@@ -540,19 +529,18 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Import_VirtualPropertyOverrideWithDifferentContract_ShouldSucceed()
         {
             var container = ContainerFactory.Create();
             container.AddAndComposeExportedValue<int>("VirtualImport", 21);
             container.AddAndComposeExportedValue<int>("OverriddenImport", 42);
 
-            var import = new ImportOnOverridenPropertyWithSameContract();
+            var import = new ImportOnOverriddenPropertyWithSameContract();
 
             container.SatisfyImportsOnce(import);
 
             // Import will get set twice because there are 2 imports on the same property.
-            // We would really like to either elminate it getting set twice or error in this case
+            // We would really like to either eliminate it getting set twice or error in this case
             // but we figure it is a rare enough corner case that it doesn't warrented the run time cost
             // and can be covered by an FxCop rule.
 
@@ -668,7 +656,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void DiscoverAddinsWithCombinedCustomExportAndMetadataAttribute()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(Addin1), typeof(Addin2), typeof(Addin3));
@@ -727,7 +714,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Test_CustomInheritedExportAttribute_OnInterface()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(UsesCustomInheritedExportOnInterface));
@@ -750,7 +736,6 @@ namespace Tests.Integration
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void Test_CustomInheritedExportAttribute_OnBaseClass()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(DerivedFromBaseWithCustomInheritedExport));
@@ -786,6 +771,7 @@ namespace Tests.Integration
         public class FooWithTwoFoos : IFoo1, IFoo2 { }
 
         [Fact]
+        [ActiveIssue("https://github.com/mono/mono/issues/16417", TestRuntimes.Mono)]
         public void InheritedExport_TwoInterfaces()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(FooWithTwoFoos));
@@ -835,7 +821,7 @@ namespace Tests.Integration
 
         [Fact]
         [ActiveIssue("https://github.com/dotnet/runtime/issues/24240")]
-        public void InheritedExport_InterfaceHiearchy()
+        public void InheritedExport_InterfaceHierarchy()
         {
             var container = ContainerFactory.CreateWithAttributedCatalog(typeof(FooWithInterfaceWithMultipleFoos));
 

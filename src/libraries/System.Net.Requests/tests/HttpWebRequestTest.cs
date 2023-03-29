@@ -34,10 +34,13 @@ namespace System.Net.Tests
     {
         public HttpWebRequestTest_Sync(ITestOutputHelper output) : base(output) { }
         protected override Task<WebResponse> GetResponseAsync(HttpWebRequest request) => Task.Run(() => request.GetResponse());
+        protected override bool IsAsync => false;
     }
 
     public abstract partial class HttpWebRequestTest
     {
+        protected virtual bool IsAsync => true;
+
         public class HttpWebRequestParameters
         {
             public DecompressionMethods AutomaticDecompression { get; set; }
@@ -435,11 +438,11 @@ namespace System.Net.Tests
         }
 
         [Theory, MemberData(nameof(EchoServers))]
-        public void MaximumAutomaticRedirections_SetZeroOrNegative_ThrowsArgumentException(Uri remoteServer)
+        public void MaximumAutomaticRedirections_SetZeroOrNegative_ThrowsArgumentOutOfRangeException(Uri remoteServer)
         {
             HttpWebRequest request = WebRequest.CreateHttp(remoteServer);
-            AssertExtensions.Throws<ArgumentException>("value", () => request.MaximumAutomaticRedirections = 0);
-            AssertExtensions.Throws<ArgumentException>("value", () => request.MaximumAutomaticRedirections = -1);
+            AssertExtensions.Throws<ArgumentOutOfRangeException>("value", () => request.MaximumAutomaticRedirections = 0);
+            AssertExtensions.Throws<ArgumentOutOfRangeException>("value", () => request.MaximumAutomaticRedirections = -1);
         }
 
         [Theory, MemberData(nameof(EchoServers))]
@@ -1063,6 +1066,69 @@ namespace System.Net.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => { request.ReadWriteTimeout = -10; });
         }
 
+        [OuterLoop("Uses timeout")]
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task ReadWriteTimeout_CancelsResponse(bool forceTimeoutDuringHeaders)
+        {
+            if (forceTimeoutDuringHeaders && IsAsync)
+            {
+                // ReadWriteTimeout doesn't apply to asynchronous operations, so when doing async
+                // internally, this test is only relevant when we then perform synchronous operations
+                // on the response stream.
+                return;
+            }
+
+            var tcs = new TaskCompletionSource();
+            await LoopbackServer.CreateClientAndServerAsync(uri => Task.Run(async () =>
+            {
+                try
+                {
+                    HttpWebRequest request = WebRequest.CreateHttp(uri);
+                    request.ReadWriteTimeout = 100;
+                    Exception e = await Assert.ThrowsAnyAsync<Exception>(async () =>
+                    {
+                        using WebResponse response = await GetResponseAsync(request);
+                        using (Stream myStream = response.GetResponseStream())
+                        {
+                            while (myStream.ReadByte() != -1) ;
+                        }
+                    });
+
+                    // If the timeout occurs while we're reading on the stream, we'll get an IOException.
+                    // If the timeout occurs while we're reading/writing the request/response headers,
+                    // that IOException will be wrapped in an HttpRequestException wrapped in a WebException.
+                    // (Note that this differs slightly from .NET Framework, where exceptions from the stream
+                    // are wrapped in a WebException as  well, but in .NET Core, HttpClient's response Stream
+                    // is passed back through the WebResponse without being wrapped.)
+                    Assert.True(
+                        e is WebException { InnerException: HttpRequestException { InnerException: IOException { InnerException: SocketException { SocketErrorCode: SocketError.TimedOut } } } } ||
+                        e is IOException { InnerException: SocketException { SocketErrorCode: SocketError.TimedOut } },
+                        e.ToString());
+                }
+                finally
+                {
+                    tcs.SetResult();
+                }
+            }), async server =>
+            {
+                try
+                {
+                    await server.AcceptConnectionAsync(async connection =>
+                    {
+                        await connection.ReadRequestHeaderAsync();
+
+                        // Make sure to send at least one byte, or the request retry logic in SocketsHttpHandler
+                        // will consider this a retryable request, since we never received any response.
+                        await connection.WriteStringAsync(forceTimeoutDuringHeaders ? "H" : "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nHello Wor");
+                        await tcs.Task;
+                    });
+                }
+                catch { }
+            });
+        }
+
         [Theory, MemberData(nameof(EchoServers))]
         public void CookieContainer_SetThenGetContainer_Success(Uri remoteServer)
         {
@@ -1389,6 +1455,7 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/56798", TestPlatforms.tvOS)]
         public async Task GetResponseAsync_UseDefaultCredentials_ExpectSuccess(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1428,6 +1495,7 @@ namespace System.Net.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/56798", TestPlatforms.tvOS)]
         public async Task HaveResponse_GetResponseAsync_ExpectTrue(bool useSsl)
         {
             var options = new LoopbackServer.Options { UseSsl = useSsl };
@@ -1500,7 +1568,7 @@ namespace System.Net.Tests
         }
 
         [ActiveIssue("https://github.com/dotnet/runtime/issues/31380")]
-        [OuterLoop("Uses external server")]
+        [OuterLoop("Uses external servers")]
         [PlatformSpecific(TestPlatforms.AnyUnix)] // The default proxy is resolved via WinINet on Windows.
         [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
         public async Task ProxySetViaEnvironmentVariable_DefaultProxyCredentialsUsed()
@@ -1668,7 +1736,7 @@ namespace System.Net.Tests
 
                         Task<Socket> secondAccept = listener.AcceptAsync();
 
-                        Task<WebResponse> secondResponseTask = request1.GetResponseAsync();
+                        Task<WebResponse> secondResponseTask = bool.Parse(async) ? request1.GetResponseAsync() : Task.Run(() => request1.GetResponse());
                         await ReplyToClient(responseContent, server, serverReader);
                         if (bool.Parse(connectionReusedString))
                         {
@@ -1844,6 +1912,170 @@ namespace System.Net.Tests
             request.Abort();
         }
 
+        [Theory]
+        [InlineData(HttpRequestCacheLevel.NoCacheNoStore, null, null, new string[] { "Pragma: no-cache", "Cache-Control: no-store, no-cache"})]
+        [InlineData(HttpRequestCacheLevel.Reload, null, null, new string[] { "Pragma: no-cache", "Cache-Control: no-cache" })]
+        [InlineData(HttpRequestCacheLevel.CacheOrNextCacheOnly, null, null, new string[] { "Cache-Control: only-if-cached" })]
+        [InlineData(HttpRequestCacheLevel.Default, HttpCacheAgeControl.MinFresh, 10, new string[] { "Cache-Control: min-fresh=10" })]
+        [InlineData(HttpRequestCacheLevel.Default, HttpCacheAgeControl.MaxAge, 10, new string[] { "Cache-Control: max-age=10" })]
+        [InlineData(HttpRequestCacheLevel.Default, HttpCacheAgeControl.MaxStale, 10, new string[] { "Cache-Control: max-stale=10" })]
+        [InlineData(HttpRequestCacheLevel.Refresh, null, null, new string[] { "Pragma: no-cache", "Cache-Control: max-age=0" })]
+        public async Task SendHttpGetRequest_WithHttpCachePolicy_AddCacheHeaders(
+            HttpRequestCacheLevel requestCacheLevel, HttpCacheAgeControl? ageControl, int? age, string[] expectedHeaders)
+        {
+            await LoopbackServer.CreateServerAsync(async (server, uri) =>
+            {
+                HttpWebRequest request = WebRequest.CreateHttp(uri);
+                request.CachePolicy = ageControl != null ?
+                    new HttpRequestCachePolicy(ageControl.Value, TimeSpan.FromSeconds((double)age))
+                    : new HttpRequestCachePolicy(requestCacheLevel);
+                Task<WebResponse> getResponse = GetResponseAsync(request);
+
+                await server.AcceptConnectionAsync(async connection =>
+                {
+                    List<string> headers = await connection.ReadRequestHeaderAndSendResponseAsync();
+
+                    foreach (string header in expectedHeaders)
+                    {
+                        Assert.Contains(header, headers);
+                    }
+                });
+
+                using (var response = (HttpWebResponse)await getResponse)
+                {
+                    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                }
+            });
+        }
+
+        [Theory]
+        [InlineData(RequestCacheLevel.NoCacheNoStore, new string[] { "Pragma: no-cache", "Cache-Control: no-store, no-cache" })]
+        [InlineData(RequestCacheLevel.Reload, new string[] { "Pragma: no-cache", "Cache-Control: no-cache" })]
+        public async Task SendHttpGetRequest_WithCachePolicy_AddCacheHeaders(
+            RequestCacheLevel requestCacheLevel, string[] expectedHeaders)
+        {
+            await LoopbackServer.CreateServerAsync(async (server, uri) =>
+            {
+                HttpWebRequest request = WebRequest.CreateHttp(uri);
+                request.CachePolicy = new RequestCachePolicy(requestCacheLevel);
+                Task<WebResponse> getResponse = GetResponseAsync(request);
+
+                await server.AcceptConnectionAsync(async connection =>
+                {
+                    List<string> headers = await connection.ReadRequestHeaderAndSendResponseAsync();
+
+                    foreach (string header in expectedHeaders)
+                    {
+                        Assert.Contains(header, headers);
+                    }
+                });
+
+                using (var response = (HttpWebResponse)await getResponse)
+                {
+                    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                }
+            });
+        }
+
+        [ConditionalTheory(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        [InlineData(RequestCacheLevel.NoCacheNoStore, "Cache-Control: no-store, no-cache")]
+        [InlineData(RequestCacheLevel.Reload, "Cache-Control: no-cache")]
+        public void SendHttpGetRequest_WithGlobalCachePolicy_AddCacheHeaders(
+            RequestCacheLevel requestCacheLevel, string expectedHeader)
+        {
+            RemoteExecutor.Invoke(async (async, reqCacheLevel, eh) =>
+            {
+                await LoopbackServer.CreateServerAsync(async (server, uri) =>
+                {
+                    HttpWebRequest.DefaultCachePolicy = new RequestCachePolicy(Enum.Parse<RequestCacheLevel>(reqCacheLevel));
+                    HttpWebRequest request = WebRequest.CreateHttp(uri);
+                    Task<WebResponse> getResponse = bool.Parse(async) ? request.GetResponseAsync() : Task.Run(() => request.GetResponse());
+
+                    await server.AcceptConnectionAsync(async connection =>
+                    {
+                        List<string> headers = await connection.ReadRequestHeaderAndSendResponseAsync();
+                        Assert.Contains("Pragma: no-cache", headers);
+                        Assert.Contains(eh, headers);
+                    });
+
+                    using (var response = (HttpWebResponse)await getResponse)
+                    {
+                        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                    }
+                });
+            }, (this is HttpWebRequestTest_Async).ToString(), requestCacheLevel.ToString(), expectedHeader).Dispose();
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task SendHttpGetRequest_WithCachePolicyCacheOnly_ThrowException(
+            bool isHttpCachePolicy)
+        {
+            HttpWebRequest request = WebRequest.CreateHttp("http://anything");
+            request.CachePolicy = isHttpCachePolicy ? new HttpRequestCachePolicy(HttpRequestCacheLevel.CacheOnly)
+                : new RequestCachePolicy(RequestCacheLevel.CacheOnly);
+            WebException exception = await Assert.ThrowsAsync<WebException>(() => GetResponseAsync(request));
+            Assert.Equal(SR.CacheEntryNotFound, exception.Message);
+        }
+
+        [ConditionalFact(typeof(RemoteExecutor), nameof(RemoteExecutor.IsSupported))]
+        public void SendHttpGetRequest_WithGlobalCachePolicyBypassCache_DoNotAddCacheHeaders()
+        {
+            RemoteExecutor.Invoke(async () =>
+            {
+                await LoopbackServer.CreateServerAsync(async (server, uri) =>
+                {
+                    HttpWebRequest.DefaultCachePolicy = new RequestCachePolicy(RequestCacheLevel.BypassCache);
+                    HttpWebRequest request = WebRequest.CreateHttp(uri);
+                    Task<WebResponse> getResponse = request.GetResponseAsync();
+
+                    await server.AcceptConnectionAsync(async connection =>
+                    {
+                        List<string> headers = await connection.ReadRequestHeaderAndSendResponseAsync();
+
+                        foreach (string header in headers)
+                        {
+                            Assert.DoesNotContain("Pragma", header);
+                            Assert.DoesNotContain("Cache-Control", header);
+                        }
+                    });
+
+                    using (var response = (HttpWebResponse)await getResponse)
+                    {
+                        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                    }
+                });
+            }).Dispose();
+        }
+
+        [Fact]
+        public async Task SendHttpGetRequest_WithCachePolicyBypassCache_DoNotAddHeaders()
+        {
+            await LoopbackServer.CreateServerAsync(async (server, uri) =>
+            {
+                HttpWebRequest request = WebRequest.CreateHttp(uri);
+                request.CachePolicy = new RequestCachePolicy(RequestCacheLevel.BypassCache);
+                Task<WebResponse> getResponse = request.GetResponseAsync();
+
+                await server.AcceptConnectionAsync(async connection =>
+                {
+                    List<string> headers = await connection.ReadRequestHeaderAndSendResponseAsync();
+
+                    foreach (string header in headers)
+                    {
+                        Assert.DoesNotContain("Pragma", header);
+                        Assert.DoesNotContain("Cache-Control", header);
+                    }
+                });
+
+                using (var response = (HttpWebResponse)await getResponse)
+                {
+                    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                }
+            });
+        }
+
         private void RequestStreamCallback(IAsyncResult asynchronousResult)
         {
             RequestState state = (RequestState)asynchronousResult.AsyncState;
@@ -1915,7 +2147,7 @@ namespace System.Net.Tests
             }
         }
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsBinaryFormatterSupported))]
         public void HttpWebRequest_Serialize_Fails()
         {
             using (MemoryStream fs = new MemoryStream())

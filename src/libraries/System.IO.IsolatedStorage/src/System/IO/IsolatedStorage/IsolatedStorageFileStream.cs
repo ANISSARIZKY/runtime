@@ -4,6 +4,7 @@
 using Microsoft.Win32.SafeHandles;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.Versioning;
 
 namespace System.IO.IsolatedStorage
 {
@@ -53,7 +54,7 @@ namespace System.IO.IsolatedStorage
         }
 
         public IsolatedStorageFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, IsolatedStorageFile? isf)
-            : this(path, mode, access, share, bufferSize, InitializeFileStream(path, mode, access, share, bufferSize, isf))
+            : this(path, access, bufferSize, InitializeFileStream(path, mode, access, share, bufferSize, isf))
         {
         }
 
@@ -63,7 +64,7 @@ namespace System.IO.IsolatedStorage
         //
         // We only expose our own nested FileStream so the base class having a handle doesn't matter. Passing a new SafeFileHandle
         // with ownsHandle: false avoids the parent class closing without our knowledge.
-        private IsolatedStorageFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, InitialiationData initializationData)
+        private IsolatedStorageFileStream(string path, FileAccess access, int bufferSize, InitializationData initializationData)
             : base(new SafeFileHandle(initializationData.NestedStream.SafeFileHandle.DangerousGetHandle(), ownsHandle: false), access, bufferSize)
         {
             _isf = initializationData.StorageFile;
@@ -72,7 +73,7 @@ namespace System.IO.IsolatedStorage
             _fs = initializationData.NestedStream;
         }
 
-        private struct InitialiationData
+        private struct InitializationData
         {
             public FileStream NestedStream;
             public IsolatedStorageFile StorageFile;
@@ -80,10 +81,9 @@ namespace System.IO.IsolatedStorage
         }
 
         // If IsolatedStorageFile is null, then we default to using a file that is scoped by user, appdomain, and assembly.
-        private static InitialiationData InitializeFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, IsolatedStorageFile? isf)
+        private static InitializationData InitializeFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, IsolatedStorageFile? isf)
         {
-            if (path == null)
-                throw new ArgumentNullException(nameof(path));
+            ArgumentNullException.ThrowIfNull(path);
 
             if ((path.Length == 0) || path.Equals(BackSlash))
                 throw new ArgumentException(
@@ -113,7 +113,7 @@ namespace System.IO.IsolatedStorage
                     throw new ArgumentException(SR.IsolatedStorage_FileOpenMode);
             }
 
-            InitialiationData data = new InitialiationData
+            InitializationData data = new InitializationData
             {
                 FullPath = isf.GetFullPath(path),
                 StorageFile = isf
@@ -206,8 +206,7 @@ namespace System.IO.IsolatedStorage
             {
                 if (disposing)
                 {
-                    if (_fs != null)
-                        _fs.Dispose();
+                    _fs?.Dispose();
                 }
             }
             finally
@@ -321,17 +320,19 @@ namespace System.IO.IsolatedStorage
             _fs.EndWrite(asyncResult);
         }
 
-        [Obsolete("This property has been deprecated.  Please use IsolatedStorageFileStream's SafeFileHandle property instead.  https://go.microsoft.com/fwlink/?linkid=14202")]
+        [Obsolete("IsolatedStorageFileStream.Handle has been deprecated. Use IsolatedStorageFileStream's SafeFileHandle property instead.")]
         public override IntPtr Handle
         {
             get { return _fs.Handle; }
         }
 
+        [UnsupportedOSPlatform("macos")]
         public override void Unlock(long position, long length)
         {
             _fs.Unlock(position, length);
         }
 
+        [UnsupportedOSPlatform("macos")]
         public override void Lock(long position, long length)
         {
             _fs.Lock(position, length);

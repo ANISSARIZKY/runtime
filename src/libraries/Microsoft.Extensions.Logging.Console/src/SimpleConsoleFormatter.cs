@@ -2,30 +2,36 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.Extensions.Logging.Console
 {
-    internal class SimpleConsoleFormatter : ConsoleFormatter, IDisposable
+    internal sealed class SimpleConsoleFormatter : ConsoleFormatter, IDisposable
     {
         private const string LoglevelPadding = ": ";
         private static readonly string _messagePadding = new string(' ', GetLogLevelString(LogLevel.Information).Length + LoglevelPadding.Length);
         private static readonly string _newLineWithMessagePadding = Environment.NewLine + _messagePadding;
-        private IDisposable _optionsReloadToken;
+#if NETCOREAPP
+        private static bool IsAndroidOrAppleMobile => OperatingSystem.IsAndroid() ||
+                                                      OperatingSystem.IsTvOS() ||
+                                                      OperatingSystem.IsIOS(); // returns true on MacCatalyst
+#else
+        private static bool IsAndroidOrAppleMobile => false;
+#endif
+        private readonly IDisposable? _optionsReloadToken;
 
         public SimpleConsoleFormatter(IOptionsMonitor<SimpleConsoleFormatterOptions> options)
-            : base (ConsoleFormatterNames.Simple)
+            : base(ConsoleFormatterNames.Simple)
         {
             ReloadLoggerOptions(options.CurrentValue);
             _optionsReloadToken = options.OnChange(ReloadLoggerOptions);
         }
 
+        [MemberNotNull(nameof(FormatterOptions))]
         private void ReloadLoggerOptions(SimpleConsoleFormatterOptions options)
         {
             FormatterOptions = options;
@@ -38,7 +44,7 @@ namespace Microsoft.Extensions.Logging.Console
 
         internal SimpleConsoleFormatterOptions FormatterOptions { get; set; }
 
-        public override void Write<TState>(in LogEntry<TState> logEntry, IExternalScopeProvider scopeProvider, TextWriter textWriter)
+        public override void Write<TState>(in LogEntry<TState> logEntry, IExternalScopeProvider? scopeProvider, TextWriter textWriter)
         {
             string message = logEntry.Formatter(logEntry.State, logEntry.Exception);
             if (logEntry.Exception == null && message == null)
@@ -49,8 +55,8 @@ namespace Microsoft.Extensions.Logging.Console
             ConsoleColors logLevelColors = GetLogLevelConsoleColors(logLevel);
             string logLevelString = GetLogLevelString(logLevel);
 
-            string timestamp = null;
-            string timestampFormat = FormatterOptions.TimestampFormat;
+            string? timestamp = null;
+            string? timestampFormat = FormatterOptions.TimestampFormat;
             if (timestampFormat != null)
             {
                 DateTimeOffset dateTimeOffset = GetCurrentDateTime();
@@ -67,18 +73,30 @@ namespace Microsoft.Extensions.Logging.Console
             CreateDefaultLogMessage(textWriter, logEntry, message, scopeProvider);
         }
 
-        private void CreateDefaultLogMessage<TState>(TextWriter textWriter, in LogEntry<TState> logEntry, string message, IExternalScopeProvider scopeProvider)
+        private void CreateDefaultLogMessage<TState>(TextWriter textWriter, in LogEntry<TState> logEntry, string message, IExternalScopeProvider? scopeProvider)
         {
             bool singleLine = FormatterOptions.SingleLine;
             int eventId = logEntry.EventId.Id;
-            Exception exception = logEntry.Exception;
+            Exception? exception = logEntry.Exception;
 
             // Example:
             // info: ConsoleApp.Program[10]
             //       Request received
 
             // category and event id
-            textWriter.Write(LoglevelPadding + logEntry.Category + '[' + eventId + "]");
+            textWriter.Write(LoglevelPadding);
+            textWriter.Write(logEntry.Category);
+            textWriter.Write('[');
+
+#if NETCOREAPP
+            Span<char> span = stackalloc char[10];
+            if (eventId.TryFormat(span, out int charsWritten))
+                textWriter.Write(span.Slice(0, charsWritten));
+            else
+#endif
+                textWriter.Write(eventId.ToString());
+
+            textWriter.Write(']');
             if (!singleLine)
             {
                 textWriter.Write(Environment.NewLine);
@@ -102,7 +120,7 @@ namespace Microsoft.Extensions.Logging.Console
             }
         }
 
-        private void WriteMessage(TextWriter textWriter, string message, bool singleLine)
+        private static void WriteMessage(TextWriter textWriter, string message, bool singleLine)
         {
             if (!string.IsNullOrEmpty(message))
             {
@@ -147,8 +165,10 @@ namespace Microsoft.Extensions.Logging.Console
 
         private ConsoleColors GetLogLevelConsoleColors(LogLevel logLevel)
         {
+            // We shouldn't be outputting color codes for Android/Apple mobile platforms,
+            // they have no shell (adb shell is not meant for running apps) and all the output gets redirected to some log file.
             bool disableColors = (FormatterOptions.ColorBehavior == LoggerColorBehavior.Disabled) ||
-                (FormatterOptions.ColorBehavior == LoggerColorBehavior.Default && System.Console.IsOutputRedirected);
+                (FormatterOptions.ColorBehavior == LoggerColorBehavior.Default && (!ConsoleUtils.EmitAnsiColorCodes || IsAndroidOrAppleMobile));
             if (disableColors)
             {
                 return new ConsoleColors(null, null);
@@ -167,7 +187,7 @@ namespace Microsoft.Extensions.Logging.Console
             };
         }
 
-        private void WriteScopeInformation(TextWriter textWriter, IExternalScopeProvider scopeProvider, bool singleLine)
+        private void WriteScopeInformation(TextWriter textWriter, IExternalScopeProvider? scopeProvider, bool singleLine)
         {
             if (FormatterOptions.IncludeScopes && scopeProvider != null)
             {
@@ -177,7 +197,8 @@ namespace Microsoft.Extensions.Logging.Console
                     if (paddingNeeded)
                     {
                         paddingNeeded = false;
-                        state.Write(_messagePadding + "=> ");
+                        state.Write(_messagePadding);
+                        state.Write("=> ");
                     }
                     else
                     {

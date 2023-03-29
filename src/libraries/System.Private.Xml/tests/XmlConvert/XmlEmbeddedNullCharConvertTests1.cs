@@ -1,9 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers.Binary;
 using OLEDB.Test.ModuleCore;
 
-namespace System.Xml.Tests
+namespace System.Xml.XmlConvertTests
 {
     internal class XmlEmbeddedNullCharConvertTests1 : XmlEmbeddedNullCharConvertTests
     {
@@ -26,7 +27,8 @@ namespace System.Xml.Tests
             int i = ((CurVariation.id) - 1) * 2;
             string strEnVal = string.Empty;
 
-            strEnVal = XmlConvert.EncodeName((BitConverter.ToChar(_byte_EmbeddedNull, i)).ToString());
+            char c = (char)BinaryPrimitives.ReadUInt16LittleEndian(new Span<byte>(_byte_EmbeddedNull, i, 2));
+            strEnVal = XmlConvert.EncodeName(c.ToString());
             CError.Compare(strEnVal, _Expbyte_EmbeddedNull[i / 2], "Comparison failed at " + i);
             return TEST_PASS;
         }

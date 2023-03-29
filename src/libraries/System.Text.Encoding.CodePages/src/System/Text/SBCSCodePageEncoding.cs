@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using System.Diagnostics;
 using System.Text;
@@ -12,7 +13,7 @@ using System.Runtime.CompilerServices;
 
 namespace System.Text
 {
-    internal class SBCSCodePageEncoding : BaseCodePageEncoding
+    internal sealed class SBCSCodePageEncoding : BaseCodePageEncoding
     {
         // Pointers to our memory section parts
         private unsafe char* _mapBytesToUnicode = null;      // char 256
@@ -30,6 +31,18 @@ namespace System.Text
 
         public SBCSCodePageEncoding(int codePage, int dataCodePage) : base(codePage, dataCodePage)
         {
+        }
+
+        internal static unsafe ushort ReadUInt16(byte* pByte)
+        {
+            if (BitConverter.IsLittleEndian)
+            {
+              return *(ushort*)pByte;
+            }
+            else
+            {
+              return BinaryPrimitives.ReverseEndianness(*(ushort*)pByte);
+            }
         }
 
         // We have a managed code page entry, so load our tables
@@ -86,21 +99,22 @@ namespace System.Text
                 lock (s_streamLock)
                 {
                     s_codePagesEncodingDataStream.Seek(m_firstDataWordOffset, SeekOrigin.Begin);
-                    s_codePagesEncodingDataStream.Read(buffer, 0, buffer.Length);
+                    int bytesRead = s_codePagesEncodingDataStream.Read(buffer, 0, buffer.Length);
+                    Debug.Assert(bytesRead == buffer.Length, "s_codePagesEncodingDataStream.Read should have read a full buffer.");
                 }
 
                 fixed (byte* pBuffer = &buffer[0])
                 {
-                    char* pTemp = (char*)pBuffer;
                     for (int b = 0; b < 256; b++)
                     {
+                        char c = (char)ReadUInt16(pBuffer + 2 * b);
                         // Don't want to force 0's to map Unicode wrong.  0 byte == 0 unicode already taken care of
-                        if (pTemp[b] != 0 || b == 0)
+                        if (c != 0 || b == 0)
                         {
-                            mapBytesToUnicode[b] = pTemp[b];
+                            mapBytesToUnicode[b] = c;
 
-                            if (pTemp[b] != UNKNOWN_CHAR)
-                                mapUnicodeToBytes[pTemp[b]] = (byte)b;
+                            if (c != UNKNOWN_CHAR)
+                                mapUnicodeToBytes[c] = (byte)b;
                         }
                         else
                         {
@@ -130,7 +144,7 @@ namespace System.Text
         }
 
         // Read in our best fit table
-        protected unsafe override void ReadBestFitTable()
+        protected override unsafe void ReadBestFitTable()
         {
             // Lock so we don't confuse ourselves.
             lock (InternalSyncObject)
@@ -149,7 +163,8 @@ namespace System.Text
                     lock (s_streamLock)
                     {
                         s_codePagesEncodingDataStream.Seek(m_firstDataWordOffset + 512, SeekOrigin.Begin);
-                        s_codePagesEncodingDataStream.Read(buffer, 0, buffer.Length);
+                        int bytesRead = s_codePagesEncodingDataStream.Read(buffer, 0, buffer.Length);
+                        Debug.Assert(bytesRead == buffer.Length, "s_codePagesEncodingDataStream.Read should have read a full buffer.");
                     }
 
                     fixed (byte* pBuffer = buffer)
@@ -162,12 +177,12 @@ namespace System.Text
 
                         // See if our words are zero
                         ushort byteTemp;
-                        while ((byteTemp = *((ushort*)pData)) != 0)
+                        while ((byteTemp = ReadUInt16(pData)) != 0)
                         {
                             Debug.Assert(arrayTemp[byteTemp] == UNKNOWN_CHAR, $"[SBCSCodePageEncoding::ReadBestFitTable] Expected unallocated byte (not 0x{(int)arrayTemp[byteTemp]:X2}) for best fit byte at 0x{byteTemp:X2} for code page {CodePage}");
                             pData += 2;
 
-                            arrayTemp[byteTemp] = *((char*)pData);
+                            arrayTemp[byteTemp] = (char)ReadUInt16(pData);
                             pData += 2;
                         }
 
@@ -184,7 +199,7 @@ namespace System.Text
 
                         // Now do the UnicodeToBytes Best Fit mapping (this is the one we normally think of when we say "best fit")
                         // pData should be pointing at the first data point for Bytes->Unicode table
-                        int unicodePosition = *((ushort*)pData);
+                        int unicodePosition = ReadUInt16(pData);
                         pData += 2;
 
                         while (unicodePosition < 0x10000)
@@ -197,7 +212,7 @@ namespace System.Text
                             if (input == 1)
                             {
                                 // Use next 2 bytes as our byte position
-                                unicodePosition = *((ushort*)pData);
+                                unicodePosition = ReadUInt16(pData);
                                 pData += 2;
                             }
                             else if (input < 0x20 && input > 0 && input != 0x1e)
@@ -222,7 +237,7 @@ namespace System.Text
                         // Now actually read in the data
                         // reset pData should be pointing at the first data point for Bytes->Unicode table
                         pData = pUnicodeToSBCS;
-                        unicodePosition = *((ushort*)pData);
+                        unicodePosition = ReadUInt16(pData);
                         pData += 2;
                         iBestFitCount = 0;
 
@@ -236,7 +251,7 @@ namespace System.Text
                             if (input == 1)
                             {
                                 // Use next 2 bytes as our byte position
-                                unicodePosition = *((ushort*)pData);
+                                unicodePosition = ReadUInt16(pData);
                                 pData += 2;
                             }
                             else if (input < 0x20 && input > 0 && input != 0x1e)
@@ -681,7 +696,7 @@ namespace System.Text
             // Have to do it the hard way.
             // Assume charCount will be == count
             int charCount = count;
-            byte[] byteBuffer = new byte[1];
+            byte[]? byteBuffer = null;
 
             // Do it our fast way
             byte* byteEnd = bytes + count;
@@ -712,6 +727,7 @@ namespace System.Text
                     }
 
                     // Use fallback buffer
+                    byteBuffer ??= new byte[1];
                     byteBuffer[0] = *(bytes - 1);
                     charCount--;                            // We'd already reserved one for *(bytes-1)
                     charCount += fallbackHelper.InternalFallback(byteBuffer, bytes);
@@ -813,7 +829,7 @@ namespace System.Text
 
             // Slower way's going to need a fallback buffer
             DecoderFallbackBuffer? fallbackBuffer = null;
-            byte[] byteBuffer = new byte[1];
+            byte[]? byteBuffer = null;
             char* charEnd = chars + charCount;
 
             DecoderFallbackBufferHelper fallbackHelper = new DecoderFallbackBufferHelper(null);
@@ -844,6 +860,7 @@ namespace System.Text
                     // Use fallback buffer
                     Debug.Assert(bytes > byteStart,
                         "[SBCSCodePageEncoding.GetChars]Expected bytes to have advanced already (unknown byte)");
+                    byteBuffer ??= new byte[1];
                     byteBuffer[0] = *(bytes - 1);
                     // Fallback adds fallback to chars, but doesn't increment chars unless the whole thing fits.
                     if (!fallbackHelper.InternalFallback(byteBuffer, bytes, ref chars))

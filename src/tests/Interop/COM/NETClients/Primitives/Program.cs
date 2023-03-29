@@ -6,11 +6,11 @@ namespace NetClient
     using System;
     using System.Threading;
     using System.Runtime.InteropServices;
-    using TestLibrary;
+    using Xunit;
 
     class Program
     {
-        static int Main(string[] doNotUse)
+        static int Main()
         {
             // RegFree COM is not supported on Windows Nano
             if (TestLibrary.Utilities.IsWindowsNanoServer)
@@ -21,15 +21,10 @@ namespace NetClient
             try
             {
                 RunTests();
-                Console.WriteLine("Testing COM object lifetime control methods.");
-                Thread.CurrentThread.DisableComObjectEagerCleanup();
-                RunTests();
-                Marshal.CleanupUnusedObjectsInCurrentContext();
-                Assert.IsFalse(Marshal.AreComObjectsAvailableForCleanup());
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Test Failure: {e}");
+                Console.WriteLine($"Test object interop failure: {e}");
                 return 101;
             }
 

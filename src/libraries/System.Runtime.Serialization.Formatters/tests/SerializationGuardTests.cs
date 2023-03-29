@@ -34,33 +34,6 @@ namespace System.Runtime.Serialization.Formatters.Tests
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/mono/mono/issues/15112", TestRuntimes.Mono)]
-        public static void BlockReflectionDodging()
-        {
-            // Ensure that the deserialization tracker cannot be called by reflection.
-            MethodInfo trackerMethod = typeof(Thread).GetMethod(
-                "GetThreadDeserializationTracker",
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-
-            Assert.NotNull(trackerMethod);
-
-            Assert.Equal(1, trackerMethod.GetParameters().Length);
-            object[] args = new object[1];
-            args[0] = Enum.ToObject(typeof(Thread).Assembly.GetType("System.Threading.StackCrawlMark"), 0);
-
-            try
-            {
-                object tracker = trackerMethod.Invoke(null, args);
-                throw new InvalidOperationException(tracker?.ToString() ?? "(null tracker returned)");
-            }
-            catch (TargetInvocationException ex)
-            {
-                Exception baseEx = ex.GetBaseException();
-                AssertExtensions.Throws<ArgumentException>("stackMark", () => throw baseEx);
-            }
-        }
-
-        [Fact]
         public static void BlockAsyncDodging()
         {
             TryPayload(new AsyncDodger());
@@ -118,7 +91,7 @@ namespace System.Runtime.Serialization.Formatters.Tests
         {
             string tempPath = Path.GetTempFileName();
             File.WriteAllText(tempPath, "This better not be written...");
-            throw new InvalidOperationException("Unreachable code (SerializationGuard should have kicked in)");
+            throw new UnreachableException("Unreachable code (SerializationGuard should have kicked in)");
         }
 
         public void GetObjectData(SerializationInfo info, StreamingContext context)

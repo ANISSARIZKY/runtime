@@ -67,7 +67,7 @@ namespace System.ComponentModel.Composition
 
         private static readonly Lock _lock = new Lock();
         private static readonly Dictionary<Type, MetadataViewFactory> _metadataViewFactories = new Dictionary<Type, MetadataViewFactory>();
-        private static readonly AssemblyName ProxyAssemblyName = new AssemblyName(string.Format(CultureInfo.InvariantCulture, "MetadataViewProxies_{0}", Guid.NewGuid()));
+        private static readonly AssemblyName ProxyAssemblyName = new AssemblyName($"MetadataViewProxies_{Guid.NewGuid()}");
         private static ModuleBuilder? transparentProxyModuleBuilder;
 
         private static readonly Type[] CtorArgumentTypes = new Type[] { typeof(IDictionary<string, object>) };
@@ -76,7 +76,7 @@ namespace System.ComponentModel.Composition
         private static readonly ConstructorInfo ObjectCtor = typeof(object).GetConstructor(Type.EmptyTypes)!;
 
         // Must be called with _lock held
-        private static ModuleBuilder GetProxyModuleBuilder(bool requiresCritical)
+        private static ModuleBuilder GetProxyModuleBuilder()
         {
             if (transparentProxyModuleBuilder == null)
             {
@@ -90,10 +90,7 @@ namespace System.ComponentModel.Composition
 
         public static MetadataViewFactory GetMetadataViewFactory(Type viewType)
         {
-            if (viewType == null)
-            {
-                throw new ArgumentNullException(nameof(viewType));
-            }
+            ArgumentNullException.ThrowIfNull(viewType);
 
             if (!viewType.IsInterface)
             {
@@ -139,10 +136,8 @@ namespace System.ComponentModel.Composition
 
         public static TMetadataView CreateMetadataView<TMetadataView>(MetadataViewFactory metadataViewFactory, IDictionary<string, object?> metadata)
         {
-            if (metadataViewFactory == null)
-            {
-                throw new ArgumentNullException(nameof(metadataViewFactory));
-            }
+            ArgumentNullException.ThrowIfNull(metadataViewFactory);
+
             // we are simulating the Activator.CreateInstance behavior by wrapping everything in a TargetInvocationException
             try
             {
@@ -189,11 +184,10 @@ namespace System.ComponentModel.Composition
             Type? proxyType;
             TypeBuilder proxyTypeBuilder;
             Type[] interfaces = { viewType };
-            bool requiresCritical = false;
 
-            var proxyModuleBuilder = GetProxyModuleBuilder(requiresCritical);
+            var proxyModuleBuilder = GetProxyModuleBuilder();
             proxyTypeBuilder = proxyModuleBuilder.DefineType(
-                string.Format(CultureInfo.InvariantCulture, "_proxy_{0}_{1}", viewType.FullName, Guid.NewGuid()),
+                $"_proxy_{viewType.FullName}_{Guid.NewGuid()}",
                 TypeAttributes.Public,
                 typeof(object),
                 interfaces);
@@ -214,7 +208,7 @@ namespace System.ComponentModel.Composition
             // Implement interface properties
             foreach (PropertyInfo propertyInfo in viewType.GetAllProperties())
             {
-                string fieldName = string.Format(CultureInfo.InvariantCulture, "_{0}_{1}", propertyInfo.Name, Guid.NewGuid());
+                string fieldName = $"_{propertyInfo.Name}_{Guid.NewGuid()}";
 
                 // Cache names and type for exception
                 string propertyName = propertyInfo.Name;
@@ -367,7 +361,7 @@ namespace System.ComponentModel.Composition
             // Finished implementing the constructor
             proxyCtorIL.Emit(OpCodes.Ret);
 
-            // Implemet the static factory
+            // Implement the static factory
             // public object Create(IDictionary<string, object>)
             // {
             //    return new <ProxyClass>(dictionary);

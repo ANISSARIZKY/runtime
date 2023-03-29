@@ -6,9 +6,10 @@
 //
 
 using System;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Threading;
-using System.Diagnostics;
 
 namespace System.Text
 {
@@ -31,7 +32,7 @@ namespace System.Text
         // Maximum number of characters that this instance of this fallback could return
         public override int MaxCharCount => 1;
 
-        public override bool Equals(object? value) =>
+        public override bool Equals([NotNullWhen(true)] object? value) =>
             value is InternalDecoderBestFitFallback that && encoding.CodePage == that.encoding.CodePage;
 
         public override int GetHashCode() => encoding.CodePage;
@@ -71,8 +72,7 @@ namespace System.Text
                 lock (InternalSyncObject)
                 {
                     // Double check before we do it again.
-                    if (_oFallback.arrayBestFit == null)
-                        _oFallback.arrayBestFit = fallback.encoding.GetBestFitBytesToUnicodeData();
+                    _oFallback.arrayBestFit ??= fallback.encoding.GetBestFitBytesToUnicodeData();
                 }
             }
         }
@@ -138,16 +138,6 @@ namespace System.Text
         public override unsafe void Reset()
         {
             iCount = -1;
-        }
-
-        // This version just counts the fallback and doesn't actually copy anything.
-        internal unsafe int InternalFallback(byte[] bytes, byte* pBytes)
-        // Right now this has both bytes and bytes[], since we might have extra bytes, hence the
-        // array, and we might need the index, hence the byte*
-        {
-            // return our replacement string Length (always 1 for InternalDecoderBestFitFallback, either
-            // a best fit char or ?
-            return 1;
         }
 
         // private helper methods

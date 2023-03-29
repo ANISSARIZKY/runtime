@@ -1,6 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace System.Text
 {
     public sealed class EncodingInfo
@@ -15,10 +17,9 @@ namespace System.Text
         /// <returns></returns>
         public EncodingInfo(EncodingProvider provider, int codePage, string name, string displayName) : this(codePage, name, displayName)
         {
-            if (name == null || displayName == null || provider == null)
-            {
-                throw new ArgumentNullException(name == null ? nameof(name) : (displayName == null ? nameof(displayName) : nameof(provider)));
-            }
+            ArgumentNullException.ThrowIfNull(provider);
+            ArgumentNullException.ThrowIfNull(name);
+            ArgumentNullException.ThrowIfNull(displayName);
 
             Provider = provider;
         }
@@ -59,7 +60,7 @@ namespace System.Text
         /// </summary>
         /// <param name="value">The other object to compare with this object</param>
         /// <returns>True if the value object is EncodingInfo object and has a codepage equals to this EncodingInfo object codepage. Otherwise, it returns False</returns>
-        public override bool Equals(object? value) => value is EncodingInfo that && CodePage == that.CodePage;
+        public override bool Equals([NotNullWhen(true)] object? value) => value is EncodingInfo that && CodePage == that.CodePage;
 
         /// <summary>
         /// Get a hashcode representing the current EncodingInfo object.

@@ -32,12 +32,6 @@
 
 #include <errno.h>
 
-#if !defined(ENABLE_NETCORE) && defined(HOST_ANDROID) && !defined(TARGET_ARM64) && !defined(TARGET_AMD64)
-// tkill was deprecated and removed in the recent versions of Android NDK
-#define USE_TKILL_ON_ANDROID 1
-extern int tkill (pid_t tid, int signal);
-#endif
-
 #if defined(_POSIX_VERSION) && !defined (HOST_WASM)
 
 #include <pthread.h>
@@ -320,7 +314,11 @@ mono_native_thread_set_name (MonoNativeThreadId tid, const char *name)
 	if (!name) {
 		pthread_setname_np (tid, "");
 	} else {
+#if defined(__FreeBSD__)
+		char n [20];
+#else
 		char n [16];
+#endif
 
 		strncpy (n, name, sizeof (n) - 1);
 		n [sizeof (n) - 1] = '\0';
@@ -365,16 +363,6 @@ mono_memory_barrier_process_wide (void)
 
 	status = pthread_mutex_unlock (&memory_barrier_process_wide_mutex);
 	g_assert (status == 0);
-}
-
-gint32
-mono_native_thread_processor_id_get (void)
-{
-#ifdef HAVE_SCHED_GETCPU
-	return sched_getcpu ();
-#else
-	return -1;
-#endif
 }
 
 #endif /* defined(_POSIX_VERSION) */

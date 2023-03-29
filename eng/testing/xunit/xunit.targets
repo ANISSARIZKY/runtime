@@ -2,16 +2,16 @@
   <ItemGroup>
     <!-- Upgrade the NETStandard.Library transitive xunit dependency to avoid transitive 1.x NS dependencies. -->
     <PackageReference Include="NETStandard.Library"
-                      Version="$(NetStandardLibrary20Version)"
+                      Version="$(NetStandardLibraryVersion)"
                       Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp'" />
   </ItemGroup>
 
   <!-- Run target (F5) support. -->
   <PropertyGroup>
-    <RunWorkingDirectory>$(OutDir)</RunWorkingDirectory>
+    <RunWorkingDirectory Condition="'$(RunWorkingDirectory)' == ''">$(OutDir)</RunWorkingDirectory>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp'">
+  <PropertyGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp' and '$(RunCommand)' == ''">
     <RunCommand>$(DotNetTool)</RunCommand>
     <RunArguments>test $(TargetPath) --settings $(OutDir).runsettings</RunArguments>
   </PropertyGroup>

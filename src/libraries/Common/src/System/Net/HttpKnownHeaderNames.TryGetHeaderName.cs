@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#nullable enable
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -51,12 +50,11 @@ namespace System.Net
                 out name);
         }
 
-        public static string GetHeaderValue(string name, char[] array, int startIndex, int length)
+        public static string GetHeaderValue(string name, ReadOnlySpan<char> value)
         {
             Debug.Assert(name != null);
-            CharArrayHelpers.DebugAssertArrayInputs(array, startIndex, length);
 
-            if (length == 0)
+            if (value.IsEmpty)
             {
                 return string.Empty;
             }
@@ -68,17 +66,18 @@ namespace System.Net
             // be either "gzip" or "deflate".
             if (ReferenceEquals(name, ContentEncoding))
             {
-                if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(Gzip, array, startIndex, length))
+                if (value.Equals(Gzip.AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
                     return Gzip;
                 }
-                else if (CharArrayHelpers.EqualsOrdinalAsciiIgnoreCase(Deflate, array, startIndex, length))
+
+                if (value.Equals(Deflate.AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
                     return Deflate;
                 }
             }
 
-            return new string(array, startIndex, length);
+            return value.ToString();
         }
 
         private static bool TryGetHeaderName<T>(

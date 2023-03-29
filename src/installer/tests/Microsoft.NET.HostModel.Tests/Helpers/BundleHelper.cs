@@ -6,6 +6,7 @@ using Microsoft.NET.HostModel.Bundle;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
@@ -57,17 +58,36 @@ namespace BundleTests.Helpers
             return new string[] { $"{appBaseName}.dll", $"{appBaseName}.deps.json", $"{appBaseName}.runtimeconfig.json" };
         }
 
-        public static string[] GetExtractedFiles(TestProjectFixture fixture)
+        public static string[] GetExtractedFiles(TestProjectFixture fixture, BundleOptions bundleOptions)
         {
-            return new string[] { Path.GetFileName(fixture.TestProject.CoreClrDll) };
+            switch (bundleOptions & ~BundleOptions.EnableCompression)
+            {
+                case BundleOptions.None:
+                case BundleOptions.BundleOtherFiles:
+                case BundleOptions.BundleSymbolFiles:
+                    throw new ArgumentException($"Bundle option {bundleOptions} doesn't extract any files to disk.");
+
+                case BundleOptions.BundleAllContent:
+                    return Directory.GetFiles(GetPublishPath(fixture))
+                        .Select(f => Path.GetFileName(f))
+                        .Except(GetFilesNeverExtracted(fixture)).ToArray();
+
+                case BundleOptions.BundleNativeBinaries:
+                    return new string[] { Path.GetFileName(fixture.TestProject.CoreClrDll) };
+
+                default:
+                    throw new ArgumentException("Unsupported bundle option.");
+            }
         }
 
         public static string[] GetFilesNeverExtracted(TestProjectFixture fixture)
         {
             string appBaseName = GetAppBaseName(fixture);
-            return new string[] { $"{appBaseName}.deps.json",
-                                  $"{appBaseName}.runtimeconfig.json",
+            return new string[] { $"{appBaseName}",
                                   $"{appBaseName}.dll",
+                                  $"{appBaseName}.exe",
+                                  $"{appBaseName}.pdb",
+                                  $"{appBaseName}.runtimeconfig.dev.json",
                                   Path.GetFileName(fixture.TestProject.HostFxrDll),
                                   Path.GetFileName(fixture.TestProject.HostPolicyDll) };
         }
@@ -109,6 +129,7 @@ namespace BundleTests.Helpers
                 "win" => OSPlatform.Windows,
                 "osx" => OSPlatform.OSX,
                 "linux" => OSPlatform.Linux,
+                "freebsd" => OSPlatform.FreeBSD,
                 _ => throw new ArgumentException(nameof(runtimeIdentifier))
             };
         }
@@ -123,7 +144,7 @@ namespace BundleTests.Helpers
         }
 
         /// Generate a bundle containind the (embeddable) files in sourceDir
-        public static string GenerateBundle(Bundler bundler, string sourceDir, string outputDir, bool copyExludedFiles=true)
+        public static string GenerateBundle(Bundler bundler, string sourceDir, string outputDir, bool copyExcludedFiles=true)
         {
             // Convert sourceDir to absolute path
             sourceDir = Path.GetFullPath(sourceDir);
@@ -142,7 +163,7 @@ namespace BundleTests.Helpers
 
             var singleFile = bundler.GenerateBundle(fileSpecs);
 
-            if (copyExludedFiles)
+            if (copyExcludedFiles)
             {
                 foreach (var spec in fileSpecs)
                 {
@@ -161,7 +182,7 @@ namespace BundleTests.Helpers
         // Bundle to a single-file
         // In several tests, the single-file bundle is created explicitly using Bundle API
         // instead of the SDK via /p:PublishSingleFile=true.
-        // This is necessary when the test needs the latest changes in the AppHost, 
+        // This is necessary when the test needs the latest changes in the AppHost,
         // which may not (yet) be available in the SDK.
         public static Bundler BundleApp(TestProjectFixture fixture,
                                         out string singleFile,
@@ -175,7 +196,7 @@ namespace BundleTests.Helpers
             var targetOS = GetTargetOS(fixture.CurrentRid);
             var targetArch = GetTargetArch(fixture.CurrentRid);
 
-            var bundler = new Bundler(hostName, bundleDir.FullName, options, targetOS, targetArch, targetFrameworkVersion);
+            var bundler = new Bundler(hostName, bundleDir.FullName, options, targetOS, targetArch, targetFrameworkVersion, macosCodesign: true);
             singleFile = GenerateBundle(bundler, publishPath, bundleDir.FullName, copyExcludedFiles);
 
             return bundler;

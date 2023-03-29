@@ -7,19 +7,20 @@ using Microsoft.Extensions.Options;
 
 namespace Microsoft.Extensions.Logging.Console
 {
-    internal class FormatterOptionsMonitor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TOptions> :
+    internal sealed class FormatterOptionsMonitor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TOptions> :
         IOptionsMonitor<TOptions>
         where TOptions : ConsoleFormatterOptions
     {
-        private TOptions _options;
+        private readonly TOptions _options;
+
         public FormatterOptionsMonitor(TOptions options)
         {
             _options = options;
         }
 
-        public TOptions Get(string name) => _options;
+        public TOptions Get(string? name) => _options;
 
-        public IDisposable OnChange(Action<TOptions, string> listener)
+        public IDisposable? OnChange(Action<TOptions, string> listener)
         {
             return null;
         }

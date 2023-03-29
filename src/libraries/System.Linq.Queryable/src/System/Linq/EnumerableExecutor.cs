@@ -2,16 +2,20 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 
 namespace System.Linq
 {
     public abstract class EnumerableExecutor
     {
+        [RequiresUnreferencedCode(Queryable.InMemoryQueryableExtensionMethodsRequiresUnreferencedCode)]
+        [RequiresDynamicCode(Queryable.InMemoryQueryableExtensionMethodsRequiresDynamicCode)]
         internal abstract object? ExecuteBoxed();
 
         internal EnumerableExecutor() { }
 
+        [RequiresDynamicCode(Queryable.InMemoryQueryableExtensionMethodsRequiresDynamicCode)]
         internal static EnumerableExecutor Create(Expression expression)
         {
             Type execType = typeof(EnumerableExecutor<>).MakeGenericType(expression.Type);
@@ -28,8 +32,12 @@ namespace System.Linq
             _expression = expression;
         }
 
+        [RequiresUnreferencedCode(Queryable.InMemoryQueryableExtensionMethodsRequiresUnreferencedCode)]
+        [RequiresDynamicCode(Queryable.InMemoryQueryableExtensionMethodsRequiresDynamicCode)]
         internal override object? ExecuteBoxed() => Execute();
 
+        [RequiresUnreferencedCode(Queryable.InMemoryQueryableExtensionMethodsRequiresUnreferencedCode)]
+        [RequiresDynamicCode(Queryable.InMemoryQueryableExtensionMethodsRequiresDynamicCode)]
         internal T Execute()
         {
             EnumerableRewriter rewriter = new EnumerableRewriter();

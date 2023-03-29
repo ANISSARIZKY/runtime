@@ -18,7 +18,7 @@ namespace System.ComponentModel.EventBasedAsync.Tests
         [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
         public void TestBackgroundWorkerBasic()
         {
-            var orignal = SynchronizationContext.Current;
+            var original = SynchronizationContext.Current;
             try
             {
                 SynchronizationContext.SetSynchronizationContext(null);
@@ -66,7 +66,7 @@ namespace System.ComponentModel.EventBasedAsync.Tests
             }
             finally
             {
-                SynchronizationContext.SetSynchronizationContext(orignal);
+                SynchronizationContext.SetSynchronizationContext(original);
             }
         }
 
@@ -84,8 +84,7 @@ namespace System.ComponentModel.EventBasedAsync.Tests
 
             backgroundWorker.RunWorkerAsync();
 
-            await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(10))); // Usually takes 100th of a sec
-            Assert.True(tcs.Task.IsCompleted);
+            await tcs.Task.WaitAsync(TimeSpan.FromSeconds(10)); // Usually takes 100th of a sec
         }
 
         #region TestCancelAsync

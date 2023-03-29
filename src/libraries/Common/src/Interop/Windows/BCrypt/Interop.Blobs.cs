@@ -5,12 +5,12 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-internal partial class Interop
+internal static partial class Interop
 {
     //
     // These structures define the layout of CNG key blobs passed to NCryptImportKey
     //
-    internal partial class BCrypt
+    internal static partial class BCrypt
     {
         /// <summary>
         ///     Append "value" to the data already in blob.
@@ -63,8 +63,17 @@ internal partial class Interop
         /// </summary>
         internal static byte[] Consume(byte[] blob, ref int offset, int count)
         {
-            byte[] value = new byte[count];
-            Buffer.BlockCopy(blob, offset, value, 0, count);
+            byte[] value = new ReadOnlySpan<byte>(blob, offset, count).ToArray();
+            offset += count;
+            return value;
+        }
+
+        /// <summary>
+        ///     Peel off the next "count" bytes in blob and return them in a byte array.
+        /// </summary>
+        internal static byte[] Consume(ReadOnlySpan<byte> blob, ref int offset, int count)
+        {
+            byte[] value = blob.Slice(offset, count).ToArray();
             offset += count;
             return value;
         }
@@ -227,10 +236,27 @@ internal partial class Interop
         }
 
         /// <summary>
-        ///     NCrypt buffer descriptors
+        ///     NCrypt or BCrypt buffer descriptors
         /// </summary>
-        internal enum NCryptBufferDescriptors : int
+        internal enum CngBufferDescriptors : int
         {
+            KDF_HASH_ALGORITHM = 0,
+            KDF_SECRET_PREPEND = 1,
+            KDF_SECRET_APPEND = 2,
+            KDF_HMAC_KEY = 3,
+            KDF_TLS_PRF_LABEL = 4,
+            KDF_TLS_PRF_SEED = 5,
+            KDF_SECRET_HANDLE = 6,
+            KDF_TLS_PRF_PROTOCOL = 7,
+            KDF_ALGORITHMID = 8,
+            KDF_PARTYUINFO = 9,
+            KDF_PARTYVINFO = 10,
+            KDF_SUPPPUBINFO = 11,
+            KDF_SUPPPRIVINFO = 12,
+            KDF_LABEL = 13,
+            KDF_CONTEXT = 14,
+            KDF_SALT = 15,
+            KDF_ITERATION_COUNT = 16,
             NCRYPTBUFFER_ECC_CURVE_NAME = 60,
         }
 
@@ -241,7 +267,7 @@ internal partial class Interop
         internal struct BCryptBuffer
         {
             internal int cbBuffer;             // Length of buffer, in bytes
-            internal NCryptBufferDescriptors BufferType; // Buffer type
+            internal CngBufferDescriptors BufferType; // Buffer type
             internal IntPtr pvBuffer;          // Pointer to buffer
         }
 

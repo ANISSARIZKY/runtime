@@ -41,6 +41,7 @@ namespace System.Reflection.Tests
 {
     public class ModuleTests
     {
+        public const string ConstField = "Value";
         public static Module Module => typeof(ModuleTests).Module;
         public static Module TestModule => typeof(TestModule.Dummy).Module;
 
@@ -54,6 +55,7 @@ namespace System.Reflection.Tests
         public void ModuleHandle()
         {
             Assert.Equal(typeof(PointerTests).Module.ModuleHandle, Module.ModuleHandle);
+            Assert.NotEqual(typeof(PointerTests).Module.ModuleHandle, System.ModuleHandle.EmptyHandle);
         }
 
         [Fact]
@@ -81,6 +83,9 @@ namespace System.Reflection.Tests
         [Fact]
         public void FullyQualifiedName()
         {
+#if SINGLE_FILE_TEST_RUNNER
+            Assert.Equal("<Unknown>", Module.FullyQualifiedName);
+#else
             var loc = AssemblyPathHelper.GetAssemblyLocation(Assembly.GetExecutingAssembly());
 
             // Browser will include the path (/), so strip it
@@ -90,12 +95,17 @@ namespace System.Reflection.Tests
             }
 
             Assert.Equal(loc, Module.FullyQualifiedName);
+#endif
         }
 
         [Fact]
         public void Name()
         {
+#if SINGLE_FILE_TEST_RUNNER
+            Assert.Equal("<Unknown>", Module.Name, ignoreCase: true);
+#else
             Assert.Equal("system.runtime.tests.dll", Module.Name, ignoreCase: true);
+#endif
         }
 
         [Fact]
@@ -176,24 +186,82 @@ namespace System.Reflection.Tests
             Assert.Equal(TestModule.GetField("TestLong", BindingFlags.NonPublic | BindingFlags.Static), fields[1]);
         }
 
-        public static IEnumerable<object[]> Types =>
-            Module.GetTypes().Select(t => new object[] { t });
-
-        [Theory]
-        [MemberData(nameof(Types))]
-        public void ResolveType(Type t)
+        [Fact]
+        public void GetMethod_NullName()
         {
-            Assert.Equal(t, Module.ResolveType(t.MetadataToken));
+            var ex = AssertExtensions.Throws<ArgumentNullException>("name", () => Module.GetMethod(null));
+            Assert.Null(ex.InnerException);
+            Assert.NotNull(ex.Message);
+
+            ex = AssertExtensions.Throws<ArgumentNullException>("name", () => Module.GetMethod(null, Type.EmptyTypes));
+            Assert.Null(ex.InnerException);
+            Assert.NotNull(ex.Message);
+        }
+
+        [Fact]
+        public void GetMethod_NullTypes()
+        {
+            var ex = AssertExtensions.Throws<ArgumentNullException>("types", () => Module.GetMethod("TestMethodFoo", null));
+            Assert.Null(ex.InnerException);
+            Assert.NotNull(ex.Message);
+        }
+
+        [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/51912", typeof(PlatformDetection), nameof(PlatformDetection.IsBuiltWithAggressiveTrimming), nameof(PlatformDetection.IsBrowser))]
+        public void GetMethod_AmbiguousMatch()
+        {
+            var ex = Assert.Throws<AmbiguousMatchException>(() => TestModule.GetMethod("TestMethodFoo"));
+            Assert.Null(ex.InnerException);
+            Assert.NotNull(ex.Message);
+        }
+
+        [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/51912", typeof(PlatformDetection), nameof(PlatformDetection.IsBuiltWithAggressiveTrimming), nameof(PlatformDetection.IsBrowser))]
+        public void GetMethod()
+        {
+            var method = TestModule.GetMethod("TestMethodFoo", Type.EmptyTypes);
+            Assert.True(method.IsPublic);
+            Assert.True(method.IsStatic);
+            Assert.Equal(typeof(void), method.ReturnType);
+            Assert.Empty(method.GetParameters());
+
+            method = TestModule.GetMethod("TestMethodBar", BindingFlags.NonPublic | BindingFlags.Static, null, CallingConventions.Any, new[] { typeof(int) }, null);
+            Assert.False(method.IsPublic);
+            Assert.True(method.IsStatic);
+            Assert.Equal(typeof(int), method.ReturnType);
+            Assert.Equal(typeof(int), method.GetParameters().Single().ParameterType);
+        }
+
+        [Fact]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/51912", typeof(PlatformDetection), nameof(PlatformDetection.IsBuiltWithAggressiveTrimming), nameof(PlatformDetection.IsBrowser))]
+        public void GetMethods()
+        {
+            var methodNames = TestModule.GetMethods().Select(m => m.Name).ToArray();
+            AssertExtensions.SequenceEqual(new[]{ "TestMethodFoo", "TestMethodFoo" }, methodNames );
+
+            methodNames = TestModule.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Select(m => m.Name).ToArray();
+            Array.Sort<string>(methodNames);
+            AssertExtensions.SequenceEqual(new[]{ "TestMethodBar", "TestMethodFoo", "TestMethodFoo" }, methodNames );
+        }
+
+        public static IEnumerable<Type> Types => Module.GetTypes();
+
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
+        public void ResolveTypes()
+        {
+            foreach(Type t in Types)
+                Assert.Equal(t, Module.ResolveType(t.MetadataToken));
         }
 
         public static IEnumerable<object[]> BadResolveTypes =>
             new[]
             {
                 new object[] { 1234 },
-                new object[] { typeof(ModuleTests).GetMethod("ResolveType").MetadataToken },
-            };
+                new object[] { typeof(ModuleTests).GetMethod("ResolveTypes").MetadataToken },
+            }
+            .Union(NullTokens);
 
-        [Theory]
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
         [MemberData(nameof(BadResolveTypes))]
         public void ResolveTypeFail(int token)
         {
@@ -203,14 +271,14 @@ namespace System.Reflection.Tests
             });
         }
 
-        public static IEnumerable<object[]> Methods =>
-            Module.GetMethods().Select(m => new object[] { m });
+        public static IEnumerable<MemberInfo> Methods =>
+            typeof(ModuleTests).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
-        [Theory]
-        [MemberData(nameof(Methods))]
-        public void ResolveMethod(MethodInfo t)
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
+        public void ResolveMethodsByMethodInfo()
         {
-            Assert.Equal(t, Module.ResolveMethod(t.MetadataToken));
+            foreach(MethodInfo mi in Methods)
+                Assert.Equal(mi, Module.ResolveMethod(mi.MetadataToken));
         }
 
         public static IEnumerable<object[]> BadResolveMethods =>
@@ -219,9 +287,10 @@ namespace System.Reflection.Tests
                 new object[] { 1234 },
                 new object[] { typeof(ModuleTests).MetadataToken },
                 new object[] { typeof(ModuleTests).MetadataToken + 1000 },
-            };
+            }
+            .Union(NullTokens);
 
-        [Theory]
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
         [MemberData(nameof(BadResolveMethods))]
         public void ResolveMethodFail(int token)
         {
@@ -231,14 +300,15 @@ namespace System.Reflection.Tests
             });
         }
 
-        public static IEnumerable<object[]> Fields =>
-            Module.GetFields().Select(f => new object[] { f });
+        public static IEnumerable<MemberInfo> Fields =>
+            typeof(ModuleTests).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
-        [Theory]
-        [MemberData(nameof(Fields))]
-        public void ResolveField(FieldInfo t)
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
+        [ActiveIssue("https://github.com/dotnet/runtime/issues/52072", TestPlatforms.iOS | TestPlatforms.tvOS | TestPlatforms.MacCatalyst)]
+        public void ResolveFieldsByFieldInfo()
         {
-            Assert.Equal(t, Module.ResolveField(t.MetadataToken));
+            foreach(FieldInfo fi in Fields)
+                Assert.Equal(fi, Module.ResolveField(fi.MetadataToken));
         }
 
         public static IEnumerable<object[]> BadResolveFields =>
@@ -247,9 +317,10 @@ namespace System.Reflection.Tests
                 new object[] { 1234 },
                 new object[] { typeof(ModuleTests).MetadataToken },
                 new object[] { typeof(ModuleTests).MetadataToken + 1000 },
-            };
+            }
+            .Union(NullTokens);
 
-        [Theory]
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
         [MemberData(nameof(BadResolveFields))]
         public void ResolveFieldFail(int token)
         {
@@ -265,9 +336,10 @@ namespace System.Reflection.Tests
                 new object[] { 1234 },
                 new object[] { typeof(ModuleTests).MetadataToken },
                 new object[] { typeof(ModuleTests).MetadataToken + 1000 },
-            };
+            }
+            .Union(NullTokens);
 
-        [Theory]
+        [ConditionalTheory(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
         [MemberData(nameof(BadResolveStrings))]
         public void ResolveStringFail(int token)
         {
@@ -277,16 +349,28 @@ namespace System.Reflection.Tests
             });
         }
 
-        [Theory]
-        [MemberData(nameof(Types))]
-        [MemberData(nameof(Methods))]
-        [MemberData(nameof(Fields))]
-        public void ResolveMember(MemberInfo member)
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
+        public void ResolveTypesByMemberInfo()
         {
-            Assert.Equal(member, Module.ResolveMember(member.MetadataToken));
+            foreach(MemberInfo mi in Types)
+                Assert.Equal(mi, Module.ResolveMember(mi.MetadataToken));
         }
 
-        [Fact]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
+        public void ResolveMethodsByMemberInfo()
+        {
+            foreach (MemberInfo mi in Methods)
+                Assert.Equal(mi, Module.ResolveMember(mi.MetadataToken));
+        }
+
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
+        public void ResolveFieldsByMemberInfo()
+        {
+            foreach (MemberInfo mi in Fields)
+                Assert.Equal(mi, Module.ResolveMember(mi.MetadataToken));
+        }
+
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsMetadataTokenSupported))]
         public void ResolveMethodOfGenericClass()
         {
             Type t = typeof(Foo<>);
@@ -303,6 +387,38 @@ namespace System.Reflection.Tests
             Assert.Equal(1, types.Count);
             Assert.Equal("System.Reflection.TestModule.Dummy, System.Reflection.TestModule, Version=1.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", types[0].AssemblyQualifiedName);
         }
+
+        private static object[][] NullTokens =>
+            new[]
+            {
+                new object[] { 0x00000000 }, // mdtModule
+                new object[] { 0x01000000 }, // mdtTypeRef
+                new object[] { 0x02000000 }, // mdtTypeDef
+                new object[] { 0x04000000 }, // mdtFieldDef
+                new object[] { 0x06000000 }, // mdtMethodDef
+                new object[] { 0x08000000 }, // mdtParamDef
+                new object[] { 0x09000000 }, // mdtInterfaceImpl
+                new object[] { 0x0a000000 }, // mdtMemberRef
+                new object[] { 0x0c000000 }, // mdtCustomAttribute
+                new object[] { 0x0e000000 }, // mdtPermission
+                new object[] { 0x11000000 }, // mdtSignature
+                new object[] { 0x14000000 }, // mdtEvent
+                new object[] { 0x17000000 }, // mdtProperty
+                new object[] { 0x19000000 }, // mdtMethodImpl
+                new object[] { 0x1a000000 }, // mdtModuleRef
+                new object[] { 0x1b000000 }, // mdtTypeSpec
+                new object[] { 0x20000000 }, // mdtAssembly
+                new object[] { 0x23000000 }, // mdtAssemblyRef
+                new object[] { 0x26000000 }, // mdtFile
+                new object[] { 0x27000000 }, // mdtExportedType
+                new object[] { 0x28000000 }, // mdtManifestResource
+                new object[] { 0x2a000000 }, // mdtGenericParam
+                new object[] { 0x2b000000 }, // mdtMethodSpec
+                new object[] { 0x2c000000 }, // mdtGenericParamConstraint
+                new object[] { 0x70000000 }, // mdtString
+                new object[] { 0x71000000 }, // mdtName
+                new object[] { 0x72000000 }  // mdtBaseType
+            };
     }
 
     public class Foo<T>

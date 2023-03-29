@@ -2,6 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.Versioning;
 
@@ -11,11 +13,12 @@ using System.Runtime.Versioning;
 
 namespace System.Runtime.InteropServices
 {
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public class ComAwareEventInfo : EventInfo
     {
         private readonly EventInfo _innerEventInfo;
 
-        public ComAwareEventInfo(Type type, string eventName)
+        public ComAwareEventInfo([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicEvents)] Type type, string eventName)
         {
             _innerEventInfo = type.GetEvent(eventName)!;
         }

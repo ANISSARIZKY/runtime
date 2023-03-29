@@ -1,34 +1,41 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Globalization;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace System.Numerics
 {
     /// <summary>Represents a vector that is used to encode three-dimensional physical rotations.</summary>
+    /// <remarks>The <see cref="Quaternion" /> structure is used to efficiently rotate an object about the (x,y,z) vector by the angle theta, where:
+    /// <c>w = cos(theta/2)</c></remarks>
     [Intrinsic]
     public struct Quaternion : IEquatable<Quaternion>
     {
         private const float SlerpEpsilon = 1e-6f;
 
-        /// <summary>Specifies the X-value of the vector component of the Quaternion.</summary>
+        /// <summary>The X value of the vector component of the quaternion.</summary>
         public float X;
 
-        /// <summary>Specifies the Y-value of the vector component of the Quaternion.</summary>
+        /// <summary>The Y value of the vector component of the quaternion.</summary>
         public float Y;
 
-        /// <summary>Specifies the Z-value of the vector component of the Quaternion.</summary>
+        /// <summary>The Z value of the vector component of the quaternion.</summary>
         public float Z;
 
-        /// <summary>Specifies the rotation component of the Quaternion.</summary>
+        /// <summary>The rotation component of the quaternion.</summary>
         public float W;
 
-        /// <summary>Constructs a Quaternion from the given components.</summary>
-        /// <param name="x">The X component of the Quaternion.</param>
-        /// <param name="y">The Y component of the Quaternion.</param>
-        /// <param name="z">The Z component of the Quaternion.</param>
-        /// <param name="w">The W component of the Quaternion.</param>
+        internal const int Count = 4;
+
+        /// <summary>Constructs a quaternion from the specified components.</summary>
+        /// <param name="x">The value to assign to the X component of the quaternion.</param>
+        /// <param name="y">The value to assign to the Y component of the quaternion.</param>
+        /// <param name="z">The value to assign to the Z component of the quaternion.</param>
+        /// <param name="w">The value to assign to the W component of the quaternion.</param>
+        [Intrinsic]
         public Quaternion(float x, float y, float z, float w)
         {
             X = x;
@@ -37,9 +44,10 @@ namespace System.Numerics
             W = w;
         }
 
-        /// <summary>Constructs a Quaternion from the given vector and rotation parts.</summary>
-        /// <param name="vectorPart">The vector part of the Quaternion.</param>
-        /// <param name="scalarPart">The rotation part of the Quaternion.</param>
+        /// <summary>Creates a quaternion from the specified vector and rotation parts.</summary>
+        /// <param name="vectorPart">The vector part of the quaternion.</param>
+        /// <param name="scalarPart">The rotation part of the quaternion.</param>
+        [Intrinsic]
         public Quaternion(Vector3 vectorPart, float scalarPart)
         {
             X = vectorPart.X;
@@ -48,38 +56,66 @@ namespace System.Numerics
             W = scalarPart;
         }
 
-        /// <summary>Returns a Quaternion representing no rotation.</summary>
-        public static Quaternion Identity
+        /// <summary>Gets a quaternion that represents a zero.</summary>
+        /// <value>A quaternion whose values are <c>(0, 0, 0, 0)</c>.</value>
+        public static Quaternion Zero
         {
-            get => new Quaternion(0, 0, 0, 1);
+            [Intrinsic]
+            get => default;
         }
 
-        /// <summary>Returns whether the Quaternion is the identity Quaternion.</summary>
+        /// <summary>Gets a quaternion that represents no rotation.</summary>
+        /// <value>A quaternion whose values are <c>(0, 0, 0, 1)</c>.</value>
+        public static Quaternion Identity
+        {
+            [Intrinsic]
+            get => new Quaternion(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+
+        /// <summary>Gets or sets the element at the specified index.</summary>
+        /// <param name="index">The index of the element to get or set.</param>
+        /// <returns>The element at <paramref name="index" />.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="index" /> was less than zero or greater than the number of elements.</exception>
+        public float this[int index]
+        {
+            [Intrinsic]
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            readonly get => this.GetElement(index);
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set => this = this.WithElement(index, value);
+        }
+
+        /// <summary>Gets a value that indicates whether the current instance is the identity quaternion.</summary>
+        /// <value><see langword="true" /> if the current instance is the identity quaternion; otherwise, <see langword="false" />.</value>
+        /// <altmember cref="Identity"/>
         public readonly bool IsIdentity
         {
             get => this == Identity;
         }
 
-        /// <summary>Adds two Quaternions element-by-element.</summary>
-        /// <param name="value1">The first source Quaternion.</param>
-        /// <param name="value2">The second source Quaternion.</param>
-        /// <returns>The result of adding the Quaternions.</returns>
+        /// <summary>Adds each element in one quaternion with its corresponding element in a second quaternion.</summary>
+        /// <param name="value1">The first quaternion.</param>
+        /// <param name="value2">The second quaternion.</param>
+        /// <returns>The quaternion that contains the summed values of <paramref name="value1" /> and <paramref name="value2" />.</returns>
+        /// <remarks>The <see cref="op_Addition" /> method defines the operation of the addition operator for <see cref="Quaternion" /> objects.</remarks>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion operator +(Quaternion value1, Quaternion value2)
         {
-            Quaternion ans;
-
-            ans.X = value1.X + value2.X;
-            ans.Y = value1.Y + value2.Y;
-            ans.Z = value1.Z + value2.Z;
-            ans.W = value1.W + value2.W;
-
-            return ans;
+            return new Quaternion(
+                value1.X + value2.X,
+                value1.Y + value2.Y,
+                value1.Z + value2.Z,
+                value1.W + value2.W
+            );
         }
 
-        /// <summary>Divides a Quaternion by another Quaternion.</summary>
-        /// <param name="value1">The source Quaternion.</param>
+        /// <summary>Divides one quaternion by a second quaternion.</summary>
+        /// <param name="value1">The dividend.</param>
         /// <param name="value2">The divisor.</param>
-        /// <returns>The result of the division.</returns>
+        /// <returns>The quaternion that results from dividing <paramref name="value1" /> by <paramref name="value2" />.</returns>
+        /// <remarks>The <see cref="op_Division" /> method defines the division operation for <see cref="Quaternion" /> objects.</remarks>
         public static Quaternion operator /(Quaternion value1, Quaternion value2)
         {
             Quaternion ans;
@@ -118,10 +154,14 @@ namespace System.Numerics
             return ans;
         }
 
-        /// <summary>Returns a boolean indicating whether the two given Quaternions are equal.</summary>
-        /// <param name="value1">The first Quaternion to compare.</param>
-        /// <param name="value2">The second Quaternion to compare.</param>
-        /// <returns>True if the Quaternions are equal; False otherwise.</returns>
+        /// <summary>Returns a value that indicates whether two quaternions are equal.</summary>
+        /// <param name="value1">The first quaternion to compare.</param>
+        /// <param name="value2">The second quaternion to compare.</param>
+        /// <returns><see langword="true" /> if the two quaternions are equal; otherwise, <see langword="false" />.</returns>
+        /// <remarks>Two quaternions are equal if each of their corresponding components is equal.
+        /// The <see cref="op_Equality" /> method defines the operation of the equality operator for <see cref="Quaternion" /> objects.</remarks>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(Quaternion value1, Quaternion value2)
         {
             return (value1.X == value2.X)
@@ -130,19 +170,22 @@ namespace System.Numerics
                 && (value1.W == value2.W);
         }
 
-        /// <summary>Returns a boolean indicating whether the two given Quaternions are not equal.</summary>
-        /// <param name="value1">The first Quaternion to compare.</param>
-        /// <param name="value2">The second Quaternion to compare.</param>
-        /// <returns>True if the Quaternions are not equal; False if they are equal.</returns>
+        /// <summary>Returns a value that indicates whether two quaternions are not equal.</summary>
+        /// <param name="value1">The first quaternion to compare.</param>
+        /// <param name="value2">The second quaternion to compare.</param>
+        /// <returns><see langword="true" /> if <paramref name="value1" /> and <paramref name="value2" /> are not equal; otherwise, <see langword="false" />.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(Quaternion value1, Quaternion value2)
         {
             return !(value1 == value2);
         }
 
-        /// <summary>Multiplies two Quaternions together.</summary>
-        /// <param name="value1">The Quaternion on the left side of the multiplication.</param>
-        /// <param name="value2">The Quaternion on the right side of the multiplication.</param>
-        /// <returns>The result of the multiplication.</returns>
+        /// <summary>Returns the quaternion that results from multiplying two quaternions together.</summary>
+        /// <param name="value1">The first quaternion.</param>
+        /// <param name="value2">The second quaternion.</param>
+        /// <returns>The product quaternion.</returns>
+        /// <remarks>The <see cref="Quaternion.op_Multiply" /> method defines the operation of the multiplication operator for <see cref="Quaternion" /> objects.</remarks>
         public static Quaternion operator *(Quaternion value1, Quaternion value2)
         {
             Quaternion ans;
@@ -172,67 +215,66 @@ namespace System.Numerics
             return ans;
         }
 
-        /// <summary>Multiplies a Quaternion by a scalar value.</summary>
-        /// <param name="value1">The source Quaternion.</param>
+        /// <summary>Returns the quaternion that results from scaling all the components of a specified quaternion by a scalar factor.</summary>
+        /// <param name="value1">The source quaternion.</param>
         /// <param name="value2">The scalar value.</param>
-        /// <returns>The result of the multiplication.</returns>
+        /// <returns>The scaled quaternion.</returns>
+        /// <remarks>The <see cref="Quaternion.op_Multiply" /> method defines the operation of the multiplication operator for <see cref="Quaternion" /> objects.</remarks>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion operator *(Quaternion value1, float value2)
         {
-            Quaternion ans;
-
-            ans.X = value1.X * value2;
-            ans.Y = value1.Y * value2;
-            ans.Z = value1.Z * value2;
-            ans.W = value1.W * value2;
-
-            return ans;
+            return new Quaternion(
+                value1.X * value2,
+                value1.Y * value2,
+                value1.Z * value2,
+                value1.W * value2
+            );
         }
 
-        /// <summary>Subtracts one Quaternion from another.</summary>
-        /// <param name="value1">The first source Quaternion.</param>
-        /// <param name="value2">The second Quaternion, to be subtracted from the first.</param>
-        /// <returns>The result of the subtraction.</returns>
+        /// <summary>Subtracts each element in a second quaternion from its corresponding element in a first quaternion.</summary>
+        /// <param name="value1">The first quaternion.</param>
+        /// <param name="value2">The second quaternion.</param>
+        /// <returns>The quaternion containing the values that result from subtracting each element in <paramref name="value2" /> from its corresponding element in <paramref name="value1" />.</returns>
+        /// <remarks>The <see cref="op_Subtraction" /> method defines the operation of the subtraction operator for <see cref="Quaternion" /> objects.</remarks>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion operator -(Quaternion value1, Quaternion value2)
         {
-            Quaternion ans;
-
-            ans.X = value1.X - value2.X;
-            ans.Y = value1.Y - value2.Y;
-            ans.Z = value1.Z - value2.Z;
-            ans.W = value1.W - value2.W;
-
-            return ans;
+            return new Quaternion(
+                value1.X - value2.X,
+                value1.Y - value2.Y,
+                value1.Z - value2.Z,
+                value1.W - value2.W
+            );
         }
 
-        /// <summary>Flips the sign of each component of the quaternion.</summary>
-        /// <param name="value">The source Quaternion.</param>
-        /// <returns>The negated Quaternion.</returns>
+        /// <summary>Reverses the sign of each component of the quaternion.</summary>
+        /// <param name="value">The quaternion to negate.</param>
+        /// <returns>The negated quaternion.</returns>
+        /// <remarks>The <see cref="op_UnaryNegation" /> method defines the operation of the unary negation operator for <see cref="Quaternion" /> objects.</remarks>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion operator -(Quaternion value)
         {
-            Quaternion ans;
-
-            ans.X = -value.X;
-            ans.Y = -value.Y;
-            ans.Z = -value.Z;
-            ans.W = -value.W;
-
-            return ans;
+            return Zero - value;
         }
 
-        /// <summary>Adds two Quaternions element-by-element.</summary>
-        /// <param name="value1">The first source Quaternion.</param>
-        /// <param name="value2">The second source Quaternion.</param>
-        /// <returns>The result of adding the Quaternions.</returns>
+        /// <summary>Adds each element in one quaternion with its corresponding element in a second quaternion.</summary>
+        /// <param name="value1">The first quaternion.</param>
+        /// <param name="value2">The second quaternion.</param>
+        /// <returns>The quaternion that contains the summed values of <paramref name="value1" /> and <paramref name="value2" />.</returns>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Add(Quaternion value1, Quaternion value2)
         {
             return value1 + value2;
         }
 
-        /// <summary>Concatenates two Quaternions; the result represents the value1 rotation followed by the value2 rotation.</summary>
-        /// <param name="value1">The first Quaternion rotation in the series.</param>
-        /// <param name="value2">The second Quaternion rotation in the series.</param>
-        /// <returns>A new Quaternion representing the concatenation of the value1 rotation followed by the value2 rotation.</returns>
+        /// <summary>Concatenates two quaternions.</summary>
+        /// <param name="value1">The first quaternion rotation in the series.</param>
+        /// <param name="value2">The second quaternion rotation in the series.</param>
+        /// <returns>A new quaternion representing the concatenation of the <paramref name="value1" /> rotation followed by the <paramref name="value2" /> rotation.</returns>
         public static Quaternion Concatenate(Quaternion value1, Quaternion value2)
         {
             Quaternion ans;
@@ -264,26 +306,21 @@ namespace System.Numerics
             return ans;
         }
 
-        /// <summary>Creates the conjugate of a specified Quaternion.</summary>
-        /// <param name="value">The Quaternion of which to return the conjugate.</param>
-        /// <returns>A new Quaternion that is the conjugate of the specified one.</returns>
+        /// <summary>Returns the conjugate of a specified quaternion.</summary>
+        /// <param name="value">The quaternion.</param>
+        /// <returns>A new quaternion that is the conjugate of <see langword="value" />.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Conjugate(Quaternion value)
         {
-            Quaternion ans;
-
-            ans.X = -value.X;
-            ans.Y = -value.Y;
-            ans.Z = -value.Z;
-            ans.W = value.W;
-
-            return ans;
+            return Multiply(value, new Vector4(-1.0f, -1.0f, -1.0f, 1.0f));
         }
 
-        /// <summary>Creates a Quaternion from a normalized vector axis and an angle to rotate about the vector.</summary>
-        /// <param name="axis">The unit vector to rotate around.
-        /// This vector must be normalized before calling this function or the resulting Quaternion will be incorrect.</param>
+        /// <summary>Creates a quaternion from a unit vector and an angle to rotate around the vector.</summary>
+        /// <param name="axis">The unit vector to rotate around.</param>
         /// <param name="angle">The angle, in radians, to rotate around the vector.</param>
-        /// <returns>The created Quaternion.</returns>
+        /// <returns>The newly created quaternion.</returns>
+        /// <remarks><paramref name="axis" /> vector must be normalized before calling this method or the resulting <see cref="Quaternion" /> will be incorrect.</remarks>
         public static Quaternion CreateFromAxisAngle(Vector3 axis, float angle)
         {
             Quaternion ans;
@@ -300,9 +337,9 @@ namespace System.Numerics
             return ans;
         }
 
-        /// <summary>Creates a Quaternion from the given rotation matrix.</summary>
+        /// <summary>Creates a quaternion from the specified rotation matrix.</summary>
         /// <param name="matrix">The rotation matrix.</param>
-        /// <returns>The created Quaternion.</returns>
+        /// <returns>The newly created quaternion.</returns>
         public static Quaternion CreateFromRotationMatrix(Matrix4x4 matrix)
         {
             float trace = matrix.M11 + matrix.M22 + matrix.M33;
@@ -352,11 +389,11 @@ namespace System.Numerics
             return q;
         }
 
-        /// <summary>Creates a new Quaternion from the given yaw, pitch, and roll, in radians.</summary>
-        /// <param name="yaw">The yaw angle, in radians, around the Y-axis.</param>
-        /// <param name="pitch">The pitch angle, in radians, around the X-axis.</param>
-        /// <param name="roll">The roll angle, in radians, around the Z-axis.</param>
-        /// <returns></returns>
+        /// <summary>Creates a new quaternion from the given yaw, pitch, and roll.</summary>
+        /// <param name="yaw">The yaw angle, in radians, around the Y axis.</param>
+        /// <param name="pitch">The pitch angle, in radians, around the X axis.</param>
+        /// <param name="roll">The roll angle, in radians, around the Z axis.</param>
+        /// <returns>The resulting quaternion.</returns>
         public static Quaternion CreateFromYawPitchRoll(float yaw, float pitch, float roll)
         {
             //  Roll first, about axis the object is facing, then
@@ -385,55 +422,65 @@ namespace System.Numerics
             return result;
         }
 
-        /// <summary>Divides a Quaternion by another Quaternion.</summary>
-        /// <param name="value1">The source Quaternion.</param>
+        /// <summary>Divides one quaternion by a second quaternion.</summary>
+        /// <param name="value1">The dividend.</param>
         /// <param name="value2">The divisor.</param>
-        /// <returns>The result of the division.</returns>
+        /// <returns>The quaternion that results from dividing <paramref name="value1" /> by <paramref name="value2" />.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Divide(Quaternion value1, Quaternion value2)
         {
             return value1 / value2;
         }
 
-        /// <summary>Calculates the dot product of two Quaternions.</summary>
-        /// <param name="quaternion1">The first source Quaternion.</param>
-        /// <param name="quaternion2">The second source Quaternion.</param>
-        /// <returns>The dot product of the Quaternions.</returns>
-        public static float Dot(Quaternion quaternion1, Quaternion quaternion2)
+        /// <summary>Divides the specified quaternion by a specified scalar value.</summary>
+        /// <param name="left">The quaternion.</param>
+        /// <param name="divisor">The scalar value.</param>
+        /// <returns>The quaternion that results from the division.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Quaternion Divide(Quaternion left, float divisor)
         {
-            return quaternion1.X * quaternion2.X +
-                   quaternion1.Y * quaternion2.Y +
-                   quaternion1.Z * quaternion2.Z +
-                   quaternion1.W * quaternion2.W;
+            return new Quaternion(
+                left.X / divisor,
+                left.Y / divisor,
+                left.Z / divisor,
+                left.W / divisor
+            );
         }
 
-        /// <summary>Returns the inverse of a Quaternion.</summary>
-        /// <param name="value">The source Quaternion.</param>
-        /// <returns>The inverted Quaternion.</returns>
+        /// <summary>Calculates the dot product of two quaternions.</summary>
+        /// <param name="quaternion1">The first quaternion.</param>
+        /// <param name="quaternion2">The second quaternion.</param>
+        /// <returns>The dot product.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float Dot(Quaternion quaternion1, Quaternion quaternion2)
+        {
+            return (quaternion1.X * quaternion2.X)
+                 + (quaternion1.Y * quaternion2.Y)
+                 + (quaternion1.Z * quaternion2.Z)
+                 + (quaternion1.W * quaternion2.W);
+        }
+
+        /// <summary>Returns the inverse of a quaternion.</summary>
+        /// <param name="value">The quaternion.</param>
+        /// <returns>The inverted quaternion.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Inverse(Quaternion value)
         {
             //  -1   (       a              -v       )
             // q   = ( -------------   ------------- )
             //       (  a^2 + |v|^2  ,  a^2 + |v|^2  )
 
-            Quaternion ans;
-
-            float ls = value.X * value.X + value.Y * value.Y + value.Z * value.Z + value.W * value.W;
-            float invNorm = 1.0f / ls;
-
-            ans.X = -value.X * invNorm;
-            ans.Y = -value.Y * invNorm;
-            ans.Z = -value.Z * invNorm;
-            ans.W = value.W * invNorm;
-
-            return ans;
+            return Divide(Conjugate(value), value.LengthSquared());
         }
 
-        /// <summary> Linearly interpolates between two quaternions.</summary>
-        /// <param name="quaternion1">The first source Quaternion.</param>
-        /// <param name="quaternion2">The second source Quaternion.</param>
-        /// <param name="amount">The relative weight of the second source Quaternion in the interpolation.</param>
-        /// <returns>The interpolated Quaternion.</returns>
+        /// <summary>Performs a linear interpolation between two quaternions based on a value that specifies the weighting of the second quaternion.</summary>
+        /// <param name="quaternion1">The first quaternion.</param>
+        /// <param name="quaternion2">The second quaternion.</param>
+        /// <param name="amount">The relative weight of <paramref name="quaternion2" /> in the interpolation.</param>
+        /// <returns>The interpolated quaternion.</returns>
         public static Quaternion Lerp(Quaternion quaternion1, Quaternion quaternion2, float amount)
         {
             float t = amount;
@@ -471,59 +518,68 @@ namespace System.Numerics
             return r;
         }
 
-        /// <summary>Multiplies two Quaternions together.</summary>
-        /// <param name="value1">The Quaternion on the left side of the multiplication.</param>
-        /// <param name="value2">The Quaternion on the right side of the multiplication.</param>
-        /// <returns>The result of the multiplication.</returns>
+        /// <summary>Returns the quaternion that results from multiplying two quaternions together.</summary>
+        /// <param name="value1">The first quaternion.</param>
+        /// <param name="value2">The second quaternion.</param>
+        /// <returns>The product quaternion.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Multiply(Quaternion value1, Quaternion value2)
         {
             return value1 * value2;
         }
 
-        /// <summary>Multiplies a Quaternion by a scalar value.</summary>
-        /// <param name="value1">The source Quaternion.</param>
+        /// <summary>Returns a new quaternion whose values are the product of each pair of elements in specified quaternion and vector.</summary>
+        /// <param name="value1">The quaternion.</param>
+        /// <param name="value2">The vector.</param>
+        /// <returns>The element-wise product vector.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Quaternion Multiply(Quaternion value1, Vector4 value2)
+        {
+            return new Quaternion(
+                value1.X * value2.X,
+                value1.Y * value2.Y,
+                value1.Z * value2.Z,
+                value1.W * value2.W
+            );
+        }
+
+        /// <summary>Returns the quaternion that results from scaling all the components of a specified quaternion by a scalar factor.</summary>
+        /// <param name="value1">The source quaternion.</param>
         /// <param name="value2">The scalar value.</param>
-        /// <returns>The result of the multiplication.</returns>
+        /// <returns>The scaled quaternion.</returns>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Multiply(Quaternion value1, float value2)
         {
             return value1 * value2;
         }
 
-        /// <summary>Flips the sign of each component of the quaternion.</summary>
-        /// <param name="value">The source Quaternion.</param>
-        /// <returns>The negated Quaternion.</returns>
+        /// <summary>Reverses the sign of each component of the quaternion.</summary>
+        /// <param name="value">The quaternion to negate.</param>
+        /// <returns>The negated quaternion.</returns>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Negate(Quaternion value)
         {
             return -value;
         }
 
-        /// <summary>Divides each component of the Quaternion by the length of the Quaternion.</summary>
-        /// <param name="value">The source Quaternion.</param>
-        /// <returns>The normalized Quaternion.</returns>
+        /// <summary>Divides each component of a specified <see cref="Quaternion" /> by its length.</summary>
+        /// <param name="value">The quaternion to normalize.</param>
+        /// <returns>The normalized quaternion.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Normalize(Quaternion value)
         {
-            Quaternion ans;
-
-            float ls = value.X * value.X + value.Y * value.Y + value.Z * value.Z + value.W * value.W;
-
-            float invNorm = 1.0f / MathF.Sqrt(ls);
-
-            ans.X = value.X * invNorm;
-            ans.Y = value.Y * invNorm;
-            ans.Z = value.Z * invNorm;
-            ans.W = value.W * invNorm;
-
-            return ans;
+            return Divide(value, value.Length());
         }
 
         /// <summary>Interpolates between two quaternions, using spherical linear interpolation.</summary>
-        /// <param name="quaternion1">The first source Quaternion.</param>
-        /// <param name="quaternion2">The second source Quaternion.</param>
-        /// <param name="amount">The relative weight of the second source Quaternion in the interpolation.</param>
-        /// <returns>The interpolated Quaternion.</returns>
+        /// <param name="quaternion1">The first quaternion.</param>
+        /// <param name="quaternion2">The second quaternion.</param>
+        /// <param name="amount">The relative weight of the second quaternion in the interpolation.</param>
+        /// <returns>The interpolated quaternion.</returns>
         public static Quaternion Slerp(Quaternion quaternion1, Quaternion quaternion2, float amount)
         {
             float t = amount;
@@ -568,59 +624,82 @@ namespace System.Numerics
             return ans;
         }
 
-        /// <summary>Subtracts one Quaternion from another.</summary>
-        /// <param name="value1">The first source Quaternion.</param>
-        /// <param name="value2">The second Quaternion, to be subtracted from the first.</param>
-        /// <returns>The result of the subtraction.</returns>
+        /// <summary>Subtracts each element in a second quaternion from its corresponding element in a first quaternion.</summary>
+        /// <param name="value1">The first quaternion.</param>
+        /// <param name="value2">The second quaternion.</param>
+        /// <returns>The quaternion containing the values that result from subtracting each element in <paramref name="value2" /> from its corresponding element in <paramref name="value1" />.</returns>
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Quaternion Subtract(Quaternion value1, Quaternion value2)
         {
             return value1 - value2;
         }
 
-        /// <summary>Returns a boolean indicating whether the given Object is equal to this Quaternion instance.</summary>
-        /// <param name="obj">The Object to compare against.</param>
-        /// <returns>True if the Object is equal to this Quaternion; False otherwise.</returns>
-        public override readonly bool Equals(object? obj)
+        /// <summary>Returns a value that indicates whether this instance and a specified object are equal.</summary>
+        /// <param name="obj">The object to compare with the current instance.</param>
+        /// <returns><see langword="true" /> if the current instance and <paramref name="obj" /> are equal; otherwise, <see langword="false" />. If <paramref name="obj" /> is <see langword="null" />, the method returns <see langword="false" />.</returns>
+        /// <remarks>The current instance and <paramref name="obj" /> are equal if <paramref name="obj" /> is a <see cref="Quaternion" /> object and the corresponding components of each matrix are equal.</remarks>
+        public override readonly bool Equals([NotNullWhen(true)] object? obj)
         {
             return (obj is Quaternion other) && Equals(other);
         }
 
-        /// <summary>Returns a boolean indicating whether the given Quaternion is equal to this Quaternion instance.</summary>
-        /// <param name="other">The Quaternion to compare this instance to.</param>
-        /// <returns>True if the other Quaternion is equal to this instance; False otherwise.</returns>
+        /// <summary>Returns a value that indicates whether this instance and another quaternion are equal.</summary>
+        /// <param name="other">The other quaternion.</param>
+        /// <returns><see langword="true" /> if the two quaternions are equal; otherwise, <see langword="false" />.</returns>
+        /// <remarks>Two quaternions are equal if each of their corresponding components is equal.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly bool Equals(Quaternion other)
         {
-            return this == other;
+            // This function needs to account for floating-point equality around NaN
+            // and so must behave equivalently to the underlying float/double.Equals
+
+            if (Vector128.IsHardwareAccelerated)
+            {
+                return this.AsVector128().Equals(other.AsVector128());
+            }
+
+            return SoftwareFallback(in this, other);
+
+            static bool SoftwareFallback(in Quaternion self, Quaternion other)
+            {
+                return self.X.Equals(other.X)
+                    && self.Y.Equals(other.Y)
+                    && self.Z.Equals(other.Z)
+                    && self.W.Equals(other.W);
+            }
         }
 
         /// <summary>Returns the hash code for this instance.</summary>
         /// <returns>The hash code.</returns>
         public override readonly int GetHashCode()
         {
-            return unchecked(X.GetHashCode() + Y.GetHashCode() + Z.GetHashCode() + W.GetHashCode());
+            return HashCode.Combine(X, Y, Z, W);
         }
 
-        /// <summary>Calculates the length of the Quaternion.</summary>
-        /// <returns>The computed length of the Quaternion.</returns>
+        /// <summary>Calculates the length of the quaternion.</summary>
+        /// <returns>The computed length of the quaternion.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly float Length()
         {
             float lengthSquared = LengthSquared();
             return MathF.Sqrt(lengthSquared);
         }
 
-        /// <summary>Calculates the length squared of the Quaternion. This operation is cheaper than Length().</summary>
-        /// <returns>The length squared of the Quaternion.</returns>
+        /// <summary>Calculates the squared length of the quaternion.</summary>
+        /// <returns>The length squared of the quaternion.</returns>
+        [Intrinsic]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly float LengthSquared()
         {
-            return X * X + Y * Y + Z * Z + W * W;
+            return Dot(this, this);
         }
 
-        /// <summary>Returns a String representing this Quaternion instance.</summary>
-        /// <returns>The string representation.</returns>
-        public override readonly string ToString()
-        {
-            return string.Format(CultureInfo.CurrentCulture, "{{X:{0} Y:{1} Z:{2} W:{3}}}", X, Y, Z, W);
-        }
+        /// <summary>Returns a string that represents this quaternion.</summary>
+        /// <returns>The string representation of this quaternion.</returns>
+        /// <remarks>The numeric values in the returned string are formatted by using the conventions of the current culture. For example, for the en-US culture, the returned string might appear as <c>{X:1.1 Y:2.2 Z:3.3 W:4.4}</c>.</remarks>
+        public override readonly string ToString() =>
+            $"{{X:{X} Y:{Y} Z:{Z} W:{W}}}";
     }
 }

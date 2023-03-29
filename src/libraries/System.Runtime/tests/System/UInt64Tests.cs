@@ -89,7 +89,7 @@ namespace System.Tests
         {
             foreach (NumberFormatInfo defaultFormat in new[] { null, NumberFormatInfo.CurrentInfo })
             {
-                foreach (string defaultSpecifier in new[] { "G", "G\0", "\0N222", "\0", "" })
+                foreach (string defaultSpecifier in new[] { "G", "G\0", "\0N222", "\0", "", "R" })
                 {
                     yield return new object[] { (ulong)0, defaultSpecifier, defaultFormat, "0" };
                     yield return new object[] { (ulong)4567, defaultSpecifier, defaultFormat, "4567" };
@@ -101,7 +101,18 @@ namespace System.Tests
 
                 yield return new object[] { (ulong)0x2468, "x", defaultFormat, "2468" };
                 yield return new object[] { (ulong)2468, "N", defaultFormat, string.Format("{0:N}", 2468.00) };
+
+
             }
+
+            NumberFormatInfo invariantFormat = NumberFormatInfo.InvariantInfo;
+            yield return new object[] { (ulong)32, "C100", invariantFormat, "\u00A432.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" };
+            yield return new object[] { (ulong)32, "P100", invariantFormat, "3,200.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 %" };
+            yield return new object[] { (ulong)32, "D100", invariantFormat, "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000032" };
+            yield return new object[] { (ulong)32, "E100", invariantFormat, "3.2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000E+001" };
+            yield return new object[] { (ulong)32, "F100", invariantFormat, "32.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" };
+            yield return new object[] { (ulong)32, "N100", invariantFormat, "32.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" };
+            yield return new object[] { (ulong)32, "X100", invariantFormat, "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020" };
 
             var customFormat = new NumberFormatInfo()
             {
@@ -134,7 +145,7 @@ namespace System.Tests
             string lowerExpected = expected.ToLowerInvariant();
 
             bool isDefaultProvider = (provider == null || provider == NumberFormatInfo.CurrentInfo);
-            if (string.IsNullOrEmpty(format) || format.ToUpperInvariant() == "G")
+            if (string.IsNullOrEmpty(format) || format.ToUpperInvariant() is "G" or "R")
             {
                 if (isDefaultProvider)
                 {
@@ -158,10 +169,6 @@ namespace System.Tests
         public static void ToString_InvalidFormat_ThrowsFormatException()
         {
             ulong i = 123;
-            Assert.Throws<FormatException>(() => i.ToString("r")); // Invalid format
-            Assert.Throws<FormatException>(() => i.ToString("r", null)); // Invalid format
-            Assert.Throws<FormatException>(() => i.ToString("R")); // Invalid format
-            Assert.Throws<FormatException>(() => i.ToString("R", null)); // Invalid format
             Assert.Throws<FormatException>(() => i.ToString("Y")); // Invalid format
             Assert.Throws<FormatException>(() => i.ToString("Y", null)); // Invalid format
         }

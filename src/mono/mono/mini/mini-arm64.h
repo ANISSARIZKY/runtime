@@ -21,11 +21,19 @@
 #define MONO_MAX_FREGS 32
 #define MONO_MAX_XREGS 32
 
-#if !defined(DISABLE_SIMD) && defined(ENABLE_NETCORE)
+#if !defined(DISABLE_SIMD)
 #define MONO_ARCH_SIMD_INTRINSICS 1
+#define MONO_ARCH_NEED_SIMD_BANK 1
+#define MONO_ARCH_USE_SHARED_FP_SIMD_BANK 1
 #endif
 
 #define MONO_CONTEXT_SET_LLVM_EXC_REG(ctx, exc) do { (ctx)->regs [0] = (gsize)exc; } while (0)
+
+#if defined(HOST_WIN32)
+#define __builtin_extract_return_addr(x) x
+#define __builtin_return_address(x) _ReturnAddress()
+#define __builtin_frame_address(x) _AddressOfReturnAddress()
+#endif
 
 #define MONO_INIT_CONTEXT_FROM_FUNC(ctx,func) do {	\
 		MONO_CONTEXT_SET_BP ((ctx), __builtin_frame_address (0));	\
@@ -46,11 +54,9 @@
 /* v8..v15 */
 #define MONO_ARCH_CALLEE_SAVED_FREGS 0xff00
 
-#define MONO_ARCH_CALLEE_SAVED_XREGS 0
+#define MONO_ARCH_CALLEE_SAVED_XREGS MONO_ARCH_CALLEE_SAVED_FREGS
 
 #define MONO_ARCH_CALLEE_XREGS MONO_ARCH_CALLEE_FREGS
-
-#define MONO_ARCH_USE_FPSTACK FALSE
 
 #define MONO_ARCH_INST_SREG2_MASK(ins) (0)
 
@@ -61,8 +67,6 @@
 #define MONO_ARCH_INST_IS_FLOAT(desc) ((desc) == 'f')
 
 #define MONO_ARCH_INST_REGPAIR_REG2(desc,hreg1) (-1)
-
-#define MONO_ARCH_USE_FPSTACK FALSE
 
 #define MONO_ARCH_FRAME_ALIGNMENT 16
 
@@ -76,7 +80,7 @@
 #define MONO_ARCH_LMF_REG_SP 11
 
 struct MonoLMF {
-	/* 
+	/*
 	 * If the second lowest bit is set to 1, then this is a MonoLMFExt structure, and
 	 * the other fields are not valid.
 	 */
@@ -170,7 +174,6 @@ typedef struct {
 #define MONO_ARCH_HAVE_GENERAL_RGCTX_LAZY_FETCH_TRAMPOLINE 1
 #define MONO_ARCH_HAVE_OBJC_GET_SELECTOR 1
 #define MONO_ARCH_HAVE_SDB_TRAMPOLINES 1
-#define MONO_ARCH_HAVE_PATCH_CODE_NEW 1
 #define MONO_ARCH_HAVE_OP_GENERIC_CLASS_INIT 1
 #define MONO_ARCH_HAVE_OPCODE_NEEDS_EMULATION 1
 #define MONO_ARCH_HAVE_DECOMPOSE_LONG_OPTS 1
@@ -197,6 +200,10 @@ typedef struct {
 
 #if defined(TARGET_IOS) || defined(TARGET_WATCHOS)
 #define MONO_ARCH_HAVE_UNWIND_BACKTRACE 1
+#endif
+
+#if defined(TARGET_TVOS) || defined(TARGET_WATCHOS)
+#define MONO_ARCH_EXPLICIT_NULL_CHECKS 1
 #endif
 
 /* Relocations */
@@ -283,6 +290,10 @@ guint8* mono_arm_emit_load_regarray (guint8 *code, guint64 regs, int basereg, in
 
 /* MonoJumpInfo **ji */
 guint8* mono_arm_emit_aotconst (gpointer ji, guint8 *code, guint8 *code_start, int dreg, guint32 patch_type, gconstpointer data);
+
+guint8* mono_arm_emit_brx (guint8 *code, int reg);
+
+guint8* mono_arm_emit_blrx (guint8 *code, int reg);
 
 void mono_arm_patch (guint8 *code, guint8 *target, int relocation);
 

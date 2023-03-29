@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 #pragma warning disable SA1028 // ignore whitespace warnings for generated code
@@ -12,6 +12,10 @@ namespace System.Security.Cryptography.Pkcs.Asn1
     internal partial struct CertificateChoiceAsn
     {
         internal ReadOnlyMemory<byte>? Certificate;
+        internal ReadOnlyMemory<byte>? ExtendedCertificate;
+        internal ReadOnlyMemory<byte>? AttributeCertificateV1;
+        internal ReadOnlyMemory<byte>? AttributeCertificateV2;
+        internal System.Security.Cryptography.Pkcs.Asn1.OtherCertificateFormat? OtherCertificateFormat;
 
 #if DEBUG
         static CertificateChoiceAsn()
@@ -28,6 +32,10 @@ namespace System.Security.Cryptography.Pkcs.Asn1
             };
 
             ensureUniqueTag(new Asn1Tag((UniversalTagNumber)16), "Certificate");
+            ensureUniqueTag(new Asn1Tag(TagClass.ContextSpecific, 0), "ExtendedCertificate");
+            ensureUniqueTag(new Asn1Tag(TagClass.ContextSpecific, 1), "AttributeCertificateV1");
+            ensureUniqueTag(new Asn1Tag(TagClass.ContextSpecific, 2), "AttributeCertificateV2");
+            ensureUniqueTag(new Asn1Tag(TagClass.ContextSpecific, 3), "OtherCertificateFormat");
         }
 #endif
 
@@ -60,6 +68,90 @@ namespace System.Security.Cryptography.Pkcs.Asn1
                 wroteValue = true;
             }
 
+            if (ExtendedCertificate.HasValue)
+            {
+                if (wroteValue)
+                    throw new CryptographicException();
+
+                // Validator for tag constraint for ExtendedCertificate
+                {
+                    if (!Asn1Tag.TryDecode(ExtendedCertificate.Value.Span, out Asn1Tag validateTag, out _) ||
+                        !validateTag.HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 0)))
+                    {
+                        throw new CryptographicException();
+                    }
+                }
+
+                try
+                {
+                    writer.WriteEncodedValue(ExtendedCertificate.Value.Span);
+                }
+                catch (ArgumentException e)
+                {
+                    throw new CryptographicException(SR.Cryptography_Der_Invalid_Encoding, e);
+                }
+                wroteValue = true;
+            }
+
+            if (AttributeCertificateV1.HasValue)
+            {
+                if (wroteValue)
+                    throw new CryptographicException();
+
+                // Validator for tag constraint for AttributeCertificateV1
+                {
+                    if (!Asn1Tag.TryDecode(AttributeCertificateV1.Value.Span, out Asn1Tag validateTag, out _) ||
+                        !validateTag.HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 1)))
+                    {
+                        throw new CryptographicException();
+                    }
+                }
+
+                try
+                {
+                    writer.WriteEncodedValue(AttributeCertificateV1.Value.Span);
+                }
+                catch (ArgumentException e)
+                {
+                    throw new CryptographicException(SR.Cryptography_Der_Invalid_Encoding, e);
+                }
+                wroteValue = true;
+            }
+
+            if (AttributeCertificateV2.HasValue)
+            {
+                if (wroteValue)
+                    throw new CryptographicException();
+
+                // Validator for tag constraint for AttributeCertificateV2
+                {
+                    if (!Asn1Tag.TryDecode(AttributeCertificateV2.Value.Span, out Asn1Tag validateTag, out _) ||
+                        !validateTag.HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 2)))
+                    {
+                        throw new CryptographicException();
+                    }
+                }
+
+                try
+                {
+                    writer.WriteEncodedValue(AttributeCertificateV2.Value.Span);
+                }
+                catch (ArgumentException e)
+                {
+                    throw new CryptographicException(SR.Cryptography_Der_Invalid_Encoding, e);
+                }
+                wroteValue = true;
+            }
+
+            if (OtherCertificateFormat.HasValue)
+            {
+                if (wroteValue)
+                    throw new CryptographicException();
+
+                OtherCertificateFormat.Value.Encode(writer, new Asn1Tag(TagClass.ContextSpecific, 3));
+                wroteValue = true;
+            }
+
             if (!wroteValue)
             {
                 throw new CryptographicException();
@@ -72,7 +164,7 @@ namespace System.Security.Cryptography.Pkcs.Asn1
             {
                 AsnValueReader reader = new AsnValueReader(encoded.Span, ruleSet);
 
-                Decode(ref reader, encoded, out CertificateChoiceAsn decoded);
+                DecodeCore(ref reader, encoded, out CertificateChoiceAsn decoded);
                 reader.ThrowIfNotEmpty();
                 return decoded;
             }
@@ -106,6 +198,28 @@ namespace System.Security.Cryptography.Pkcs.Asn1
             {
                 tmpSpan = reader.ReadEncodedValue();
                 decoded.Certificate = rebindSpan.Overlaps(tmpSpan, out offset) ? rebind.Slice(offset, tmpSpan.Length) : tmpSpan.ToArray();
+            }
+            else if (tag.HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 0)))
+            {
+                tmpSpan = reader.ReadEncodedValue();
+                decoded.ExtendedCertificate = rebindSpan.Overlaps(tmpSpan, out offset) ? rebind.Slice(offset, tmpSpan.Length) : tmpSpan.ToArray();
+            }
+            else if (tag.HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 1)))
+            {
+                tmpSpan = reader.ReadEncodedValue();
+                decoded.AttributeCertificateV1 = rebindSpan.Overlaps(tmpSpan, out offset) ? rebind.Slice(offset, tmpSpan.Length) : tmpSpan.ToArray();
+            }
+            else if (tag.HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 2)))
+            {
+                tmpSpan = reader.ReadEncodedValue();
+                decoded.AttributeCertificateV2 = rebindSpan.Overlaps(tmpSpan, out offset) ? rebind.Slice(offset, tmpSpan.Length) : tmpSpan.ToArray();
+            }
+            else if (tag.HasSameClassAndValue(new Asn1Tag(TagClass.ContextSpecific, 3)))
+            {
+                System.Security.Cryptography.Pkcs.Asn1.OtherCertificateFormat tmpOtherCertificateFormat;
+                System.Security.Cryptography.Pkcs.Asn1.OtherCertificateFormat.Decode(ref reader, new Asn1Tag(TagClass.ContextSpecific, 3), rebind, out tmpOtherCertificateFormat);
+                decoded.OtherCertificateFormat = tmpOtherCertificateFormat;
+
             }
             else
             {

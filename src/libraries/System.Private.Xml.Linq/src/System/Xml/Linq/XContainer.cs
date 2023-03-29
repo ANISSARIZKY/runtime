@@ -28,7 +28,8 @@ namespace System.Xml.Linq
 
         internal XContainer(XContainer other)
         {
-            if (other == null) throw new ArgumentNullException(nameof(other));
+            ArgumentNullException.ThrowIfNull(other);
+
             if (other.content is string)
             {
                 this.content = other.content;
@@ -54,8 +55,7 @@ namespace System.Xml.Linq
         {
             get
             {
-                XNode? last = LastNode;
-                return last != null ? last.next : null;
+                return LastNode?.next;
             }
         }
 
@@ -807,47 +807,24 @@ namespace System.Xml.Linq
 
         internal static string GetStringValue(object value)
         {
-            string? s = value as string;
-            if (s != null)
+            string? s = value switch
             {
-                return s;
-            }
-            else if (value is double)
-            {
-                s = XmlConvert.ToString((double)value);
-            }
-            else if (value is float)
-            {
-                s = XmlConvert.ToString((float)value);
-            }
-            else if (value is decimal)
-            {
-                s = XmlConvert.ToString((decimal)value);
-            }
-            else if (value is bool)
-            {
-                s = XmlConvert.ToString((bool)value);
-            }
-            else if (value is DateTime)
-            {
-                s = XmlConvert.ToString((DateTime) value, XmlDateTimeSerializationMode.RoundtripKind);
-            }
-            else if (value is DateTimeOffset)
-            {
-                s = XmlConvert.ToString((DateTimeOffset)value);
-            }
-            else if (value is TimeSpan)
-            {
-                s = XmlConvert.ToString((TimeSpan)value);
-            }
-            else if (value is XObject)
-            {
-                throw new ArgumentException(SR.Argument_XObjectValue);
-            }
-            else
-            {
-                s = value.ToString();
-            }
+                string stringValue => stringValue,
+                int intValue => XmlConvert.ToString(intValue),
+                double doubleValue => XmlConvert.ToString(doubleValue),
+                long longValue => XmlConvert.ToString(longValue),
+                float floatValue => XmlConvert.ToString(floatValue),
+                decimal decimalValue => XmlConvert.ToString(decimalValue),
+                short shortValue => XmlConvert.ToString(shortValue),
+                sbyte sbyteValue => XmlConvert.ToString(sbyteValue),
+                bool boolValue => XmlConvert.ToString(boolValue),
+                DateTime dtValue => XmlConvert.ToString(dtValue, XmlDateTimeSerializationMode.RoundtripKind),
+                DateTimeOffset dtoValue => XmlConvert.ToString(dtoValue),
+                TimeSpan tsValue => XmlConvert.ToString(tsValue),
+                XObject => throw new ArgumentException(SR.Argument_XObjectValue),
+                _ => value.ToString()
+            };
+
             if (s == null) throw new ArgumentException(SR.Argument_ConvertToString);
             return s;
         }
@@ -870,7 +847,7 @@ namespace System.Xml.Linq
             if (r.ReadState != ReadState.Interactive) throw new InvalidOperationException(SR.InvalidOperation_ExpectedInteractive);
 
             ContentReader cr = new ContentReader(this, r, o);
-            while (cr.ReadContentFrom(this, r, o) && r.Read()) ;
+            while (cr.ReadContentFromContainer(this, r) && r.Read()) ;
         }
 
         internal async Task ReadContentFromAsync(XmlReader r, CancellationToken cancellationToken)
@@ -899,7 +876,7 @@ namespace System.Xml.Linq
             {
                 cancellationToken.ThrowIfCancellationRequested();
             }
-            while (await cr.ReadContentFromAsync(this, r, o).ConfigureAwait(false) && await r.ReadAsync().ConfigureAwait(false));
+            while (await cr.ReadContentFromContainerAsync(this, r).ConfigureAwait(false) && await r.ReadAsync().ConfigureAwait(false));
         }
 
         private sealed class ContentReader
@@ -943,10 +920,7 @@ namespace System.Xml.Linq
                         }
                         break;
                     case XmlNodeType.EndElement:
-                        if (_currentContainer.content == null)
-                        {
-                            _currentContainer.content = string.Empty;
-                        }
+                        _currentContainer.content ??= string.Empty;
                         if (_currentContainer == rootContainer) return false;
                         _currentContainer = _currentContainer.parent!;
                         break;
@@ -1002,10 +976,7 @@ namespace System.Xml.Linq
                         }
                         break;
                     case XmlNodeType.EndElement:
-                        if (_currentContainer.content == null)
-                        {
-                            _currentContainer.content = string.Empty;
-                        }
+                        _currentContainer.content ??= string.Empty;
                         if (_currentContainer == rootContainer) return false;
                         _currentContainer = _currentContainer.parent!;
                         break;
@@ -1038,7 +1009,7 @@ namespace System.Xml.Linq
                 return true;
             }
 
-            public bool ReadContentFrom(XContainer rootContainer, XmlReader r, LoadOptions o)
+            public bool ReadContentFromContainer(XContainer rootContainer, XmlReader r)
             {
                 XNode? newNode = null;
                 string baseUri = r.BaseURI;
@@ -1082,10 +1053,7 @@ namespace System.Xml.Linq
                     }
                     case XmlNodeType.EndElement:
                     {
-                        if (_currentContainer.content == null)
-                        {
-                                _currentContainer.content = string.Empty;
-                        }
+                        _currentContainer.content ??= string.Empty;
                         // Store the line info of the end element tag.
                         // Note that since we've got EndElement the current container must be an XElement
                         XElement? e = _currentContainer as XElement;
@@ -1150,13 +1118,12 @@ namespace System.Xml.Linq
                     }
 
                     _currentContainer.AddNodeSkipNotify(newNode);
-                    newNode = null;
                 }
 
                 return true;
             }
 
-            public async ValueTask<bool> ReadContentFromAsync(XContainer rootContainer, XmlReader r, LoadOptions o)
+            public async ValueTask<bool> ReadContentFromContainerAsync(XContainer rootContainer, XmlReader r)
             {
                 XNode? newNode = null;
                 string baseUri = r.BaseURI!;
@@ -1202,10 +1169,7 @@ namespace System.Xml.Linq
                         }
                     case XmlNodeType.EndElement:
                         {
-                            if (_currentContainer.content == null)
-                            {
-                                _currentContainer.content = string.Empty;
-                            }
+                            _currentContainer.content ??= string.Empty;
                             // Store the line info of the end element tag.
                             // Note that since we've got EndElement the current container must be an XElement
                             XElement? e = _currentContainer as XElement;
@@ -1270,7 +1234,6 @@ namespace System.Xml.Linq
                     }
 
                     _currentContainer.AddNodeSkipNotify(newNode);
-                    newNode = null;
                 }
 
                 return true;
@@ -1404,7 +1367,7 @@ namespace System.Xml.Linq
             }
         }
 
-        [return: NotNullIfNotNull("content")]
+        [return: NotNullIfNotNull(nameof(content))]
         internal static object? GetContentSnapshot(object? content)
         {
             if (content is string || !(content is IEnumerable)) return content;

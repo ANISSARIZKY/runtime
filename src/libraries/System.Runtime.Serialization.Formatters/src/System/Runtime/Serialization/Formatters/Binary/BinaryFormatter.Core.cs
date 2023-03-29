@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 
 namespace System.Runtime.Serialization.Formatters.Binary
@@ -8,18 +9,18 @@ namespace System.Runtime.Serialization.Formatters.Binary
     public sealed partial class BinaryFormatter : IFormatter
     {
         [Obsolete(Obsoletions.BinaryFormatterMessage, DiagnosticId = Obsoletions.BinaryFormatterDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [RequiresDynamicCode(IFormatter.RequiresDynamicCodeMessage)]
+        [RequiresUnreferencedCode(IFormatter.RequiresUnreferencedCodeMessage)]
         public object Deserialize(Stream serializationStream)
         {
-            // don't refactor the 'throw' into a helper method; linker will have difficulty trimming
+            // don't refactor the 'throw' into a helper method; trimming tools will have difficulty trimming
             if (!LocalAppContextSwitches.BinaryFormatterEnabled)
             {
                 throw new NotSupportedException(SR.BinaryFormatter_SerializationDisallowed);
             }
 
-            if (serializationStream == null)
-            {
-                throw new ArgumentNullException(nameof(serializationStream));
-            }
+            ArgumentNullException.ThrowIfNull(serializationStream);
+
             if (serializationStream.CanSeek && (serializationStream.Length == 0))
             {
                 throw new SerializationException(SR.Serialization_Stream);
@@ -58,18 +59,16 @@ namespace System.Runtime.Serialization.Formatters.Binary
         }
 
         [Obsolete(Obsoletions.BinaryFormatterMessage, DiagnosticId = Obsoletions.BinaryFormatterDiagId, UrlFormat = Obsoletions.SharedUrlFormat)]
+        [RequiresUnreferencedCode(IFormatter.RequiresUnreferencedCodeMessage)]
         public void Serialize(Stream serializationStream, object graph)
         {
-            // don't refactor the 'throw' into a helper method; linker will have difficulty trimming
+            // don't refactor the 'throw' into a helper method; trimming tools will have difficulty trimming
             if (!LocalAppContextSwitches.BinaryFormatterEnabled)
             {
                 throw new NotSupportedException(SR.BinaryFormatter_SerializationDisallowed);
             }
 
-            if (serializationStream == null)
-            {
-                throw new ArgumentNullException(nameof(serializationStream));
-            }
+            ArgumentNullException.ThrowIfNull(serializationStream);
 
             var formatterEnums = new InternalFE()
             {
